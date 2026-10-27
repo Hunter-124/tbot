@@ -1,0 +1,6 @@
+* text=auto
+*.step+ binary
+*.3mf binary
+*.png binary
+*.step -diff
+*.gcode -diff
