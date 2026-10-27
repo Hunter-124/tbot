@@ -1,0 +1,148 @@
+{
+  "schema": "chudware.print_job/1",
+  "part": "pod_cap",
+  "source": {
+    "kind": "doc",
+    "doc_id": "doc-cpp00000020"
+  },
+  "copies": 1,
+  "printer": {
+    "name": "Creality Ender-3 (0.4 mm nozzle)",
+    "vendor": "Creality",
+    "bed_polygon": [
+      [
+        3.0,
+        3.0
+      ],
+      [
+        228.0,
+        3.0
+      ],
+      [
+        228.0,
+        228.0
+      ],
+      [
+        3.0,
+        228.0
+      ]
+    ],
+    "max_height_mm": 250.0
+  },
+  "presets": {
+    "print": "0.20 mm NORMAL (0.4 mm nozzle) @CREALITY",
+    "filament": "Generic ABS @CREALITY"
+  },
+  "goal": "balanced",
+  "settings_changed": {
+    "temperature": "255",
+    "first_layer_temperature": "255",
+    "bed_temperature": "100",
+    "first_layer_bed_temperature": "100",
+    "support_material": "0",
+    "binary_gcode": "0",
+    "overhangs": "1"
+  },
+  "effective": {
+    "layer_height": "0.20",
+    "first_layer_height": "0.2",
+    "perimeters": "3",
+    "fill_density": "15%",
+    "fill_pattern": "grid",
+    "top_solid_layers": "5",
+    "bottom_solid_layers": "4",
+    "support_material": "0",
+    "support_material_style": null,
+    "support_material_threshold": "40",
+    "dont_support_bridges": "1",
+    "overhangs": "1",
+    "brim_width": "0",
+    "temperature": "255",
+    "first_layer_temperature": "255",
+    "bed_temperature": "100",
+    "first_layer_bed_temperature": "100",
+    "nozzle_diameter": "0.4",
+    "retract_length": "5"
+  },
+  "orientation": {
+    "build_dir": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "yaw_deg": 0.0,
+    "source": "caller",
+    "why": "caller-specified build direction"
+  },
+  "slicer": {
+    "kind": "flatpak",
+    "argv_prefix": [
+      "/usr/bin/flatpak",
+      "run",
+      "--user",
+      "--command=prusa-slicer",
+      "com.prusa3d.PrusaSlicer"
+    ],
+    "version": "2.9.6",
+    "profiles_dir": "/home/hunter/.local/share/flatpak/app/com.prusa3d.PrusaSlicer/x86_64/stable/bf3534e4ffc688bbaf625206f27f9333b1b8820d3425dae19d3083b47e08ce79/files/share/PrusaSlicer/profiles",
+    "source": "flatpak_user",
+    "identity": "bf3534e4ffc688bbaf625206f27f9333b1b8820d3425dae19d3083b47e08ce79",
+    "usable": true
+  },
+  "config_sha256": "6de5ac08adc7c7ba82d56ade6eff72b6a4fd9766e707b29af1ac43890fe85808",
+  "mesh_sha256": "a766bb2bd03b3dd28f921526383afe129e7c22573c6920d8ae575a91e8f037e5",
+  "gcode": "/home/hunter/Desktop/TBOT/print/creality_ender_3_0_4_mm_nozzle/pod_cap.gcode",
+  "gcode_sha256": "f3ee97fde2b97b00957fefbbea7bb034ce380e03728aa5d57b8661ddd8bb6d18",
+  "project_3mf": "/home/hunter/Desktop/TBOT/print/creality_ender_3_0_4_mm_nozzle/pod_cap.3mf",
+  "stats": {
+    "layers": 207,
+    "height_mm": 41.4,
+    "filament_mm": 5343.815,
+    "filament_g": 13.37,
+    "print_time_s": 6998.0,
+    "support_share": 0.0,
+    "by_type_mm": {
+      "Bridge infill": 1288.221,
+      "Custom": 260.0,
+      "External perimeter": 43521.107,
+      "Internal infill": 26296.125,
+      "Overhang perimeter": 97.932,
+      "Perimeter": 78988.899,
+      "Skirt/Brim": 399.114,
+      "Solid infill": 9723.701,
+      "Top solid infill": 1611.581
+    },
+    "slicer": "PrusaSlicer 2.9.6"
+  },
+  "estimate": {
+    "part_volume_mm3": 19119.59,
+    "support_volume_mm3": 0.0,
+    "material_g": 14.67,
+    "support_g": 0.0,
+    "time_h": 0.472,
+    "layers": 208,
+    "support_share": 0.0,
+    "method": "deterministic shell/infill/flow ranking estimate, not slicer output"
+  },
+  "printability": {
+    "status": "pass",
+    "issues": []
+  },
+  "gcode_check": {
+    "status": "pass",
+    "issues": []
+  },
+  "slicer_warnings": [],
+  "slicer_mesh_repairs": {
+    "available": true,
+    "volumes": 1,
+    "counts": {
+      "edges_fixed": 0,
+      "degenerate_facets": 0,
+      "facets_removed": 0,
+      "facets_reversed": 0,
+      "backwards_edges": 0
+    }
+  },
+  "print_ready": true
+}
