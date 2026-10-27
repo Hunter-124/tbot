@@ -1,0 +1,178 @@
+# TBOT default configuration. Every key is required here; override files (--config) and --set key=value
+# only change values. Units are in the key suffix. Gun frame (mm): +X muzzle, +Y gun-left, +Z up, origin at
+# the trigger face (hardware/design/layout.md). [INFERENCE] = estimate to be replaced by a measurement/calibration.
+
+[camera]
+source = "picam"              # picam | cv:<index> | video:<path> | replay:<session_dir> | synthetic[:<scenario>]
+width = 640                   # OV9281 2x2 binned mode (kernel driver modes 1280x800 / 1280x720 / 640x400; manual V1.4 §2 says "1280x700")
+height = 400
+fps = 120.0                   # Pi 3B processing budget; sensor does more at 640x400
+exposure_us = 500.0           # short exposure = no motion blur on a 20 m/s clay; daylight at F2.2
+analogue_gain = 1.0
+auto_exposure = false
+rotate_180 = true             # pod_cap mounts the board rotated 180 deg about the lens axis (layout.md REV E)
+emulate_mono = "none"         # cv/video sources only: none | luma | red (red = mono sensor behind an orange long-pass)
+buffer_count = 4
+
+[optics]                      # nominal prior until calib/intrinsics.json exists (innomaker manual V1.4 §3.1)
+model = "fisheye"             # fisheye (cv2.fisheye, equidistant base) | pinhole
+focal_length_mm = 2.8
+pixel_pitch_um = 3.0          # at full resolution
+sensor_width_px = 1280
+sensor_height_px = 800
+
+[mount]                       # gun frame, mm (hardware/design/layout.md REV E.1 pod_cap)
+cam_pos_mm = [670.0, 0.0, 17.0]      # optical centre: lens axis Y0 Z17; X = lens tip 675.6 - ~5.6 [INFERENCE +/-5]
+cam_rpy_deg = [0.0, 0.0, 0.0]        # mount error about gun X,Y,Z; calib/boresight.json overrides
+lens_tip_x_mm = 675.6
+muzzle_pos_mm = [841.0, 0.0, 49.0]
+barrel_axis_z_mm = 49.0
+barrel_od_mm = [[500.0, 24.0], [841.0, 20.5]]   # (X, OD) linear profile
+barrel_mask_margin_px = 6
+clay_diameter_m = 0.108       # ISSF/ATA standard clay 108-110 mm
+
+[detector]
+mode = "auto"                 # auto (color if the frame is colour) | mono | color
+polarity = "both"             # bright | dark | both  (clay vs sky; mono, no filter: usually dark)
+bg_downscale = 4
+bg_kernel = 9                 # box blur kernel on the downscaled image (odd)
+k_sigma = 6.0                 # contrast threshold in robust noise sigmas
+min_contrast = 10.0           # DN floor
+noise_every = 10              # frames between noise-sigma refreshes
+min_area_px = 2
+max_area_px = 400
+max_aspect = 5.0             # edge-on clay is 108 x 25 mm = 4.3:1 plus bbox quantisation
+max_detections = 8
+hsv_lo = [5, 110, 70]         # OpenCV HSV (H 0-180): clay orange
+hsv_hi = [25, 255, 255]
+color_combine = "or"          # and | or : how the HSV mask combines with the contrast mask on colour frames
+debug = false
+psf_px = 1.2                  # 4-sigma diameter of the system blur (pixel box alone = 1.15 px); calibrate: tbot calib-detector --psf [INFERENCE]
+
+[tracker]
+gate_sigma = 4.0
+gate_min_deg = 0.4
+confirm_hits = 3
+max_misses = 6
+jerk_psd_deg = 2000.0         # CA-model process noise: jerk spectral density, deg^2/s^5 (sqrt shown in deg)
+meas_sigma_px = 0.7
+range_prior_m = 20.0          # skeet crossing distance class [INFERENCE]
+range_prior_sigma_m = 8.0
+size_range_sigma_frac = 0.35  # 1-sigma relative error of one size-based range sample (frame-to-frame noise)
+size_range_bias_frac = 0.10   # systematic (frame-correlated) size-range error: floor on the fused range sigma
+max_tracks = 4
+
+[imu]
+enabled = true
+i2c_bus = 1
+address = 0x68
+sample_rate_hz = 500
+gyro_range_dps = 1000
+accel_range_g = 8
+dlpf_hz = 98
+poll_hz = 100
+R_gun_imu = [[0.0, 0.0, -1.0], [0.0, -1.0, 0.0], [-1.0, 0.0, 0.0]]   # layout.md pod_cap AXIS MAP
+
+[attitude]
+accel_gain = 0.02             # complementary-filter gain per sample when the accel is trusted
+accel_gate_g = 0.15           # trust accel only when | |a| - g | < gate
+history_s = 2.0
+init_still_s = 0.3            # gravity initialisation window
+
+[gun]                         # Weatherby Element 12 ga, inertia operated
+lock_time_ms = 6.0            # sear release -> primer [INFERENCE]
+barrel_time_ms = 3.0          # primer -> shot exits the muzzle [INFERENCE]
+
+[shot]
+muzzle_velocity_mps = 366.0   # 1200 fps target load
+pellet_diameter_mm = 2.29     # #8 lead
+pellet_density_kg_m3 = 11340.0
+air_density_kg_m3 = 1.225
+speed_of_sound_mps = 343.0
+pattern_radius_ref_m = 0.38   # effective core radius at the reference range (skeet choke ~30 in @ 25 yd) [INFERENCE]
+pattern_ref_range_m = 22.9
+pattern_min_radius_m = 0.02
+max_range_m = 60.0
+
+[fire]
+live = false                  # false = dry run: log would-fire decisions, never drive the actuator
+min_hit_probability = 0.5    # fire at the best moment only if P(hit) >= this (miss, 1-sigma uncertainty, pattern radius)
+min_track_hits = 5
+horizon_frames = 3
+max_shots_per_arm = 1
+min_range_m = 8.0
+max_range_m = 40.0
+min_elevation_deg = -5.0
+watchdog_ms = 250.0
+
+[arming]
+pin = 17
+active_low = true
+pull = "up"
+debounce_ms = 5.0
+
+[actuator]
+type = "servo"                # servo (MG996R) | pq12 | sim | none
+
+[actuator.servo]
+pwm_chip = 0                  # GPIO18 = PWM0 with dtoverlay=pwm,pin=18,func=2
+pwm_channel = 0
+frame_hz = 50.0
+rest_us = 1670.0              # lever +17 deg [INFERENCE ~10 us/deg; confirm direction on the bench]
+fire_us = 1330.0              # lever -17 deg
+hold_ms = 150.0               # hold at fire before returning to rest
+
+[actuator.pq12]
+pin_extend = 23
+pin_retract = 24
+extend_ms = 2500.0            # full 20 mm stroke at >= 8 mm/s, ends on the internal limit switch
+retract_ms = 2500.0
+
+[actuator.sim]
+delay_ms = 100.0
+
+[gpio]
+backend = "auto"              # auto (lgpio on a Pi, else sim) | lgpio | sim
+chip = 0
+latency_led_pin = 27
+break_sense_pin = 22
+
+[latency]                     # defaults until calib/latency.json has measurements
+camera_timestamp_offset_ns = 0
+exposure_to_user_ms = 8.0     # [INFERENCE]
+servo_cmd_to_break_ms = 115.0 # layout.md MG996R estimate, loaded @ 4.8 V [INFERENCE]
+pq12_cmd_to_break_ms = 900.0  # 6.7 mm at 6-10 mm/s [INFERENCE]
+sim_cmd_to_break_ms = 100.0
+none_cmd_to_break_ms = 100.0
+jitter_ms = 6.0               # 1-sigma until measured: a 50 Hz servo frame quantises the command by U(0,20 ms) -> 20/sqrt(12) = 5.8 ms
+
+[stream]
+enabled = false
+host = "0.0.0.0"
+port = 8080
+fps = 10.0
+jpeg_quality = 70
+
+[record]
+mode = "armed"                # off | armed (ring buffer dumped around each arming press) | continuous
+dir = "sessions"
+preroll_s = 2.0
+postroll_s = 1.0
+max_ram_mb = 200
+decimate = 1
+
+[paths]
+calib_dir = "calib"
+
+[sim]
+scenario = "skeet_crossing"
+seed = 1
+sky_level = 170.0
+sky_gradient = 40.0
+cloud_amount = 0.3
+clay_contrast = -45.0         # mono DN, negative = clay darker than sky
+noise_sigma = 2.0
+render_color = false
+gyro_noise_dps = 0.05
+swing_lag_s = 0.12            # simulated shooter: pursuit lag of the swing behind the clay
+swing_noise_deg = 0.15

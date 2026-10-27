@@ -1,0 +1,643 @@
+"""Live pipeline: frame -> IMU -> attitude -> detect -> track -> fire solver -> actuator (`tbot run`).
+
+Safety (docs/ARCHITECTURE.md): cfg.fire.live is false by default and the pipeline then only logs
+would-fire decisions; the arming interlock is enforced by the arming switch and the actuator layer; a
+watchdog aborts the actuator when frames stop arriving; shutdown always aborts and rests the actuator.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import logging
+import signal
+import threading
+import time
+from pathlib import Path
+
+import numpy as np
+
+from tbot.app import overlay as overlay_mod
+from tbot.app.stream import DebugServer, jsonable
+from tbot.camera import open_source
+from tbot.config import (
+    Calibration,
+    Config,
+    LatencyBudget,
+    add_common_args,
+    load_from_args,
+    resolve_path,
+)
+from tbot.fire.ballistics import ShotModel
+from tbot.fire.solver import FireSolver
+from tbot.hw.actuator import make_actuator
+from tbot.hw.arming import ArmingSwitch
+from tbot.hw.gpio import SimGpio, open_gpio
+from tbot.hw.health import read_health
+from tbot.imu.attitude import AttitudeEstimator, FixedAttitude
+from tbot.imu.mpu6050 import NullImu, open_imu
+from tbot.optics import CameraModel, MountModel, combined_mask
+from tbot.types import Frame
+from tbot.vision.detector import ClayDetector
+from tbot.vision.tracker import ClayTracker
+
+log = logging.getLogger("tbot.run")
+
+LEAD_PREVIEW_S = overlay_mod.LEAD_PREVIEW_S  # overlay velocity arrow horizon
+FPS_EMA_ALPHA = 0.1
+
+
+def _ms(t0_ns: int, t1_ns: int) -> float:
+    return (t1_ns - t0_ns) / 1e6
+
+
+class Pipeline:
+    """One frame in, one telemetry dict out; owns every per-run object the stages need."""
+
+    def __init__(
+        self,
+        cfg: Config,
+        calib: Calibration,
+        source,
+        gpio=None,
+        actuator=None,
+        arming=None,
+        imu=None,
+    ):
+        self.cfg = cfg
+        self.calib = calib
+        self.source = source
+        width, height = int(source.width), int(source.height)
+        self.cam = CameraModel.from_calibration(calib.intrinsics, cfg, width, height)
+        self.mount = MountModel.from_config(cfg, calib.boresight)
+        self.mask = combined_mask(self.cam, self.mount, cfg, calib)
+        self.detector = ClayDetector(cfg, self.mask)
+        self.tracker = ClayTracker(cfg, self.cam, self.mount)
+        self.shot = ShotModel(cfg)
+        self.budget: LatencyBudget = calib.budget or LatencyBudget.from_config(cfg, calib.latency)
+        self.solver = FireSolver(cfg, self.shot, self.mount, self.budget)
+
+        self._own_imu = imu is None
+        self.imu = imu if imu is not None else open_imu(cfg, calib, source)
+        self.attitude = FixedAttitude() if isinstance(self.imu, NullImu) else AttitudeEstimator(cfg)
+
+        self._own_gpio = gpio is None
+        self.gpio = gpio if gpio is not None else open_gpio(cfg)
+        self.arming = arming if arming is not None else ArmingSwitch(self.gpio, cfg)
+
+        self._own_actuator = actuator is None
+        if actuator is not None:
+            self.actuator = actuator
+        elif cfg.fire.live:
+            self.actuator = make_actuator(cfg, self.gpio, self.arming)
+        else:
+            self.actuator = None
+            log.info("dry run (fire.live = false): decisions are logged, the actuator is never driven")
+
+        self.nominal_fps = float(source.nominal_fps) or float(cfg.camera.fps)
+        if self.nominal_fps <= 0:
+            self.nominal_fps = 30.0
+        self.frame_period_s = 1.0 / self.nominal_fps
+        self.read_timeout_s = max(0.1, 5.0 * self.frame_period_s)
+        self.bore_px = self.mount.bore_pixel(self.cam, float(cfg.tracker.range_prior_m))
+
+        # per-frame state (read by the overlay, the tools and the tests)
+        self.frames = 0
+        self.shots = 0
+        self.fps = 0.0
+        self.detections: list = []
+        self.tracks: list = []
+        self.decision = None
+        self.last_telemetry: dict | None = None
+        self.events: list[dict] = []
+        self.health: dict = {}
+        self._health_flags = {"under_voltage_now": False, "throttled_now": False}
+
+        self.server: DebugServer | None = None
+        self.recorder = None
+        self._recorder_is_writer = False
+        self._display = False
+        self._window = "tbot"
+        self._window_open = False
+        self._jsonl = None
+
+        self._started = False
+        self._closed = False
+        self._stop = threading.Event()
+        self._prev_exposure_ns: int | None = None
+        self._last_step_ns: int | None = None
+        self._last_frame_wall: float | None = None
+        self._wd_thread: threading.Thread | None = None
+        self._wd_stop = threading.Event()
+        self._wd_tripped = False
+        self.watchdog_aborts = 0
+        self._status_wall = 0.0
+        self._sig_prev: list = []
+
+    # ------------------------------------------------------------------ Pi health
+    _HEALTH_WARNINGS = (
+        ("under_voltage_now", "UNDER-VOLTAGE on the Pi supply (sagging pack or thin wiring)"),
+        ("throttled_now", "CPU THROTTLED (hot pod or low supply voltage)"),
+    )
+
+    def _check_health(self, health: dict) -> None:
+        """Warn once on each rising edge of an under-voltage / throttling condition."""
+        flags = (health or {}).get("throttled") or {}
+        for key, message in self._HEALTH_WARNINGS:
+            active = bool(flags.get(key))
+            if active and not self._health_flags[key]:
+                log.warning("health: %s (source %s)", message, (health or {}).get("source"))
+            self._health_flags[key] = active
+
+    # ------------------------------------------------------------------ lifecycle
+    def start(self) -> None:
+        """Start the source, the IMU, the debug stream and the recorder (idempotent)."""
+        if self._started:
+            return
+        self._started = True
+        self.source.start()
+        self.imu.start()
+        if self.cfg.stream.enabled:
+            self.server = DebugServer(self.cfg).start()
+        self._open_recorder()
+        if self.actuator is not None and self.cfg.fire.live:
+            self.actuator.rest()  # known state before the first frame; dry run never commands the actuator
+        self._last_step_ns = time.monotonic_ns()
+
+    def close(self) -> None:
+        """Always-safe shutdown: actuator to rest, then source/IMU/GPIO/recorder/stream down."""
+        if self._closed:
+            return
+        self._closed = True
+        self._stop.set()
+        self._wd_stop.set()
+        if self._wd_thread is not None:
+            self._wd_thread.join(timeout=1.0)
+            self._wd_thread = None
+        if self.actuator is not None:
+            try:
+                self.actuator.abort()
+            finally:
+                if self._own_actuator:
+                    self.actuator.close()
+        try:
+            self.source.stop()
+        finally:
+            self.imu.stop()
+        if self.recorder is not None:
+            written = self.recorder.close()
+            self.recorder = None
+            for p in written if isinstance(written, list) else [written]:
+                log.info("session written: %s", p)
+        if self.server is not None:
+            self.server.stop()
+            self.server = None
+        if self._jsonl is not None:
+            self._jsonl.close()
+            self._jsonl = None
+        if self._window_open:
+            import cv2
+
+            cv2.destroyWindow(self._window)
+            self._window_open = False
+        if self._own_gpio:
+            self.gpio.close()
+
+    def __enter__(self) -> "Pipeline":
+        self.start()
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self.close()
+
+    # ------------------------------------------------------------------ recording
+    def _open_recorder(self) -> None:
+        cfg = self.cfg
+        mode = cfg.record.mode
+        if mode == "off":
+            return
+        from tbot.app.record import RingRecorder, SessionWriter, session_meta_extra
+
+        channels = 3 if bool(self.source.is_color) else 1
+        w, h = int(self.source.width), int(self.source.height)
+        meta = session_meta_extra(cfg, self.calib, getattr(self.source, "name", None) or cfg.camera.source)
+        if mode == "armed":
+            self.recorder = RingRecorder(cfg, w, h, channels, self.nominal_fps, meta_extra=meta)
+            self._recorder_is_writer = False
+            self.arming.on_change(self._on_arming_change)
+            log.info("ring recorder armed: %.1f s preroll, dumps to %s", cfg.record.preroll_s, cfg.record.dir)
+        elif mode == "continuous":
+            path = resolve_path(cfg.record.dir) / (time.strftime("%Y%m%d-%H%M%S") + "-run")
+            self.recorder = SessionWriter(path, w, h, channels, self.nominal_fps, meta_extra=meta)
+            self._recorder_is_writer = True
+            log.info("recording continuously to %s", path)
+        else:
+            raise ValueError(f"record.mode must be off|armed|continuous, got {mode!r}")
+
+    def _on_arming_change(self, armed: bool, t_ns: int) -> None:
+        """Ring recorder: dump the buffer around every press when the operator lets go."""
+        if self.recorder is None:
+            return
+        # The ring windows frames by the SOURCE clock; on hardware it is the same monotonic clock the
+        # switch stamps with, on replay/synthetic sources it is not, so window on the source clock.
+        now = int(self.source.clock.now_ns())
+        self.recorder.event({"t_ns": now, "type": "arming", "armed": bool(armed), "switch_t_ns": int(t_ns)})
+        if not armed and not self._recorder_is_writer:
+            self.recorder.trigger(now, tag="disarm")
+
+    def _record(self, frame: Frame, samples: list) -> None:
+        rec = self.recorder
+        if rec is None:
+            return
+        if self._recorder_is_writer:
+            if self.cfg.record.decimate <= 1 or (self.frames % int(self.cfg.record.decimate)) == 0:
+                rec.add_frame(frame)
+            if samples:
+                rec.add_imu(samples)
+        else:
+            rec.push(frame)
+            if samples:
+                rec.push_imu(samples)
+
+    def _event(self, ev: dict) -> None:
+        self.events.append(ev)
+        if self.recorder is not None:
+            if self._recorder_is_writer:
+                self.recorder.add_event(ev)
+            else:
+                self.recorder.event(ev)
+
+    # ------------------------------------------------------------------ helpers
+    def _projector(self, R_wg: np.ndarray):
+        """World direction -> pixel in the frame whose attitude is R_wg (None when behind the camera)."""
+        cam, mount = self.cam, self.mount
+        R_gw = np.asarray(R_wg, dtype=np.float64).reshape(3, 3).T
+
+        def project(dir_w) -> tuple[float, float] | None:
+            if dir_w is None:
+                return None
+            d_g = R_gw @ np.asarray(dir_w, dtype=np.float64).reshape(3)
+            d_c = np.asarray(mount.gun_to_cam(d_g), dtype=np.float64).reshape(1, 3)
+            uv = np.asarray(cam.ray_to_pixel(d_c), dtype=np.float64).reshape(-1, 2)
+            u, v = float(uv[0, 0]), float(uv[0, 1])
+            if not (np.isfinite(u) and np.isfinite(v)):
+                return None
+            return (u, v)
+
+        return project
+
+    def render_overlay(self, frame: Frame, R_wg: np.ndarray, telemetry: dict) -> np.ndarray:
+        """Debug image for the stream / local window (only called when it is going to be shown)."""
+        project = self._projector(R_wg)
+        lead_ns = int(LEAD_PREVIEW_S * 1e9)
+        track_lead = {}
+        for t in self.tracks:
+            track_lead[t.track_id] = self.tracker.predict_dir(t, int(t.t_ns) + lead_ns)
+        return overlay_mod.draw(
+            frame.image,
+            detections=self.detections,
+            tracks=self.tracks,
+            decision=self.decision,
+            mask=self.mask,
+            bore_px=self.bore_px,
+            telemetry=telemetry,
+            project_w=project,
+            track_lead=track_lead,
+            armed=bool(telemetry.get("armed", False)),
+            fired=bool(telemetry.get("fired", False)),
+        )
+
+    def _publish(self, frame: Frame, R_wg: np.ndarray, telemetry: dict) -> float:
+        """Render + publish/show the overlay when due. Returns the time spent in ms."""
+        want_stream = self.server is not None and self.server.due()
+        if not (want_stream or self._display):
+            if self.server is not None:
+                self.server.set_telemetry(telemetry)
+            return 0.0
+        t0 = time.perf_counter_ns()
+        bgr = self.render_overlay(frame, R_wg, telemetry)
+        if want_stream and self.server is not None:
+            self.server.publish(bgr, telemetry)
+        if self._display:
+            import cv2
+
+            if not self._window_open:
+                cv2.namedWindow(self._window)
+                self._window_open = True
+            cv2.imshow(self._window, bgr)
+            if (cv2.waitKey(1) & 0xFF) in (27, ord("q")):
+                log.info("display window: quit requested")
+                self._stop.set()
+        return _ms(t0, time.perf_counter_ns())
+
+    # ------------------------------------------------------------------ one frame
+    def step(self) -> dict | None:
+        """Process the next frame. None = no frame (timeout or end of stream)."""
+        if not self._started:
+            self.start()
+        cfg = self.cfg
+        t_begin = time.perf_counter_ns()
+        frame = self.source.read(timeout_s=self.read_timeout_s)
+        t_read = time.perf_counter_ns()
+        if frame is None:
+            return None
+
+        samples = self.imu.read()
+        t_imu = time.perf_counter_ns()
+        if samples:
+            self.attitude.update(samples)
+        R_wg = np.asarray(self.attitude.R_wg(int(frame.t_exposure_ns)), dtype=np.float64)
+        t_att = time.perf_counter_ns()
+
+        self.detections = self.detector.detect(frame)
+        t_det = time.perf_counter_ns()
+
+        self.tracks = self.tracker.update(int(frame.t_exposure_ns), self.detections, R_wg)
+        t_trk = time.perf_counter_ns()
+
+        now = int(self.source.clock.now_ns())
+        armed = bool(self.arming.armed)
+        decision = self.solver.evaluate(now, self.tracker, self.attitude, armed, self.frame_period_s)
+        self.decision = decision
+        t_sol = time.perf_counter_ns()
+
+        fired = False
+        if decision.fire and self.arming.try_consume_shot():
+            if cfg.fire.live and self.actuator is not None:
+                fired = bool(self.actuator.fire(now))
+                if not fired:
+                    log.warning("actuator refused the fire command (interlock open?)")
+            else:
+                fired = True
+                log.info(
+                    "FIRE (dry run) track %s  miss %.2f deg  pattern %.2f deg  P(hit) %.2f  range %.1f m",
+                    decision.track_id,
+                    np.degrees(decision.miss_rad),
+                    np.degrees(decision.pattern_rad),
+                    decision.p_hit,
+                    decision.range_m,
+                )
+            if fired:
+                self.shots += 1
+
+        self.frames += 1
+        dt_ns = None if self._prev_exposure_ns is None else int(frame.t_exposure_ns) - self._prev_exposure_ns
+        if dt_ns is not None and dt_ns > 0:
+            inst = 1e9 / dt_ns
+            self.fps = inst if self.fps <= 0.0 else (1.0 - FPS_EMA_ALPHA) * self.fps + FPS_EMA_ALPHA * inst
+        self._prev_exposure_ns = int(frame.t_exposure_ns)
+
+        self.health = read_health()  # cheap: the reader caches for 1 s and never raises
+        self._check_health(self.health)
+
+        tele = {
+            "seq": int(frame.seq),
+            "frames": self.frames,
+            "t_exposure_ns": int(frame.t_exposure_ns),
+            "t_ns": now,
+            "age_ms": (now - int(frame.t_exposure_ns)) / 1e6,
+            "fps": float(self.fps),
+            "dropped": int(getattr(self.source, "dropped", 0)),
+            "armed": armed,
+            "shots": int(self.shots),
+            "fired": bool(fired),
+            "live": bool(cfg.fire.live),
+            "imu_ready": bool(self.attitude.ready),
+            "n_detections": len(self.detections),
+            "exposure_us": float(frame.exposure_us),
+            "gain": float(frame.gain),
+            "health": self.health,
+            "stage_ms": {
+                "read": _ms(t_begin, t_read),
+                "imu": _ms(t_read, t_imu),
+                "attitude": _ms(t_imu, t_att),
+                "detect": _ms(t_att, t_det),
+                "track": _ms(t_det, t_trk),
+                "solve": _ms(t_trk, t_sol),
+            },
+            "detector_ms": dict(self.detector.timings_ms),
+            "tracks": [
+                {
+                    "id": int(t.track_id),
+                    "az_deg": float(np.degrees(t.az)),
+                    "el_deg": float(np.degrees(t.el)),
+                    "range_m": float(t.range_m),
+                    "range_sigma_m": float(t.range_sigma_m),
+                    "hits": int(t.hits),
+                    "misses": int(t.misses),
+                    "confirmed": bool(t.confirmed),
+                }
+                for t in self.tracks
+            ],
+            "decision": {
+                "fire": bool(decision.fire),
+                "reason": str(decision.reason),
+                "track_id": None if decision.track_id is None else int(decision.track_id),
+                "miss_deg": float(np.degrees(decision.miss_rad)),
+                "pattern_deg": float(np.degrees(decision.pattern_rad)),
+                "sigma_deg": float(np.degrees(decision.sigma_rad)),
+                "p_hit": float(decision.p_hit),
+                "range_m": float(decision.range_m),
+                "tof_ms": float(decision.tof_s * 1e3),
+            },
+        }
+        if fired:
+            ev = {
+                "t_ns": now,
+                "type": "fire",
+                "live": bool(cfg.fire.live),
+                "track_id": tele["decision"]["track_id"],
+                "miss_deg": tele["decision"]["miss_deg"],
+                "p_hit": tele["decision"]["p_hit"],
+                "range_m": tele["decision"]["range_m"],
+                "shots": self.shots,
+            }
+            self._event(ev)
+
+        self._record(frame, samples)
+        if fired and self.recorder is not None and not self._recorder_is_writer:
+            self.recorder.trigger(now, tag="fire")
+
+        tele["stage_ms"]["overlay"] = self._publish(frame, R_wg, tele)
+        tele["stage_ms"]["total"] = _ms(t_begin, time.perf_counter_ns())
+        if self._jsonl is not None:
+            self._jsonl.write(json.dumps(jsonable(tele)) + "\n")
+
+        self.last_telemetry = tele
+        self._last_step_ns = time.monotonic_ns()
+        self._last_frame_wall = time.monotonic()
+        self._wd_tripped = False
+        return tele
+
+    # ------------------------------------------------------------------ loop
+    def _watchdog(self) -> None:
+        limit_ns = int(float(self.cfg.fire.watchdog_ms) * 1e6)
+        period = max(0.002, min(0.05, limit_ns / 4e9))
+        while not self._wd_stop.wait(period):
+            last = self._last_step_ns
+            if last is None or self._wd_tripped:
+                continue
+            if time.monotonic_ns() - last > limit_ns:
+                self._wd_tripped = True
+                self.watchdog_aborts += 1
+                log.warning("watchdog: no processed frame for %.0f ms -> actuator abort", self.cfg.fire.watchdog_ms)
+                if self.actuator is not None:
+                    self.actuator.abort()
+
+    def _on_signal(self, signum, _frame) -> None:
+        log.info("signal %s: stopping", signal.Signals(signum).name)
+        self._stop.set()
+
+    def _install_signals(self) -> None:
+        if threading.current_thread() is not threading.main_thread():
+            return
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            try:
+                self._sig_prev.append((sig, signal.signal(sig, self._on_signal)))
+            except (ValueError, OSError):  # pragma: no cover - restricted environments
+                pass
+
+    def _restore_signals(self) -> None:
+        while self._sig_prev:
+            sig, prev = self._sig_prev.pop()
+            try:
+                signal.signal(sig, prev)
+            except (ValueError, OSError):  # pragma: no cover
+                pass
+
+    def _status(self) -> None:
+        tele = self.last_telemetry
+        if tele is None:
+            return
+        d = tele["decision"]
+        health = tele.get("health") or {}
+        temp = health.get("cpu_temp_c")
+        flags = health.get("throttled") or {}
+        warn = "".join(
+            tag for tag, key in (("UV", "under_voltage_now"), ("THR", "throttled_now")) if flags.get(key)
+        )
+        hstr = ""
+        if temp is not None:
+            hstr += f"  {float(temp):4.1f}C"
+        if warn:
+            hstr += f"  !{warn}"
+        print(
+            f"[{self.frames:6d}] {tele['fps']:5.1f} fps  age {tele['age_ms']:5.1f} ms  "
+            f"cpu {tele['stage_ms']['total']:5.1f} ms  det {tele['n_detections']}  trk {len(tele['tracks'])}  "
+            f"{'ARMED' if tele['armed'] else 'SAFE '}  shots {self.shots}  drop {tele['dropped']}{hstr}  "
+            f"{'FIRE' if d['fire'] else d['reason']}",
+            flush=True,
+        )
+
+    def run(
+        self,
+        max_frames: int | None = None,
+        display: bool = False,
+        log_jsonl: str | Path | None = None,
+        status: bool = True,
+        idle_end_s: float | None = None,
+        startup_timeout_s: float = 10.0,
+    ) -> int:
+        """Loop until the source ends, max_frames, SIGINT or a display quit. Returns a process exit code."""
+        self._display = bool(display)
+        if log_jsonl is not None:
+            p = resolve_path(log_jsonl)
+            p.parent.mkdir(parents=True, exist_ok=True)
+            self._jsonl = open(p, "w", buffering=1)
+            log.info("telemetry log: %s", p)
+        if idle_end_s is None:
+            idle_end_s = max(0.75, 3.0 * float(self.cfg.fire.watchdog_ms) / 1000.0)
+        self._install_signals()
+        rc = 0
+        try:
+            self.start()
+            self._wd_stop.clear()
+            self._wd_thread = threading.Thread(target=self._watchdog, name="tbot-watchdog", daemon=True)
+            self._wd_thread.start()
+            t_run0 = time.monotonic()
+            while not self._stop.is_set():
+                tele = self.step()
+                now = time.monotonic()
+                if tele is None:
+                    if self._last_frame_wall is None:
+                        if now - t_run0 > startup_timeout_s:
+                            log.error("no frame from %s within %.0f s", self.source.name, startup_timeout_s)
+                            rc = 1
+                            break
+                    elif now - self._last_frame_wall > idle_end_s:
+                        log.info("source %s delivered no frame for %.2f s: stopping", self.source.name, idle_end_s)
+                        break
+                    time.sleep(0.002)
+                    continue
+                if status and now - self._status_wall >= 1.0:
+                    self._status_wall = now
+                    self._status()
+                if max_frames is not None and self.frames >= max_frames:
+                    break
+        except KeyboardInterrupt:  # pragma: no cover - SIGINT handler normally wins
+            log.info("interrupted")
+        finally:
+            self._restore_signals()
+            self.close()
+        log.info(
+            "stopped after %d frames, %d shot(s), %d dropped",
+            self.frames,
+            self.shots,
+            int(getattr(self.source, "dropped", 0)),
+        )
+        return rc
+
+
+# --------------------------------------------------------------------------------------------- CLI
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        prog="tbot run",
+        description="live pipeline: camera -> detect -> track -> fire solver (dry run unless --live)",
+    )
+    add_common_args(parser)
+    parser.add_argument("--live", action="store_true", help="ARM THE ACTUATOR: drive the trigger when the solver fires")
+    parser.add_argument("--stream", action="store_true", help="serve the debug overlay over HTTP")
+    parser.add_argument("--port", type=int, default=None, help="debug stream port (implies --stream)")
+    parser.add_argument("--display", action="store_true", help="show a local preview window (needs a display)")
+    parser.add_argument(
+        "--sim-armed", action="store_true", help="simulated GPIO only: hold the arming button down from the start"
+    )
+    parser.add_argument("--max-frames", type=int, default=None, metavar="N", help="stop after N processed frames")
+    parser.add_argument("--record", choices=("off", "armed", "continuous"), default=None, help="override record.mode")
+    parser.add_argument("--log-jsonl", default=None, metavar="PATH", help="write one telemetry JSON line per frame")
+    parser.add_argument("--quiet", action="store_true", help="no per-second status line")
+    args = parser.parse_args(argv)
+
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    cfg, calib = load_from_args(args)
+    if args.live:
+        cfg.fire.live = True
+    if args.port is not None:
+        cfg.stream.port = int(args.port)
+    if args.stream or args.port is not None:
+        cfg.stream.enabled = True
+    if args.record is not None:
+        cfg.record.mode = args.record
+
+    source = open_source(cfg.camera.source, cfg, calib)
+    gpio = open_gpio(cfg)
+    if args.sim_armed and not isinstance(gpio, SimGpio):
+        gpio.close()
+        parser.error("--sim-armed only works with a simulated GPIO backend (--set gpio.backend=sim)")
+    pipe = Pipeline(cfg, calib, source, gpio=gpio)
+    if args.sim_armed:
+        pressed = 0 if cfg.arming.active_low else 1
+        gpio.inject(int(cfg.arming.pin), pressed)
+        log.warning("--sim-armed: the arming interlock is simulated as HELD (no hardware button)")
+    if cfg.fire.live:
+        log.warning("LIVE: the trigger actuator will be driven while the arming button is held")
+    return pipe.run(
+        max_frames=args.max_frames,
+        display=args.display,
+        log_jsonl=args.log_jsonl,
+        status=not args.quiet,
+    )
+
+
+if __name__ == "__main__":  # pragma: no cover
+    raise SystemExit(main())

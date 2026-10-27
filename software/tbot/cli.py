@@ -1,0 +1,47 @@
+"""`tbot <command> ...` — dispatches to each tool module's main(argv) (imported lazily)."""
+
+from __future__ import annotations
+
+import importlib
+import sys
+
+COMMANDS: dict[str, tuple[str, str]] = {
+    "run": ("tbot.app.run", "live pipeline: camera -> detect -> track -> fire solver (dry run unless fire.live)"),
+    "sim": ("tbot.tools.sim_eval", "closed-loop evaluation on synthetic scenarios"),
+    "record": ("tbot.app.record", "record a session (frames + timestamps + IMU) for replay"),
+    "board": ("tbot.tools.make_board", "write a printable calibration chessboard"),
+    "calib-intrinsics": ("tbot.tools.calib_intrinsics", "fisheye intrinsic calibration -> calib/intrinsics.json"),
+    "calib-boresight": ("tbot.tools.calib_boresight", "camera-to-bore alignment -> calib/boresight.json"),
+    "calib-imu": ("tbot.tools.calib_imu", "IMU bias / axis check / camera-IMU time sync -> calib/imu.json"),
+    "calib-detector": ("tbot.tools.calib_detector", "detector tuning + barrel/static mask -> calib/detector.json, mask.png"),
+    "latency-camera": ("tbot.tools.latency_camera", "LED test: exposure -> userspace latency, timestamp offset"),
+    "latency-actuator": ("tbot.tools.latency_actuator", "fire command -> trigger break latency (arming held)"),
+    "latency-report": ("tbot.tools.latency_report", "print the latency budget (defaults vs measured)"),
+    "bench": ("tbot.tools.bench", "per-stage processing time at the configured resolution"),
+    "hwcheck": ("tbot.tools.hwcheck", "check every fitted device: camera, IMU, arming switch, PWM/actuator, power, temperature"),
+    "jog": ("tbot.tools.jog", "bench setup of the trigger actuator (servo pulse widths / PQ12 pulses); arming button held"),
+}
+
+
+def _usage() -> str:
+    width = max(len(c) for c in COMMANDS)
+    lines = ["usage: tbot <command> [options]   (tbot <command> -h for help)", "", "commands:"]
+    lines += [f"  {c:<{width}}  {d}" for c, (_, d) in COMMANDS.items()]
+    return "\n".join(lines)
+
+
+def main(argv: list[str] | None = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if not argv or argv[0] in ("-h", "--help", "help"):
+        print(_usage())
+        return 0
+    cmd, rest = argv[0], argv[1:]
+    if cmd not in COMMANDS:
+        print(f"tbot: unknown command {cmd!r}\n\n{_usage()}", file=sys.stderr)
+        return 2
+    module = importlib.import_module(COMMANDS[cmd][0])
+    return int(module.main(rest) or 0)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

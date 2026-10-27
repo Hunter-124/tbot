@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tbot"
+version = "0.1.0"
+description = "TBOT skeet assist: OV9281 clay detection, tracking, fire solver, calibration and latency tools"
+requires-python = ">=3.11"
+# numpy and OpenCV come from apt on the Pi (python3-numpy, python3-opencv); use the [laptop] extra elsewhere.
+dependencies = []
+
+[project.optional-dependencies]
+laptop = ["numpy>=1.24", "opencv-python>=4.6"]
+pi = ["smbus2>=0.4"]          # picamera2 and lgpio: apt install python3-picamera2 python3-lgpio
+test = ["pytest>=7"]
+
+[project.scripts]
+tbot = "tbot.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["tbot*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"

@@ -1,0 +1,5 @@
+sessions/
+__pycache__/
+*.tmp
+config/local.toml
+.pytest_cache/
