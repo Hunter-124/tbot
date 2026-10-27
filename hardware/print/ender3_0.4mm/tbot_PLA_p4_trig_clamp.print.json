@@ -1,0 +1,350 @@
+{
+  "schema": "chudware.print_job/1",
+  "part": "tbot_PLA_p4_trig_clamp",
+  "source": {
+    "kind": "plate",
+    "parts": [
+      {
+        "part": "trig_clamp_R",
+        "source": {
+          "kind": "doc",
+          "doc_id": "doc-cpp00000002"
+        },
+        "copies": 1
+      },
+      {
+        "part": "batt_box",
+        "source": {
+          "kind": "doc",
+          "doc_id": "doc-cpp00000022"
+        },
+        "copies": 1
+      }
+    ]
+  },
+  "copies": 2,
+  "printer": {
+    "name": "Creality Ender-3 (0.4 mm nozzle)",
+    "vendor": "Creality",
+    "bed_polygon": [
+      [
+        3.0,
+        3.0
+      ],
+      [
+        228.0,
+        3.0
+      ],
+      [
+        228.0,
+        228.0
+      ],
+      [
+        3.0,
+        228.0
+      ]
+    ],
+    "max_height_mm": 250.0
+  },
+  "presets": {
+    "print": "0.20 mm NORMAL (0.4 mm nozzle) @CREALITY",
+    "filament": "Generic PLA @CREALITY"
+  },
+  "goal": "strength",
+  "settings_changed": {
+    "perimeters": "4",
+    "fill_density": "35%",
+    "fill_pattern": "cubic",
+    "top_solid_layers": "6",
+    "bottom_solid_layers": "5",
+    "temperature": "215",
+    "first_layer_temperature": "215",
+    "support_material": "0",
+    "binary_gcode": "0",
+    "overhangs": "1",
+    "complete_objects": "1"
+  },
+  "effective": {
+    "layer_height": "0.20",
+    "first_layer_height": "0.2",
+    "perimeters": "4",
+    "fill_density": "35%",
+    "fill_pattern": "cubic",
+    "top_solid_layers": "6",
+    "bottom_solid_layers": "5",
+    "support_material": "0",
+    "support_material_style": null,
+    "support_material_threshold": "40",
+    "dont_support_bridges": "1",
+    "overhangs": "1",
+    "brim_width": "0",
+    "temperature": "215",
+    "first_layer_temperature": "215",
+    "bed_temperature": "60",
+    "first_layer_bed_temperature": "60",
+    "nozzle_diameter": "0.4",
+    "retract_length": "5",
+    "complete_objects": "1",
+    "extruder_clearance_radius": "55",
+    "extruder_clearance_height": "25"
+  },
+  "orientation": null,
+  "plate": {
+    "complete_individual_objects": true,
+    "objects": [
+      {
+        "object": "batt_box#1",
+        "part": "batt_box",
+        "copy": 1,
+        "print_order": 1,
+        "offset_mm": [
+          115.5,
+          76.75
+        ],
+        "bbox_mm": [
+          60.5,
+          42.75,
+          170.5,
+          110.75
+        ],
+        "height_mm": 25.0,
+        "above_clearance_height": false,
+        "gcode_label": "01_batt_box_1.stl",
+        "mesh_sha256": "33259a09692a2075e6aeb68b85cbecc0389a7f6f757726d7d710c9a383ae9eb1"
+      },
+      {
+        "object": "trig_clamp_R#1",
+        "part": "trig_clamp_R",
+        "copy": 1,
+        "print_order": 2,
+        "offset_mm": [
+          99.0,
+          178.0
+        ],
+        "bbox_mm": [
+          60.5,
+          167.75,
+          137.5,
+          188.25
+        ],
+        "height_mm": 30.3,
+        "above_clearance_height": true,
+        "gcode_label": "02_trig_clamp_r_1.stl",
+        "mesh_sha256": "243d06ca99dd94927c9b39f5a6b70f889bb9d1d2bdee910597283c87e0fd37d6"
+      }
+    ],
+    "gap_mm": 57.0,
+    "min_object_gap_mm": 57.0,
+    "edge_margin_mm": 4.45,
+    "usable_rect_mm": [
+      7.45,
+      7.45,
+      223.55,
+      223.55
+    ],
+    "clearance": {
+      "extruder_clearance_radius_mm": 55.0,
+      "extruder_clearance_height_mm": 25.0
+    },
+    "parts": [
+      {
+        "part": "trig_clamp_R",
+        "copies": 1,
+        "source": {
+          "kind": "doc",
+          "doc_id": "doc-cpp00000002"
+        },
+        "orientation": {
+          "build_dir": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "yaw_deg": 0.0,
+          "source": "caller",
+          "why": "caller-specified build direction"
+        },
+        "estimate": {
+          "part_volume_mm3": 11776.449,
+          "support_volume_mm3": 0.0,
+          "material_g": 13.783,
+          "support_g": 0.0,
+          "time_h": 0.29,
+          "layers": 152,
+          "support_share": 0.0,
+          "method": "deterministic shell/infill/flow ranking estimate, not slicer output"
+        },
+        "printability": {
+          "status": "warn",
+          "issues": [
+            {
+              "check": "small_holes",
+              "status": "warn",
+              "note": "6 cylindrical holes evaluated; 2 below printability thresholds.",
+              "fix": [
+                "vertical holes print ~0.1-0.2 mm undersize; size +0.2 mm or drill",
+                "use teardrop/diamond profiles for large horizontal holes"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "part": "batt_box",
+        "copies": 1,
+        "source": {
+          "kind": "doc",
+          "doc_id": "doc-cpp00000022"
+        },
+        "orientation": {
+          "build_dir": [
+            0.0,
+            1.0,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "source": "caller",
+          "why": "caller-specified build direction"
+        },
+        "estimate": {
+          "part_volume_mm3": 63098.151,
+          "support_volume_mm3": 0.0,
+          "material_g": 59.673,
+          "support_g": 0.0,
+          "time_h": 0.961,
+          "layers": 125,
+          "support_share": 0.0,
+          "method": "deterministic shell/infill/flow ranking estimate, not slicer output"
+        },
+        "printability": {
+          "status": "warn",
+          "issues": [
+            {
+              "check": "small_holes",
+              "status": "warn",
+              "note": "9 cylindrical holes evaluated; 1 below printability thresholds.",
+              "fix": [
+                "vertical holes print ~0.1-0.2 mm undersize; size +0.2 mm or drill",
+                "use teardrop/diamond profiles for large horizontal holes"
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "support_for": [],
+    "brim_for": []
+  },
+  "slicer": {
+    "kind": "flatpak",
+    "argv_prefix": [
+      "/usr/bin/flatpak",
+      "run",
+      "--user",
+      "--command=prusa-slicer",
+      "com.prusa3d.PrusaSlicer"
+    ],
+    "version": "2.9.6",
+    "profiles_dir": "/home/hunter/.local/share/flatpak/app/com.prusa3d.PrusaSlicer/x86_64/stable/bf3534e4ffc688bbaf625206f27f9333b1b8820d3425dae19d3083b47e08ce79/files/share/PrusaSlicer/profiles",
+    "source": "flatpak_user",
+    "identity": "bf3534e4ffc688bbaf625206f27f9333b1b8820d3425dae19d3083b47e08ce79",
+    "usable": true
+  },
+  "config_sha256": "80e20ef18efba0d53efcd1d1377fb1bf5b72f0026adab01c721e824335e25c65",
+  "mesh_sha256": "8c73bada75e4a3637ec5e4b320e400d5e6ef43066e0d704ef7958279ce181d32",
+  "gcode": "/home/hunter/Desktop/TBOT/print/creality_ender_3_0_4_mm_nozzle/tbot_PLA_p4_trig_clamp.gcode",
+  "gcode_sha256": "7914d36616b8f7b22c99e222bb73aedc857261900115f6de4ad1738f707acbb7",
+  "project_3mf": "/home/hunter/Desktop/TBOT/print/creality_ender_3_0_4_mm_nozzle/tbot_PLA_p4_trig_clamp.3mf",
+  "stats": {
+    "layers": 151,
+    "height_mm": 30.2,
+    "filament_mm": 24002.111,
+    "filament_g": 71.59,
+    "print_time_s": 26156.0,
+    "support_share": 0.0,
+    "by_type_mm": {
+      "Bridge infill": 16036.646,
+      "Custom": 260.0,
+      "External perimeter": 95800.13,
+      "Internal infill": 157780.254,
+      "Overhang perimeter": 53.288,
+      "Perimeter": 275504.021,
+      "Skirt/Brim": 946.641,
+      "Solid infill": 157044.963,
+      "Top solid infill": 18662.766
+    },
+    "slicer": "PrusaSlicer 2.9.6"
+  },
+  "estimate": [
+    {
+      "part": "trig_clamp_R",
+      "estimate": {
+        "part_volume_mm3": 11776.449,
+        "support_volume_mm3": 0.0,
+        "material_g": 13.783,
+        "support_g": 0.0,
+        "time_h": 0.29,
+        "layers": 152,
+        "support_share": 0.0,
+        "method": "deterministic shell/infill/flow ranking estimate, not slicer output"
+      }
+    },
+    {
+      "part": "batt_box",
+      "estimate": {
+        "part_volume_mm3": 63098.151,
+        "support_volume_mm3": 0.0,
+        "material_g": 59.673,
+        "support_g": 0.0,
+        "time_h": 0.961,
+        "layers": 125,
+        "support_share": 0.0,
+        "method": "deterministic shell/infill/flow ranking estimate, not slicer output"
+      }
+    }
+  ],
+  "printability": {
+    "status": "warn",
+    "issues": [
+      {
+        "check": "small_holes",
+        "status": "warn",
+        "note": "6 cylindrical holes evaluated; 2 below printability thresholds.",
+        "fix": [
+          "vertical holes print ~0.1-0.2 mm undersize; size +0.2 mm or drill",
+          "use teardrop/diamond profiles for large horizontal holes"
+        ],
+        "part": "trig_clamp_R"
+      },
+      {
+        "check": "small_holes",
+        "status": "warn",
+        "note": "9 cylindrical holes evaluated; 1 below printability thresholds.",
+        "fix": [
+          "vertical holes print ~0.1-0.2 mm undersize; size +0.2 mm or drill",
+          "use teardrop/diamond profiles for large horizontal holes"
+        ],
+        "part": "batt_box"
+      }
+    ]
+  },
+  "gcode_check": {
+    "status": "pass",
+    "issues": []
+  },
+  "slicer_warnings": [
+    "print warning: Detected print stability issues:; 02_trig_clamp_r_1.stl; Low bed adhesion; Consider enabling supports.; Also consider enabling brim."
+  ],
+  "slicer_mesh_repairs": {
+    "available": true,
+    "volumes": 2,
+    "counts": {
+      "edges_fixed": 0,
+      "degenerate_facets": 0,
+      "facets_removed": 0,
+      "facets_reversed": 0,
+      "backwards_edges": 0
+    }
+  },
+  "print_ready": true
+}

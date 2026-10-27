@@ -116,10 +116,31 @@ LOP 365), origin re-picked on the trigger finger face mid-blade. +/-1.5 mm near 
   legs, free in the steel rod-end boss, bottoms on the blind hole at Y=+10 — insert from
   the outboard +Y side); 1x 2.0 mm TPU/silicone pad 7.8 (Y) x 3.9 (Z), slid into the pocket
   from -X. No screws, inserts or nuts on this part.
-- parts/trig_bracket_L passes FDM DfM at build_dir [0,0,1] (928.8 mm2 bed, 0 overhang).
+- parts/trig_bracket_L passes FDM DfM at build_dir [0,0,1] (REV H: 1151.8 mm2 bed, 0 overhang; was 928.8 before the shroud).
   Its two warns are benign: min_wall 1.051 (the 45 deg gable apexes of f22-f25) and a
   9.5 mm bridge over the f19 PinSlot — 0.5 mm under the fail limit, so do not widen that
   slot without gabling it.
+
+## REV H — trigger hardware clean-up (user, 2026-10-26: "make it much cleaner")
+- trig_bracket_L now reads as ONE flush slab from the gun-left side: the cradle's outboard wall continues rearward as
+  ShroudWall X -20..27, Y 24.3..27.1, Z -22.3..8.6, tied to the cradle along its full height and stiffened by
+  ShroudFloor (Y 16.85..24.35, Z -22.3..-19.8, on the bed). The carriage, rod end and dowel pin are no longer exposed
+  from the left or below-outboard (pinch point covered). Carriage clearances: 1.9 to the wall (carriage max Y 22.4),
+  0.8 to the floor flange (carriage hook max Y 16.05 below Z -17.5). The rear (X -20) stays OPEN: the carriage still
+  slides onto the rail from the rear before the bracket goes on the guard.
+- PinAccess D4.2 along Y at (X 24, Z 0) through the shroud: lines up with the carriage pin hole at REST, so the
+  D3 x 12 dowel still goes in from +Y.
+- FPCGroove on the cradle underside: X 35.4..62.1, Y 13.2..19.8, 1.0 deep — the PQ12 flex leaves the FPCSlot and lies
+  flush forward instead of hanging.
+- Outline: R8 rear-top corner, R4 ear front-top, R1.5 round the whole outboard face boundary, 1.0 x 0.8 bed chamfer
+  on the outboard / rear / ear-front bottom edges (steeper than 45 deg so the R1.5 blends are not overhangs).
+- trig_clamp_R: front end of PlateR rounded R4 (top) + 1.5 x 1.2 bed chamfer; button pose, housing and screws unchanged.
+  An R1 on the plate's outboard top edge was tried and dropped: it runs back into the CskU17 rim (0.93 mm sliver).
+- Verified: verify_battery pass (attachment 1.0) and dfm_check(ender 3, +Z) pass on both; wall_thickness red only at
+  the pre-existing gable apexes (bracket) and housing rear edges (clamp). Rigs: 190 pairs clear (PQ12 rig), 21
+  (servo rig); PQ12 sweeps m6 3->16.8 and m6 16.8->21.1 with trigger m4 0->-9.4 clear on all 10 frames.
+  Sliced PETG strength, print_ready: bracket 24.3 g / 2.5 h (gcode warn: 8.25 mm air run < 10 limit), clamp 14.0 g / 1.6 h.
+- Not changed: trig_finger (frozen interfaces), servo_bracket_L / servo_lever (the MG996R set still shows its mechanism).
 
 ## MG996R trigger actuator set (parts/servo_bracket_L, servo_lever; refs/mg996r) — ALTERNATIVE to the PQ12 set
 Same guard-clamp interface as trig_bracket_L/trig_clamp_R: left plate Y +5.5..+8.5, clamp lip Y +2..+5.5 (X 0..30, Z -24.0..-14.8, 45 deg gable under it), M3 cross screws along Y at (X8,Z-8.8) (X17,Z-8.2) above the bow and (X8,Z-18) (X17,Z-18) below it, M3 heat-set inserts in the left plate, trig_clamp_R unchanged.
@@ -402,6 +423,24 @@ at=[-276, 36.2, -5] (world X -311..-231, Y 26.2..46.2, Z -34..24).
 - Lead: out of the front notch, forward along the stock's left side and the receiver's left
   side (past the trigger actuator, which is also on the left: short 12 V branch), then along
   the forend underside to the pod's rear cable exit.
+- REV E.3 ergonomics (user, 2026-10-27: "improve the ergonomics ... remove the sharp edges/corners") - SUPERSEDES the
+  ear/tab/lid geometry above; cavity, pack placement, rim Y 47.2 and strap channels unchanged.
+  - batt_box: ears merged into one rounded slab X -324..-228, Z -39..29, Y 22.2..47.2, R12 outer corners (matches lid),
+    1.5 x 45 deg chamfer round the whole stock-side (bed) edge incl. the tongue. M3 heat-set inserts moved to
+    (X -318 / -234, Z -21 / 11) - 4 mm wall to outside and to the cavity. Cable notch now runs straight out through
+    the front wall X -241..-226.5, Z -10..0, floor Y 26.2 flush with the tongue top (no step for the lead), exit
+    edges R1.5. Nose tongue X -228..-214, Z -16..6, 4 thick: R5 tip corners, R3 root, R1.2 top edges; tie slots
+    3 x 4 at X -222..-219, Z -13..-9 / -1..3. 63.0 cm^3 (solid; was 48.8 - the filled ears, mostly infill).
+  - batt_lid: R12 corners, R3 outer rim, 4x M3 flat-head countersinks (90 deg, D7.0 at the face, 1.8 deep) at the
+    new insert positions -> heads flush; hardware is now 4x M3 x 8 ISO 10642 countersunk (was SHCS). Strap-channel
+    lips R0.8. 20.7 cm^3.
+  - Verified: verify_battery pass both; dfm_check(ender 3, build_dir +Y) lid pass; box fails only on the 4 corner
+    + tongue faces of the nominal 45 deg bed chamfer measured at 45.6-46.0 deg (tessellation of the conical
+    corner patches, 1-9 mm^2 each at Z 0-1 mm) and warns the notch as a "horizontal hole" (it is open to the
+    top in print orientation); wall_thickness min 1.24 / 1.38 mm, no red. Assembly (tbot_trigger_cam7): clear,
+    box->stock 1.45, pack->box/lid 1.0, pack->stock 5.67.
+  - 2026-10-27 print prep: bed chamfer changed to 1.5 x 1.2 (steeper than 45 deg) -> dfm_check(ender 3, +Y) PASS on
+    batt_box (the 45.6-46 deg corner faces are gone). Sliced on plate tbot_p4 (see design/BOM.md).
 
 ## REV F — arming switch, external hose clamps, verified print set (user, 2026-10-26)
 User: "make a place for this momentary switch too since it's going to act as an arming trigger, model in the
@@ -425,23 +464,23 @@ guard post, spine and the X 62..96 housing are deleted.
   is X +2.8, so the reach is 6.8 mm SHORTER than the trigger's; 15 mm right of the trigger centreline, 7 mm below the
   trigger contact point (origin). btn_e429 placement (row-major, local -> gun): [0,0,1,-13.8; 1,0,0,-15; 0,1,0,-7]
   (local +Z -> +X, nut flats horizontal), lock-mated flange-top <-> panel back face.
-- Housing (trig_clamp_R base feature): X -44.5..-13.8, Y -22.5..-5.5, Z -22.3..+1.0 — top stays under the crossbolt
+- Housing (trig_clamp_R base feature): X -41.0..-13.8 (REV H.1; was -44.5), Y -22.5..-5.5, Z -22.3..+1.0 — top stays under the crossbolt
   keep-out (Z +3; 6.5 mm below the bolt). Outboard underside 41 deg from vertical (Y -22.5, Z -13 -> Y -14.5, Z -22.3).
   Front face X -13.8 is the panel face: hex nut sits ON it (9.5 mm / 3/8" open-end wrench from outboard), panel
   X -16.8..-13.8 with a D7.4 50-deg teardrop, flange seats on the panel back X -16.8, D10 truncated 50-deg teardrop bore
-  X -44.5..-16.8 (flat top Z -1.2, 3.3 wide), open at the rear: the switch goes in cap-first from the rear.
+  X -41.0..-16.8 (flat top Z -1.2, 3.3 wide), open at the rear: the switch goes in cap-first from the rear.
 - Finger pocket in front of the cap: inboard wall Y -8.5..-5.5 = ArmTie (X -14.5..-2.5, up to Z +1) + FingerShield
   (X -3..20, Z -4.5..+8, 4 mm top-front chamfer), 6.5 mm from the cap axis. It is also the pinch barrier: the
   fingertip cannot enter the guard opening where the PQ12 carriage / MG996R crown sweep (Y >= -4.5; 1.0 mm to
   trig_finger, 1.6 to servo_lever). ArmChin under the cap: X -14.5..+2, Y -13.2..-5.5, Z -22.3..-16.5.
 - Cross screws are now COUNTERSUNK (4x M3 ISO 10642) in 94-deg seats, r 3.1 at Y -8.6: heads ~0.3 mm proud, so the
   finger zone carries no screw heads. Lengths unchanged (M3x20 upper, M3x16 lower); thread engagement -0.3 mm.
-- Lead: out of the open rear of the bore, down the rear face into the 3.0 x 2.4 underside channel (Y -11.5..-8.5,
-  X -44.5..+2), out under the chin, along the underside of the plate/lip, then receiver/forend underside to the pod's
+- Lead: out of the open rear of the bore, down the rear face into the 3.0 x 2.7 underside channel (Y -11.5..-8.5,
+  Z -22.4..-19.7, X -41.1..+2.1), out under the chin, along the underside of the plate/lip, then receiver/forend underside to the pod's
   rear cable exit (~450 mm, tape with the 12 V lead).
 - Safety: the cap faces +X, so no flat surface the gun is laid on (either side, butt-down, upside-down) can press it;
   only a rearward pull arms. NO contact; firmware treats open as disarmed.
-- Structure: the housing cantilevers 31 mm behind the plate. Joint section at X -6 (tie + chin) 97 mm2, plate + lip at
+- Structure: the housing cantilevers 27.5 mm behind the plate (REV H.1; the stresses below were computed for REV G's 31 mm and are now conservative). Joint section at X -6 (tie + chin) 97 mm2, plate + lip at
   X 4 80 mm2: 4.4 / 4.8 MPa peak at a 35 N axial load (finger abuse, or recoil inertia [INFERENCE ~12 g x ~300 g]) vs
   PETG ~45 MPa; the stress lies in the layer plane.
 - Verified: verify_battery pass (attachment 1.0); dfm_check(ender 3, +Z) pass, 0 support; wall_thickness red only on
@@ -452,6 +491,30 @@ guard post, spine and the X 62..96 housing are deleted.
   gun_body <-> clamp minimum is the unchanged LipR top vs the guard-bow spline sag at X 13.7 (shim/pad zone).
 - Fit check on the gun before final use: with the hand in the firing grip, the pad should land on the cap without
   moving the hand; cap travel must click before the cap bottoms.
+
+### Arming trigger comfort — REV H.1 (user, 2026-10-26: "optimize the ergonomics more for the comfort of the shooter")
+- The "free-floating" button the user saw was a stale tab (doc-cpp00000031) still carrying the REV F button mate m22,
+  whose clamp face no longer exists; m22 was replaced by the REV G lock (flange top <-> panel back), button now seated.
+- Finger pad (parts/arm_pad, PETG): the switch is a dead-man that is HELD the whole time the system is armed, and a bare
+  D5.5 cap concentrates that hold force on the fingertip. The pad is an 11 (Y) x 13 (Z) shoe glued (CA/epoxy) on the cap:
+  Y -20.5..-9.5, Z -13.5..-0.5, rear face X -5.5, D5.8 x 1.6 socket over the cap (0.1 glue gap at the cap tip),
+  concave R22 finger face (axis along Y, centre X 19.6 / Z -7) -> face X -2.4 at the centre, -1.7 at the rounded rims;
+  R2.5 corners, R1 face rim. ~4.5x the cap's contact area; it also covers the brass nut from the finger.
+  Reach: 5.2 mm shorter than the trigger at that height (was 6.8 with the bare cap).
+  Travel: 2.7 mm before the pad meets the bushing front (X -8.2) — above the 1.5-2 mm [INFERENCE] switch travel, so the
+  switch, not the pad, ends the stroke. 1.0 mm to the ArmTie wall on the inboard side (it guides the pad), 3.0 above the
+  chin. Safety unchanged: the housing outboard face (Y -22.5) and the chin (Z -22.3) stand proud of the pad, so a flat
+  surface still cannot press it; only a rearward pull arms.
+  Print +X up (rear face on the bed), 1.0 x 0.8 bed chamfer, no supports: 0.6 g / 0.1 h.
+- Housing 3.5 mm shorter (rear X -41.0): the heat-shrink ends at X -40.0, so the bore still covers it; rear end is 3.5 mm
+  further from the middle finger. Lead now modelled as routed (refs/btn_e429 LeadOut/LeadDown/LeadAcross/LeadChannelRun):
+  1.4 mm out of the rear, down the rear face, across to Y -10, forward in the channel (centre Z -21.0, flush with the
+  bed face) and out under the chin — nothing points back at the hand.
+- Verified: arm_pad verify_battery pass, dfm_check(ender 3, +X) pass, wall_thickness clean; trig_clamp_R verify_battery /
+  dfm pass, wall_thickness red only at the housing rear edges (0.75 / 0.94, as REV G) and 0.994 at the chin-nose corner
+  over the channel (convex chamfer corner, 1.2 wall behind). Rigs: PQ12 210 pairs clear, servo 28 pairs clear; PQ12 sweeps
+  (m6 3->16.8; 16.8->21.1 with m4 0->-9.4) and MG996R sweeps (m4 -17->+2; +2->+17 with m5 0->-9.07) clear on every frame.
+  Sliced PETG strength, print_ready, gcode pass: trig_clamp_R 13.1 g / 1.5 h, arm_pad 0.6 g / 0.1 h.
 
 ### Hose clamps (refs/hose_clamp_rear, refs/hose_clamp_front)
 - 2x DIN 3017 W4 stainless worm-drive clamp, 9 mm band, range 70-90 mm. Modelled closed path 254.7 / 254.1 mm
@@ -610,6 +673,12 @@ shooter, so the IMU goes toward the end of the gun)
   so those documents carry ABS as the stand-in (density/stiffness within ~3%). Upgrade path with an
   enclosed, hardened printer: PC or PA-CF. All barrel contact goes through a 1.5 mm silicone liner
   on relieved contact ribs. Non-barrel parts (both trigger sets, pendant) stay PETG.
+- 2026-10-27 (user): no ASA-capable printer (stock open-frame Ender 3). cam_mount_lower and pod_cap are now stored and
+  sliced as PETG, with fiberglass insulation between the barrel and the print in place of the silicone-only liner.
+  ASA/PC remain the upgrade path; inspect the pod for creep after long hot sessions.
+- 2026-10-27 (user): PLA for every part off the barrel — trig_bracket_L, trig_finger, trig_clamp_R, arm_pad, batt_box,
+  batt_lid (stored material set to PLA). Barrel-mounted parts stay PETG: cam_mount_lower, pod_cap, pod_sled
+  (user confirmed the cap and sled stay PETG). Print files carry the material in the name (tbot_PLA_* / tbot_PETG_*).
 - Barrel mounting = stainless worm-drive hose clamps passing UNDER the vent-rib plate between rib
   posts (posts 4 long every 45 from X=200 [INFERENCE from photos]); the posts locate the band
   axially (recoil) and in rotation. CHECK ON THE REAL GUN that a 9 mm band slips under the rib
@@ -618,15 +687,16 @@ shooter, so the IMU goes toward the end of the gun)
 ## Files
 - refs/*.step+: reference geometry, not printed (gun, trigger, PQ12, MG996R, Pi 3B, Pi 5 + AI HAT+ envelope,
   innomaker camera, GY-521, XL4015, 3S 2600 mAh pack, E429 arming button, hose_clamp_rear/front).
-- parts/*.step+ printed. ASA: cam_mount_lower (pod body), pod_cap. PETG: pod_sled, batt_box, batt_lid,
-  trig_bracket_L, trig_clamp_R (with the arming switch), trig_finger, servo_bracket_L, servo_lever.
+- parts/*.step+ printed (2026-10-27 material split). PETG (barrel-mounted): cam_mount_lower (pod body), pod_cap,
+  pod_sled. PLA (off the barrel): batt_box, batt_lid, trig_bracket_L, trig_clamp_R (with the arming switch),
+  trig_finger, arm_pad. MG996R set (not sliced in the plates): servo_bracket_L, servo_lever.
   NOT PRINTED (superseded/retired): cam_mount_upper, imu_clamp_upper (REV C split caps), imu_clamp_lower
   (REV D muzzle IMU saddle — it blocked the camera; the IMU now rides on pod_cap), pendant_body/pendant_cap
   (REV F: the arming switch lives on trig_clamp_R).
 - asm/tbot_trigger_cam.step+: full rig (PQ12 trigger variant, pod, sled, Pi 3B, buck, cap, camera, IMU, battery
-  box, arming button, both hose clamps), all mated. asm/pod_slide_study.step+: sled slide-in study (Pi 3B + Pi 5
+  box, arming button + arm_pad, both hose clamps), all mated. asm/pod_slide_study.step+: sled slide-in study (Pi 3B + Pi 5
   envelopes). asm/tbot_trigger_servo.step+: MG996R trigger variant (+ arming button). Root tbot_trigger_cam.step+ /
   imu_fitcheck.step+ are pre-REV-D files (stale).
 - export/*.step: ISO STEP of every printed part; print/creality_ender_3_0_4_mm_nozzle/: verified G-code, 3MF and
-  .print.json per part; design/BOM.md: print + hardware list; design/assembly_sequence.md: assemblability study +
+  .print.json per plate (tbot_<MATERIAL>_pN); design/BOM.md: print + hardware list; design/assembly_sequence.md: assemblability study +
   build/service sequence.

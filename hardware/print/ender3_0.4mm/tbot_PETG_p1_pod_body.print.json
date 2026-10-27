@@ -1,0 +1,388 @@
+{
+  "schema": "chudware.print_job/1",
+  "part": "tbot_PETG_p1_pod_body",
+  "source": {
+    "kind": "plate",
+    "parts": [
+      {
+        "part": "cam_mount_lower",
+        "source": {
+          "kind": "doc",
+          "doc_id": "doc-cpp00000010"
+        },
+        "copies": 1
+      },
+      {
+        "part": "pod_sled",
+        "source": {
+          "kind": "doc",
+          "doc_id": "doc-cpp00000021"
+        },
+        "copies": 1
+      }
+    ]
+  },
+  "copies": 2,
+  "printer": {
+    "name": "Creality Ender-3 (0.4 mm nozzle)",
+    "vendor": "Creality",
+    "bed_polygon": [
+      [
+        3.0,
+        3.0
+      ],
+      [
+        228.0,
+        3.0
+      ],
+      [
+        228.0,
+        228.0
+      ],
+      [
+        3.0,
+        228.0
+      ]
+    ],
+    "max_height_mm": 250.0
+  },
+  "presets": {
+    "print": "0.20 mm NORMAL (0.4 mm nozzle) @CREALITY",
+    "filament": "Generic PETG @CREALITY"
+  },
+  "goal": "strength",
+  "settings_changed": {
+    "perimeters": "4",
+    "fill_density": "35%",
+    "fill_pattern": "cubic",
+    "top_solid_layers": "6",
+    "bottom_solid_layers": "5",
+    "support_material": "0",
+    "binary_gcode": "0",
+    "overhangs": "1",
+    "complete_objects": "1"
+  },
+  "effective": {
+    "layer_height": "0.20",
+    "first_layer_height": "0.2",
+    "perimeters": "4",
+    "fill_density": "35%",
+    "fill_pattern": "cubic",
+    "top_solid_layers": "6",
+    "bottom_solid_layers": "5",
+    "support_material": "0",
+    "support_material_style": null,
+    "support_material_threshold": "40",
+    "dont_support_bridges": "1",
+    "overhangs": "1",
+    "brim_width": "0",
+    "temperature": "240",
+    "first_layer_temperature": "240",
+    "bed_temperature": "70",
+    "first_layer_bed_temperature": "70",
+    "nozzle_diameter": "0.4",
+    "retract_length": "5",
+    "complete_objects": "1",
+    "extruder_clearance_radius": "55",
+    "extruder_clearance_height": "25"
+  },
+  "orientation": null,
+  "plate": {
+    "complete_individual_objects": true,
+    "objects": [
+      {
+        "object": "pod_sled#1",
+        "part": "pod_sled",
+        "copy": 1,
+        "print_order": 1,
+        "offset_mm": [
+          115.5,
+          186.5
+        ],
+        "bbox_mm": [
+          42.0,
+          153.3,
+          189.0,
+          219.7
+        ],
+        "height_mm": 17.0,
+        "above_clearance_height": false,
+        "gcode_label": "01_pod_sled_1.stl",
+        "mesh_sha256": "e2a902067e08d50ffac34bfc766f8ab91194dca23740fb3ac2685e9d0ac4eace"
+      },
+      {
+        "object": "cam_mount_lower#1",
+        "part": "cam_mount_lower",
+        "copy": 1,
+        "print_order": 2,
+        "offset_mm": [
+          70.0,
+          53.8
+        ],
+        "bbox_mm": [
+          42.0,
+          11.3,
+          98.0,
+          96.3
+        ],
+        "height_mm": 154.0,
+        "above_clearance_height": true,
+        "gcode_label": "02_cam_mount_lower_1.stl",
+        "mesh_sha256": "37b330487b00650f93632035f954572d7a5c7521bdbbe3e72672cf29af60a924"
+      }
+    ],
+    "gap_mm": 57.0,
+    "min_object_gap_mm": 57.0,
+    "edge_margin_mm": 4.45,
+    "usable_rect_mm": [
+      7.45,
+      7.45,
+      223.55,
+      223.55
+    ],
+    "clearance": {
+      "extruder_clearance_radius_mm": 55.0,
+      "extruder_clearance_height_mm": 25.0
+    },
+    "parts": [
+      {
+        "part": "cam_mount_lower",
+        "copies": 1,
+        "source": {
+          "kind": "doc",
+          "doc_id": "doc-cpp00000010"
+        },
+        "orientation": {
+          "build_dir": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "source": "caller",
+          "why": "caller-specified build direction"
+        },
+        "estimate": {
+          "part_volume_mm3": 113289.9,
+          "support_volume_mm3": 0.0,
+          "material_g": 126.945,
+          "support_g": 0.0,
+          "time_h": 3.898,
+          "layers": 770,
+          "support_share": 0.0,
+          "method": "deterministic shell/infill/flow ranking estimate, not slicer output"
+        },
+        "printability": {
+          "status": "warn",
+          "issues": [
+            {
+              "check": "min_wall",
+              "status": "warn",
+              "note": "Minimum measured wall 1.500 mm; required 1 mm. 26 more regions are not shown. To show up to 50 regions, set detail=true.",
+              "fix": [
+                "thicken to >= 1 mm (3 perimeters at 0.44 mm)"
+              ]
+            },
+            {
+              "check": "bridges",
+              "status": "warn",
+              "note": "Largest two-sided bridge span 8.143 mm; clean bridge limit 5 mm, fail above 10 mm.",
+              "fix": [
+                "slicer bridges it but expect sag; add support/sacrificial layer or shorten"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "part": "pod_sled",
+        "copies": 1,
+        "source": {
+          "kind": "doc",
+          "doc_id": "doc-cpp00000021"
+        },
+        "orientation": {
+          "build_dir": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "yaw_deg": 0.0,
+          "source": "caller",
+          "why": "caller-specified build direction"
+        },
+        "estimate": {
+          "part_volume_mm3": 24782.771,
+          "support_volume_mm3": 0.0,
+          "material_g": 31.474,
+          "support_g": 0.0,
+          "time_h": 0.908,
+          "layers": 85,
+          "support_share": 0.0,
+          "method": "deterministic shell/infill/flow ranking estimate, not slicer output"
+        },
+        "printability": {
+          "status": "warn",
+          "issues": [
+            {
+              "check": "bridges",
+              "status": "warn",
+              "note": "Largest two-sided bridge span 5.242 mm; clean bridge limit 5 mm, fail above 10 mm. 4 more regions are not shown. To show up to 50 regions, set detail=true.",
+              "fix": [
+                "slicer bridges it but expect sag; add support/sacrificial layer or shorten"
+              ]
+            },
+            {
+              "check": "small_holes",
+              "status": "warn",
+              "note": "10 cylindrical holes evaluated; 4 below printability thresholds.",
+              "fix": [
+                "vertical holes print ~0.1-0.2 mm undersize; size +0.2 mm or drill",
+                "use teardrop/diamond profiles for large horizontal holes"
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "support_for": [],
+    "brim_for": []
+  },
+  "slicer": {
+    "kind": "flatpak",
+    "argv_prefix": [
+      "/usr/bin/flatpak",
+      "run",
+      "--user",
+      "--command=prusa-slicer",
+      "com.prusa3d.PrusaSlicer"
+    ],
+    "version": "2.9.6",
+    "profiles_dir": "/home/hunter/.local/share/flatpak/app/com.prusa3d.PrusaSlicer/x86_64/stable/bf3534e4ffc688bbaf625206f27f9333b1b8820d3425dae19d3083b47e08ce79/files/share/PrusaSlicer/profiles",
+    "source": "flatpak_user",
+    "identity": "bf3534e4ffc688bbaf625206f27f9333b1b8820d3425dae19d3083b47e08ce79",
+    "usable": true
+  },
+  "config_sha256": "dea3659021d02bb658c3097ba7e528f46201f0d241e7df2f7b26e41622e06fa3",
+  "mesh_sha256": "62c4926726c2ff2b5340d2c58acb26ad5cc467da9f75a8e2849a5e5051404b36",
+  "gcode": "/home/hunter/Desktop/TBOT/print/creality_ender_3_0_4_mm_nozzle/tbot_PETG_p1_pod_body.gcode",
+  "gcode_sha256": "032332b0e609b1acc7061be5eaa822455629b6e036145e2950fcfe17d4591672",
+  "project_3mf": "/home/hunter/Desktop/TBOT/print/creality_ender_3_0_4_mm_nozzle/tbot_PETG_p1_pod_body.3mf",
+  "stats": {
+    "layers": 770,
+    "height_mm": 154.0,
+    "filament_mm": 47041.439,
+    "filament_g": 143.7,
+    "print_time_s": 55779.0,
+    "support_share": 0.0,
+    "by_type_mm": {
+      "Bridge infill": 21456.84,
+      "Custom": 260.0,
+      "External perimeter": 261304.135,
+      "Internal infill": 204327.093,
+      "Overhang perimeter": 294.274,
+      "Perimeter": 662755.581,
+      "Skirt/Brim": 1301.671,
+      "Solid infill": 217288.222,
+      "Top solid infill": 26522.013
+    },
+    "slicer": "PrusaSlicer 2.9.6"
+  },
+  "estimate": [
+    {
+      "part": "cam_mount_lower",
+      "estimate": {
+        "part_volume_mm3": 113289.9,
+        "support_volume_mm3": 0.0,
+        "material_g": 126.945,
+        "support_g": 0.0,
+        "time_h": 3.898,
+        "layers": 770,
+        "support_share": 0.0,
+        "method": "deterministic shell/infill/flow ranking estimate, not slicer output"
+      }
+    },
+    {
+      "part": "pod_sled",
+      "estimate": {
+        "part_volume_mm3": 24782.771,
+        "support_volume_mm3": 0.0,
+        "material_g": 31.474,
+        "support_g": 0.0,
+        "time_h": 0.908,
+        "layers": 85,
+        "support_share": 0.0,
+        "method": "deterministic shell/infill/flow ranking estimate, not slicer output"
+      }
+    }
+  ],
+  "printability": {
+    "status": "warn",
+    "issues": [
+      {
+        "check": "min_wall",
+        "status": "warn",
+        "note": "Minimum measured wall 1.500 mm; required 1 mm. 26 more regions are not shown. To show up to 50 regions, set detail=true.",
+        "fix": [
+          "thicken to >= 1 mm (3 perimeters at 0.44 mm)"
+        ],
+        "part": "cam_mount_lower"
+      },
+      {
+        "check": "bridges",
+        "status": "warn",
+        "note": "Largest two-sided bridge span 8.143 mm; clean bridge limit 5 mm, fail above 10 mm.",
+        "fix": [
+          "slicer bridges it but expect sag; add support/sacrificial layer or shorten"
+        ],
+        "part": "cam_mount_lower"
+      },
+      {
+        "check": "bridges",
+        "status": "warn",
+        "note": "Largest two-sided bridge span 5.242 mm; clean bridge limit 5 mm, fail above 10 mm. 4 more regions are not shown. To show up to 50 regions, set detail=true.",
+        "fix": [
+          "slicer bridges it but expect sag; add support/sacrificial layer or shorten"
+        ],
+        "part": "pod_sled"
+      },
+      {
+        "check": "small_holes",
+        "status": "warn",
+        "note": "10 cylindrical holes evaluated; 4 below printability thresholds.",
+        "fix": [
+          "vertical holes print ~0.1-0.2 mm undersize; size +0.2 mm or drill",
+          "use teardrop/diamond profiles for large horizontal holes"
+        ],
+        "part": "pod_sled"
+      }
+    ]
+  },
+  "gcode_check": {
+    "status": "warn",
+    "issues": [
+      {
+        "check": "floating_extrusion",
+        "status": "warn",
+        "note": "Hard floating: 0.8 mm2/layer, 0.971 mm unanchored run; unanchored air run 6.706 mm (limit 10); backed bridge 6.895 mm; infill/interface spans informational (41.8 mm2 total)",
+        "fix": [
+          "Reorient or support long unanchored outer-wall and bridge paths.",
+          "Review the flagged type, layer and XY positions in PrusaSlicer before printing."
+        ]
+      }
+    ]
+  },
+  "slicer_warnings": [],
+  "slicer_mesh_repairs": {
+    "available": true,
+    "volumes": 2,
+    "counts": {
+      "edges_fixed": 0,
+      "degenerate_facets": 0,
+      "facets_removed": 0,
+      "facets_reversed": 0,
+      "backwards_edges": 0
+    }
+  },
+  "print_ready": true
+}

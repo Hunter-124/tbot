@@ -25,15 +25,15 @@ layout first, then the config (`software/config/default.toml`).
 
 See `software/README.md` for the full five-layer safety model.
 
-## Hardware at a glance (BOM REV G)
+## Hardware at a glance (BOM REV H)
 
 - Raspberry Pi 3 Model B v1.2 (clearance kept for a Pi 5 + AI HAT+)
 - innomaker CAM-MIPIOV9281 (OV9281 mono global shutter)
 - MPU-6050 (GY-521) IMU on the pod cap
 - Trigger actuator, two interchangeable sets: Actuonix PQ12-100-12-S **or** TowerPro MG996R
-- 7 mm momentary NO arming button in the trigger-guard clamp
+- 7 mm momentary NO arming button in the trigger-guard clamp, with a glued-on finger pad (`arm_pad`)
 - XL4015 buck (5.1 V) from a 3S 2600 mAh pack strapped to the stock
-- Barrel pod held by two 70–90 mm worm-drive hose clamps; ASA for barrel-contact parts, PETG elsewhere
+- Barrel pod held by two 70–90 mm worm-drive hose clamps; PETG (fiberglass-insulated) for barrel-mounted parts, PLA elsewhere
 
 Full list: [hardware/design/BOM.md](hardware/design/BOM.md).
 
