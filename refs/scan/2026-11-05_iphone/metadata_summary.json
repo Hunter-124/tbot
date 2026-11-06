@@ -1,0 +1,64 @@
+{
+  "source_device": "iPhone 17 (UDID 00008150-00013D5226DB401C), iOS 26.6.1",
+  "source_paths": {
+    "IMG_0467.MOV": "afc://00008150-00013d5226db401c/DCIM/100APPLE/IMG_0467.MOV",
+    "IMG_0468.MOV": "afc://00008150-00013d5226db401c/DCIM/100APPLE/IMG_0468.MOV",
+    "IMG_0466.MOV": "afc://00008150-00013d5226db401c/DCIM/100APPLE/IMG_0466.MOV"
+  },
+  "files": {
+    "IMG_0467.MOV": {
+      "bytes": 42671057,
+      "creationdate": "2026-11-05T15:37:18-0500",
+      "duration_s": 5.118333,
+      "video": {
+        "codec": "hevc main10 Dolby Vision 8.4 / HLG (arib-std-b67), bt2020",
+        "width": 3840,
+        "height": 2160,
+        "avg_frame_rate": "184200/3071",
+        "frames": 307,
+        "rotation": "none (landscape)"
+      },
+      "lens_model": "iPhone 17 back camera 5.96mm f/1.6",
+      "focal_length_35mm_equiv_mm": 26,
+      "f_number": 1.6,
+      "focal_px_estimate_from_35mm_equiv": 2647.6,
+      "note": "35mm-equivalent is rounded to whole mm and video EIS crops/warps per frame; treat focal_px as a prior for SfM self-calibration, not a calibration."
+    },
+    "IMG_0468.MOV": {
+      "bytes": 295532101,
+      "creationdate": "2026-11-05T15:37:32-0500",
+      "duration_s": 27.858333,
+      "video": {
+        "codec": "hevc main10 Dolby Vision 8.4 / HLG (arib-std-b67), bt2020",
+        "width": 3840,
+        "height": 2160,
+        "avg_frame_rate": "83550/1393",
+        "frames": 1671,
+        "rotation": "none (landscape)"
+      },
+      "lens_model": "iPhone 17 back camera 5.96mm f/1.6",
+      "focal_length_35mm_equiv_mm": 27,
+      "f_number": 1.6,
+      "focal_px_estimate_from_35mm_equiv": 2749.4,
+      "note": "35mm-equivalent is rounded to whole mm and video EIS crops/warps per frame; treat focal_px as a prior for SfM self-calibration, not a calibration."
+    },
+    "IMG_0466.MOV": {
+      "bytes": 192809109,
+      "creationdate": "2026-11-05T15:36:18-0500",
+      "duration_s": 22.975,
+      "video": {
+        "codec": "hevc main10 Dolby Vision 8.4 / HLG (arib-std-b67), bt2020",
+        "width": 3840,
+        "height": 2160,
+        "avg_frame_rate": "55120/919",
+        "frames": 1378,
+        "rotation": "none (landscape)"
+      },
+      "lens_model": "iPhone 17 back camera 5.96mm f/1.6",
+      "focal_length_35mm_equiv_mm": 27,
+      "f_number": 1.6,
+      "focal_px_estimate_from_35mm_equiv": 2749.4,
+      "note": "Not named by the user; recorded one minute before IMG_0467 in the same setup (overhead views). Copied as a supplementary reference."
+    }
+  }
+}

@@ -1,0 +1,1359 @@
+{
+ "source_mesh": "/home/hunter/Desktop/TBOT/scratch/gunscan2/out/C_final.ply",
+ "dataset": "/home/hunter/Desktop/TBOT/scratch/gunscan2/recon/C/dataset",
+ "mm_per_unit_charuco": 55.8337918811074,
+ "vertices": 363425,
+ "triangles": 690697,
+ "gunframe_extent_mm": [
+  552.4,
+  60.6,
+  147.7
+ ],
+ "gunframe_bounds_mm": [
+  [
+   -295.5,
+   -42.4,
+   -77.9
+  ],
+  [
+   256.9,
+   18.2,
+   69.7
+  ]
+ ],
+ "registration_to_gun_body": {
+  "cad": "/home/hunter/Desktop/TBOT/scratch/gunscan/out_9509/gun_body_r5.stl",
+  "transform_matframe_to_gunframe": [
+   [
+    -0.041325019510535674,
+    -0.9991260735078378,
+    0.006271522882439101,
+    93.97631949555823
+   ],
+   [
+    0.999127650869301,
+    -0.041361244214346574,
+    -0.005760620229969726,
+    -94.43191078192648
+   ],
+   [
+    0.006014983860875767,
+    0.0060279941815080005,
+    0.9999637409702915,
+    73.91913001061081
+   ],
+   [
+    0.0,
+    0.0,
+    0.0,
+    1.0
+   ]
+  ],
+  "icp_fitness_within_2.5mm": 0.51153,
+  "icp_inlier_rmse_mm": 1.451749713041123
+ },
+ "deviation_scan_minus_cad": {
+  "sign": "+ = scan surface outside gun_body (CAD too small there)",
+  "within_8mm_fraction": 0.911874,
+  "median_mm": -0.3669727632461321,
+  "abs_p50_mm": 1.9749601710467568,
+  "abs_p90_mm": 5.714449026447537,
+  "stations_25mm": [
+   {
+    "x_mm": [
+     -300,
+     -275
+    ],
+    "median_mm": 3.72,
+    "n": 3584,
+    "gun_right_-Y": {
+     "median_mm": 3.78,
+     "p10_p90_mm": [
+      -1.09,
+      7.3
+     ]
+    }
+   },
+   {
+    "x_mm": [
+     -275,
+     -250
+    ],
+    "median_mm": 0.99,
+    "n": 16241,
+    "gun_right_-Y": {
+     "median_mm": 0.93,
+     "p10_p90_mm": [
+      -2.97,
+      5.69
+     ]
+    },
+    "bottom": {
+     "median_mm": 1.21,
+     "p10_p90_mm": [
+      -3.42,
+      3.14
+     ]
+    }
+   },
+   {
+    "x_mm": [
+     -250,
+     -225
+    ],
+    "median_mm": -1.9,
+    "n": 18275,
+    "gun_right_-Y": {
+     "median_mm": -1.96,
+     "p10_p90_mm": [
+      -5.71,
+      2.98
+     ]
+    },
+    "bottom": {
+     "median_mm": -0.91,
+     "p10_p90_mm": [
+      -5.91,
+      1.53
+     ]
+    }
+   },
+   {
+    "x_mm": [
+     -225,
+     -200
+    ],
+    "median_mm": -1.69,
+    "n": 19955,
+    "gun_right_-Y": {
+     "median_mm": -1.73,
+     "p10_p90_mm": [
+      -5.47,
+      1.92
+     ]
+    },
+    "bottom": {
+     "median_mm": -1.28,
+     "p10_p90_mm": [
+      -6.76,
+      0.97
+     ]
+    }
+   },
+   {
+    "x_mm": [
+     -200,
+     -175
+    ],
+    "median_mm": -2.38,
+    "n": 19880,
+    "gun_right_-Y": {
+     "median_mm": -2.25,
+     "p10_p90_mm": [
+      -5.34,
+      0.07
+     ]
+    },
+    "bottom": {
+     "median_mm": -3.1,
+     "p10_p90_mm": [
+      -7.05,
+      0.21
+     ]
+    }
+   },
+   {
+    "x_mm": [
+     -175,
+     -150
+    ],
+    "median_mm": -1.01,
+    "n": 17415,
+    "gun_left_+Y": {
+     "median_mm": -6.84,
+     "p10_p90_mm": [
+      -7.76,
+      -6.57
+     ]
+    },
+    "gun_right_-Y": {
+     "median_mm": -0.38,
+     "p10_p90_mm": [
+      -4.21,
+      2.37
+     ]
+    },
+    "bottom": {
+     "median_mm": -3.43,
+     "p10_p90_mm": [
+      -6.95,
+      -0.96
+     ]
+    }
+   },
+   {
+    "x_mm": [
+     -150,
+     -125
+    ],
+    "median_mm": 0.24,
+    "n": 25272,
+    "gun_left_+Y": {
+     "median_mm": -5.12,
+     "p10_p90_mm": [
+      -6.66,
+      4.73
+     ]
+    },
+    "gun_right_-Y": {
+     "median_mm": 0.56,
+     "p10_p90_mm": [
+      -1.98,
+      3.03
+     ]
+    },
+    "bottom": {
+     "median_mm": -0.54,
+     "p10_p90_mm": [
+      -5.36,
+      3.64
+     ]
+    }
+   },
+   {
+    "x_mm": [
+     -125,
+     -100
+    ],
+    "median_mm": 1.41,
+    "n": 27291,
+    "gun_left_+Y": {
+     "median_mm": -4.75,
+     "p10_p90_mm": [
+      -7.21,
+      2.84
+     ]
+    },
+    "gun_right_-Y": {
+     "median_mm": 2.23,
+     "p10_p90_mm": [
+      -1.34,
+      4.71
+     ]
+    },
+    "bottom": {
+     "median_mm": -3.24,
+     "p10_p90_mm": [
+      -6.65,
+      3.03
+     ]
+    }
+   },
+   {
+    "x_mm": [
+     -100,
+     -75
+    ],
+    "median_mm": 0.41,
+    "n": 31771,
+    "gun_left_+Y": {
+     "median_mm": -4.24,
+     "p10_p90_mm": [
+      -6.43,
+      -2.54
+     ]
+    },
+    "gun_right_-Y": {
+     "median_mm": 1.84,
+     "p10_p90_mm": [
+      -1.1,
+      4.36
+     ]
+    },
+    "bottom": {
+     "median_mm": 0.01,
+     "p10_p90_mm": [
+      -4.57,
+      2.08
+     ]
+    }
+   },
+   {
+    "x_mm": [
+     -75,
+     -50
+    ],
+    "median_mm": 0.41,
+    "n": 17219,
+    "gun_left_+Y": {
+     "median_mm": -3.87,
+     "p10_p90_mm": [
+      -5.56,
+      -2.02
+     ]
+    },
+    "gun_right_-Y": {
+     "median_mm": 1.92,
+     "p10_p90_mm": [
+      -4.24,
+      3.92
+     ]
+    },
+    "bottom": {
+     "median_mm": -1.71,
+     "p10_p90_mm": [
+      -7.03,
+      3.21
+     ]
+    }
+   },
+   {
+    "x_mm": [
+     -50,
+     -25
+    ],
+    "median_mm": 0.6,
+    "n": 18533,
+    "gun_left_+Y": {
+     "median_mm": 0.13,
+     "p10_p90_mm": [
+      -6.35,
+      5.43
+     ]
+    },
+    "gun_right_-Y": {
+     "median_mm": 0.89,
+     "p10_p90_mm": [
+      -1.58,
+      2.08
+     ]
+    },
+    "bottom": {
+     "median_mm": 0.26,
+     "p10_p90_mm": [
+      -4.33,
+      2.59
+     ]
+    }
+   },
+   {
+    "x_mm": [
+     -25,
+     0
+    ],
+    "median_mm": -0.45,
+    "n": 29389,
+    "gun_left_+Y": {
+     "median_mm": -5.73,
+     "p10_p90_mm": [
+      -7.52,
+      -3.71
+     ]
+    },
+    "gun_right_-Y": {
+     "median_mm": 0.07,
+     "p10_p90_mm": [
+      -1.99,
+      1.5
+     ]
+    },
+    "bottom": {
+     "median_mm": 0.74,
+     "p10_p90_mm": [
+      -2.55,
+      4.95
+     ]
+    }
+   },
+   {
+    "x_mm": [
+     0,
+     25
+    ],
+    "median_mm": -0.73,
+    "n": 27092,
+    "gun_left_+Y": {
+     "median_mm": -5.07,
+     "p10_p90_mm": [
+      -7.21,
+      -0.66
+     ]
+    },
+    "gun_right_-Y": {
+     "median_mm": -0.19,
+     "p10_p90_mm": [
+      -2.8,
+      1.13
+     ]
+    },
+    "bottom": {
+     "median_mm": -0.02,
+     "p10_p90_mm": [
+      -4.94,
+      4.72
+     ]
+    }
+   },
+   {
+    "x_mm": [
+     25,
+     50
+    ],
+    "median_mm": -0.28,
+    "n": 27807,
+    "gun_left_+Y": {
+     "median_mm": -4.48,
+     "p10_p90_mm": [
+      -6.97,
+      0.3
+     ]
+    },
+    "gun_right_-Y": {
+     "median_mm": 0.73,
+     "p10_p90_mm": [
+      -2.21,
+      2.29
+     ]
+    },
+    "top": {
+     "median_mm": -7.42,
+     "p10_p90_mm": [
+      -7.83,
+      -7.09
+     ]
+    },
+    "bottom": {
+     "median_mm": -1.17,
+     "p10_p90_mm": [
+      -3.53,
+      1.58
+     ]
+    }
+   },
+   {
+    "x_mm": [
+     50,
+     75
+    ],
+    "median_mm": 0.06,
+    "n": 23569,
+    "gun_left_+Y": {
+     "median_mm": -2.92,
+     "p10_p90_mm": [
+      -6.64,
+      1.02
+     ]
+    },
+    "gun_right_-Y": {
+     "median_mm": 0.32,
+     "p10_p90_mm": [
+      -1.51,
+      2.74
+     ]
+    },
+    "top": {
+     "median_mm": -7.63,
+     "p10_p90_mm": [
+      -7.94,
+      -7.27
+     ]
+    },
+    "bottom": {
+     "median_mm": 0.32,
+     "p10_p90_mm": [
+      -2.23,
+      2.95
+     ]
+    }
+   },
+   {
+    "x_mm": [
+     75,
+     100
+    ],
+    "median_mm": -0.01,
+    "n": 26673,
+    "gun_left_+Y": {
+     "median_mm": -5.9,
+     "p10_p90_mm": [
+      -7.39,
+      1.6
+     ]
+    },
+    "gun_right_-Y": {
+     "median_mm": 0.27,
+     "p10_p90_mm": [
+      -2.27,
+      2.85
+     ]
+    },
+    "bottom": {
+     "median_mm": 5.6,
+     "p10_p90_mm": [
+      3.74,
+      7.41
+     ]
+    }
+   },
+   {
+    "x_mm": [
+     100,
+     125
+    ],
+    "median_mm": -0.21,
+    "n": 20623,
+    "gun_left_+Y": {
+     "median_mm": -3.94,
+     "p10_p90_mm": [
+      -6.45,
+      1.72
+     ]
+    },
+    "gun_right_-Y": {
+     "median_mm": 0.31,
+     "p10_p90_mm": [
+      -2.81,
+      2.3
+     ]
+    },
+    "top": {
+     "median_mm": -7.51,
+     "p10_p90_mm": [
+      -7.89,
+      -7.28
+     ]
+    },
+    "bottom": {
+     "median_mm": 4.99,
+     "p10_p90_mm": [
+      3.44,
+      7.15
+     ]
+    }
+   },
+   {
+    "x_mm": [
+     125,
+     150
+    ],
+    "median_mm": 0.23,
+    "n": 17861,
+    "gun_left_+Y": {
+     "median_mm": -1.38,
+     "p10_p90_mm": [
+      -6.19,
+      2.12
+     ]
+    },
+    "gun_right_-Y": {
+     "median_mm": 0.2,
+     "p10_p90_mm": [
+      -1.07,
+      3.06
+     ]
+    },
+    "top": {
+     "median_mm": -7.72,
+     "p10_p90_mm": [
+      -7.93,
+      -7.45
+     ]
+    },
+    "bottom": {
+     "median_mm": 5.15,
+     "p10_p90_mm": [
+      3.33,
+      7.39
+     ]
+    }
+   },
+   {
+    "x_mm": [
+     150,
+     175
+    ],
+    "median_mm": -0.03,
+    "n": 20231,
+    "gun_left_+Y": {
+     "median_mm": 0.29,
+     "p10_p90_mm": [
+      -2.93,
+      2.51
+     ]
+    },
+    "gun_right_-Y": {
+     "median_mm": -0.53,
+     "p10_p90_mm": [
+      -3.81,
+      1.2
+     ]
+    },
+    "bottom": {
+     "median_mm": 3.1,
+     "p10_p90_mm": [
+      -2.91,
+      6.04
+     ]
+    }
+   },
+   {
+    "x_mm": [
+     175,
+     200
+    ],
+    "median_mm": -0.49,
+    "n": 20345,
+    "gun_left_+Y": {
+     "median_mm": -0.25,
+     "p10_p90_mm": [
+      -1.87,
+      2.45
+     ]
+    },
+    "gun_right_-Y": {
+     "median_mm": -0.73,
+     "p10_p90_mm": [
+      -2.69,
+      0.75
+     ]
+    },
+    "bottom": {
+     "median_mm": 0.79,
+     "p10_p90_mm": [
+      -4.49,
+      4.04
+     ]
+    }
+   },
+   {
+    "x_mm": [
+     200,
+     225
+    ],
+    "median_mm": -1.56,
+    "n": 17064,
+    "gun_left_+Y": {
+     "median_mm": -1.13,
+     "p10_p90_mm": [
+      -2.39,
+      3.82
+     ]
+    },
+    "gun_right_-Y": {
+     "median_mm": -1.92,
+     "p10_p90_mm": [
+      -3.87,
+      -0.39
+     ]
+    },
+    "bottom": {
+     "median_mm": 1.92,
+     "p10_p90_mm": [
+      -4.1,
+      4.55
+     ]
+    }
+   },
+   {
+    "x_mm": [
+     225,
+     250
+    ],
+    "median_mm": -1.68,
+    "n": 9560,
+    "gun_right_-Y": {
+     "median_mm": -1.68,
+     "p10_p90_mm": [
+      -4.03,
+      1.18
+     ]
+    },
+    "bottom": {
+     "median_mm": -1.73,
+     "p10_p90_mm": [
+      -4.51,
+      2.28
+     ]
+    }
+   }
+  ]
+ },
+ "side_profile_10mm": {
+  "note": "Top/bottom of the X-Z silhouette (0.5/99.5 percentile of scan Z, extreme CAD Z). top_diff = scan - CAD; bottom_diff = CAD - scan (both + where the scan is larger).",
+  "stations": [
+   {
+    "x_mm": [
+     -300,
+     -290
+    ],
+    "scan_top_z": 16.1,
+    "cad_top_z": 25.3,
+    "scan_bottom_z": -17.1,
+    "cad_bottom_z": -80.4,
+    "top_diff": -9.2,
+    "bottom_diff": -63.3
+   },
+   {
+    "x_mm": [
+     -290,
+     -280
+    ],
+    "scan_top_z": 16.2,
+    "cad_top_z": 25.4,
+    "scan_bottom_z": -59.6,
+    "cad_bottom_z": -86.0,
+    "top_diff": -9.2,
+    "bottom_diff": -26.4
+   },
+   {
+    "x_mm": [
+     -280,
+     -270
+    ],
+    "scan_top_z": 17.3,
+    "cad_top_z": 25.5,
+    "scan_bottom_z": -77.4,
+    "cad_bottom_z": -84.6,
+    "top_diff": -8.2,
+    "bottom_diff": -7.2
+   },
+   {
+    "x_mm": [
+     -270,
+     -260
+    ],
+    "scan_top_z": 18.0,
+    "cad_top_z": 25.5,
+    "scan_bottom_z": -75.8,
+    "cad_bottom_z": -72.6,
+    "top_diff": -7.5,
+    "bottom_diff": 3.2
+   },
+   {
+    "x_mm": [
+     -260,
+     -250
+    ],
+    "scan_top_z": 20.3,
+    "cad_top_z": 25.6,
+    "scan_bottom_z": -72.4,
+    "cad_bottom_z": -70.1,
+    "top_diff": -5.3,
+    "bottom_diff": 2.3
+   },
+   {
+    "x_mm": [
+     -250,
+     -240
+    ],
+    "scan_top_z": 21.1,
+    "cad_top_z": 25.6,
+    "scan_bottom_z": -69.1,
+    "cad_bottom_z": -67.6,
+    "top_diff": -4.5,
+    "bottom_diff": 1.6
+   },
+   {
+    "x_mm": [
+     -240,
+     -230
+    ],
+    "scan_top_z": 22.8,
+    "cad_top_z": 25.6,
+    "scan_bottom_z": -66.1,
+    "cad_bottom_z": -65.0,
+    "top_diff": -2.8,
+    "bottom_diff": 1.1
+   },
+   {
+    "x_mm": [
+     -230,
+     -220
+    ],
+    "scan_top_z": 23.2,
+    "cad_top_z": 25.6,
+    "scan_bottom_z": -63.1,
+    "cad_bottom_z": -62.2,
+    "top_diff": -2.4,
+    "bottom_diff": 0.9
+   },
+   {
+    "x_mm": [
+     -220,
+     -210
+    ],
+    "scan_top_z": 24.9,
+    "cad_top_z": 25.6,
+    "scan_bottom_z": -59.7,
+    "cad_bottom_z": -59.2,
+    "top_diff": -0.7,
+    "bottom_diff": 0.5
+   },
+   {
+    "x_mm": [
+     -210,
+     -200
+    ],
+    "scan_top_z": 25.8,
+    "cad_top_z": 25.6,
+    "scan_bottom_z": -56.3,
+    "cad_bottom_z": -55.9,
+    "top_diff": 0.2,
+    "bottom_diff": 0.4
+   },
+   {
+    "x_mm": [
+     -200,
+     -190
+    ],
+    "scan_top_z": 26.1,
+    "cad_top_z": 25.6,
+    "scan_bottom_z": -52.7,
+    "cad_bottom_z": -52.4,
+    "top_diff": 0.4,
+    "bottom_diff": 0.3
+   },
+   {
+    "x_mm": [
+     -190,
+     -180
+    ],
+    "scan_top_z": 26.8,
+    "cad_top_z": 25.7,
+    "scan_bottom_z": -48.8,
+    "cad_bottom_z": -48.9,
+    "top_diff": 1.1,
+    "bottom_diff": -0.1
+   },
+   {
+    "x_mm": [
+     -180,
+     -170
+    ],
+    "scan_top_z": 27.7,
+    "cad_top_z": 25.7,
+    "scan_bottom_z": -44.8,
+    "cad_bottom_z": -45.6,
+    "top_diff": 2.0,
+    "bottom_diff": -0.8
+   },
+   {
+    "x_mm": [
+     -170,
+     -160
+    ],
+    "scan_top_z": 28.4,
+    "cad_top_z": 25.8,
+    "scan_bottom_z": -41.8,
+    "cad_bottom_z": -42.9,
+    "top_diff": 2.7,
+    "bottom_diff": -1.1
+   },
+   {
+    "x_mm": [
+     -160,
+     -150
+    ],
+    "scan_top_z": 28.3,
+    "cad_top_z": 25.8,
+    "scan_bottom_z": -39.1,
+    "cad_bottom_z": -40.9,
+    "top_diff": 2.5,
+    "bottom_diff": -1.8
+   },
+   {
+    "x_mm": [
+     -150,
+     -140
+    ],
+    "scan_top_z": 29.3,
+    "cad_top_z": 26.0,
+    "scan_bottom_z": -42.2,
+    "cad_bottom_z": -39.8,
+    "top_diff": 3.4,
+    "bottom_diff": 2.5
+   },
+   {
+    "x_mm": [
+     -140,
+     -130
+    ],
+    "scan_top_z": 31.5,
+    "cad_top_z": 26.6,
+    "scan_bottom_z": -44.1,
+    "cad_bottom_z": -39.7,
+    "top_diff": 4.9,
+    "bottom_diff": 4.4
+   },
+   {
+    "x_mm": [
+     -130,
+     -120
+    ],
+    "scan_top_z": 29.8,
+    "cad_top_z": 28.2,
+    "scan_bottom_z": -44.8,
+    "cad_bottom_z": -40.7,
+    "top_diff": 1.6,
+    "bottom_diff": 4.1
+   },
+   {
+    "x_mm": [
+     -120,
+     -110
+    ],
+    "scan_top_z": 26.0,
+    "cad_top_z": 31.3,
+    "scan_bottom_z": -46.1,
+    "cad_bottom_z": -44.3,
+    "top_diff": -5.3,
+    "bottom_diff": 1.8
+   },
+   {
+    "x_mm": [
+     -110,
+     -100
+    ],
+    "scan_top_z": 28.7,
+    "cad_top_z": 35.8,
+    "scan_bottom_z": -47.1,
+    "cad_bottom_z": -46.9,
+    "top_diff": -7.1,
+    "bottom_diff": 0.2
+   },
+   {
+    "x_mm": [
+     -100,
+     -90
+    ],
+    "scan_top_z": 32.2,
+    "cad_top_z": 41.5,
+    "scan_bottom_z": -49.3,
+    "cad_bottom_z": -48.4,
+    "top_diff": -9.3,
+    "bottom_diff": 0.9
+   },
+   {
+    "x_mm": [
+     -90,
+     -80
+    ],
+    "scan_top_z": 36.8,
+    "cad_top_z": 47.3,
+    "scan_bottom_z": -48.2,
+    "cad_bottom_z": -45.3,
+    "top_diff": -10.5,
+    "bottom_diff": 2.9
+   },
+   {
+    "x_mm": [
+     -80,
+     -70
+    ],
+    "scan_top_z": 42.3,
+    "cad_top_z": 52.4,
+    "scan_bottom_z": -0.5,
+    "cad_bottom_z": 3.7,
+    "top_diff": -10.0,
+    "bottom_diff": 4.2
+   },
+   {
+    "x_mm": [
+     -70,
+     -60
+    ],
+    "scan_top_z": 46.1,
+    "cad_top_z": 57.8,
+    "scan_bottom_z": 8.3,
+    "cad_bottom_z": 11.5,
+    "top_diff": -11.8,
+    "bottom_diff": 3.2
+   },
+   {
+    "x_mm": [
+     -60,
+     -50
+    ],
+    "scan_top_z": 51.3,
+    "cad_top_z": 64.5,
+    "scan_bottom_z": 10.7,
+    "cad_bottom_z": 13.7,
+    "top_diff": -13.2,
+    "bottom_diff": 3.0
+   },
+   {
+    "x_mm": [
+     -50,
+     -40
+    ],
+    "scan_top_z": 55.2,
+    "cad_top_z": 70.8,
+    "scan_bottom_z": 12.5,
+    "cad_bottom_z": 14.0,
+    "top_diff": -15.6,
+    "bottom_diff": 1.4
+   },
+   {
+    "x_mm": [
+     -40,
+     -30
+    ],
+    "scan_top_z": 58.8,
+    "cad_top_z": 76.6,
+    "scan_bottom_z": 12.4,
+    "cad_bottom_z": 13.8,
+    "top_diff": -17.8,
+    "bottom_diff": 1.4
+   },
+   {
+    "x_mm": [
+     -30,
+     -20
+    ],
+    "scan_top_z": 61.4,
+    "cad_top_z": 76.6,
+    "scan_bottom_z": 8.9,
+    "cad_bottom_z": 8.4,
+    "top_diff": -15.2,
+    "bottom_diff": -0.5
+   },
+   {
+    "x_mm": [
+     -20,
+     -10
+    ],
+    "scan_top_z": 64.2,
+    "cad_top_z": 76.6,
+    "scan_bottom_z": -3.1,
+    "cad_bottom_z": -4.9,
+    "top_diff": -12.4,
+    "bottom_diff": -1.7
+   },
+   {
+    "x_mm": [
+     -10,
+     0
+    ],
+    "scan_top_z": 68.8,
+    "cad_top_z": 76.6,
+    "scan_bottom_z": -14.6,
+    "cad_bottom_z": -14.2,
+    "top_diff": -7.8,
+    "bottom_diff": 0.4
+   },
+   {
+    "x_mm": [
+     0,
+     10
+    ],
+    "scan_top_z": 68.5,
+    "cad_top_z": 76.6,
+    "scan_bottom_z": -16.4,
+    "cad_bottom_z": -16.6,
+    "top_diff": -8.1,
+    "bottom_diff": -0.2
+   },
+   {
+    "x_mm": [
+     10,
+     20
+    ],
+    "scan_top_z": 67.6,
+    "cad_top_z": 76.6,
+    "scan_bottom_z": -16.3,
+    "cad_bottom_z": -16.6,
+    "top_diff": -9.0,
+    "bottom_diff": -0.3
+   },
+   {
+    "x_mm": [
+     20,
+     30
+    ],
+    "scan_top_z": 67.5,
+    "cad_top_z": 76.6,
+    "scan_bottom_z": -15.0,
+    "cad_bottom_z": -15.8,
+    "top_diff": -9.1,
+    "bottom_diff": -0.8
+   },
+   {
+    "x_mm": [
+     30,
+     40
+    ],
+    "scan_top_z": 68.2,
+    "cad_top_z": 76.6,
+    "scan_bottom_z": -12.2,
+    "cad_bottom_z": -13.0,
+    "top_diff": -8.4,
+    "bottom_diff": -0.8
+   },
+   {
+    "x_mm": [
+     40,
+     50
+    ],
+    "scan_top_z": 69.4,
+    "cad_top_z": 76.6,
+    "scan_bottom_z": -8.2,
+    "cad_bottom_z": -8.8,
+    "top_diff": -7.2,
+    "bottom_diff": -0.6
+   },
+   {
+    "x_mm": [
+     50,
+     60
+    ],
+    "scan_top_z": 69.1,
+    "cad_top_z": 76.6,
+    "scan_bottom_z": -2.6,
+    "cad_bottom_z": -2.7,
+    "top_diff": -7.5,
+    "bottom_diff": -0.2
+   },
+   {
+    "x_mm": [
+     60,
+     70
+    ],
+    "scan_top_z": 68.2,
+    "cad_top_z": 76.6,
+    "scan_bottom_z": 3.2,
+    "cad_bottom_z": 4.9,
+    "top_diff": -8.4,
+    "bottom_diff": 1.7
+   },
+   {
+    "x_mm": [
+     70,
+     80
+    ],
+    "scan_top_z": 67.6,
+    "cad_top_z": 76.6,
+    "scan_bottom_z": 9.9,
+    "cad_bottom_z": 9.1,
+    "top_diff": -9.0,
+    "bottom_diff": -0.8
+   },
+   {
+    "x_mm": [
+     80,
+     90
+    ],
+    "scan_top_z": 68.3,
+    "cad_top_z": 76.6,
+    "scan_bottom_z": 11.6,
+    "cad_bottom_z": 13.7,
+    "top_diff": -8.3,
+    "bottom_diff": 2.1
+   },
+   {
+    "x_mm": [
+     90,
+     100
+    ],
+    "scan_top_z": 69.2,
+    "cad_top_z": 76.6,
+    "scan_bottom_z": 11.6,
+    "cad_bottom_z": 13.7,
+    "top_diff": -7.4,
+    "bottom_diff": 2.1
+   },
+   {
+    "x_mm": [
+     100,
+     110
+    ],
+    "scan_top_z": 69.2,
+    "cad_top_z": 76.6,
+    "scan_bottom_z": 11.7,
+    "cad_bottom_z": 13.7,
+    "top_diff": -7.4,
+    "bottom_diff": 2.0
+   },
+   {
+    "x_mm": [
+     110,
+     120
+    ],
+    "scan_top_z": 69.0,
+    "cad_top_z": 76.6,
+    "scan_bottom_z": 11.7,
+    "cad_bottom_z": 13.7,
+    "top_diff": -7.6,
+    "bottom_diff": 2.0
+   },
+   {
+    "x_mm": [
+     120,
+     130
+    ],
+    "scan_top_z": 69.1,
+    "cad_top_z": 76.6,
+    "scan_bottom_z": 11.6,
+    "cad_bottom_z": 13.7,
+    "top_diff": -7.5,
+    "bottom_diff": 2.1
+   },
+   {
+    "x_mm": [
+     130,
+     140
+    ],
+    "scan_top_z": 68.8,
+    "cad_top_z": 76.6,
+    "scan_bottom_z": 11.5,
+    "cad_bottom_z": 13.7,
+    "top_diff": -7.8,
+    "bottom_diff": 2.2
+   },
+   {
+    "x_mm": [
+     140,
+     150
+    ],
+    "scan_top_z": 69.0,
+    "cad_top_z": 76.6,
+    "scan_bottom_z": 11.3,
+    "cad_bottom_z": 13.7,
+    "top_diff": -7.6,
+    "bottom_diff": 2.4
+   },
+   {
+    "x_mm": [
+     150,
+     160
+    ],
+    "scan_top_z": 68.9,
+    "cad_top_z": 76.6,
+    "scan_bottom_z": 8.7,
+    "cad_bottom_z": 13.7,
+    "top_diff": -7.7,
+    "bottom_diff": 5.0
+   },
+   {
+    "x_mm": [
+     160,
+     170
+    ],
+    "scan_top_z": 68.9,
+    "cad_top_z": 76.6,
+    "scan_bottom_z": 6.9,
+    "cad_bottom_z": 9.0,
+    "top_diff": -7.7,
+    "bottom_diff": 2.1
+   },
+   {
+    "x_mm": [
+     170,
+     180
+    ],
+    "scan_top_z": 67.5,
+    "cad_top_z": 76.6,
+    "scan_bottom_z": 8.5,
+    "cad_bottom_z": 9.0,
+    "top_diff": -9.1,
+    "bottom_diff": 0.5
+   },
+   {
+    "x_mm": [
+     180,
+     190
+    ],
+    "scan_top_z": 68.1,
+    "cad_top_z": 76.6,
+    "scan_bottom_z": 6.1,
+    "cad_bottom_z": 9.0,
+    "top_diff": -8.5,
+    "bottom_diff": 2.9
+   },
+   {
+    "x_mm": [
+     190,
+     200
+    ],
+    "scan_top_z": 68.2,
+    "cad_top_z": 76.6,
+    "scan_bottom_z": 6.1,
+    "cad_bottom_z": 10.5,
+    "top_diff": -8.4,
+    "bottom_diff": 4.4
+   },
+   {
+    "x_mm": [
+     200,
+     210
+    ],
+    "scan_top_z": 67.9,
+    "cad_top_z": 76.6,
+    "scan_bottom_z": 6.1,
+    "cad_bottom_z": 10.5,
+    "top_diff": -8.7,
+    "bottom_diff": 4.4
+   },
+   {
+    "x_mm": [
+     210,
+     220
+    ],
+    "scan_top_z": 67.9,
+    "cad_top_z": 76.6,
+    "scan_bottom_z": 5.9,
+    "cad_bottom_z": 10.1,
+    "top_diff": -8.7,
+    "bottom_diff": 4.2
+   },
+   {
+    "x_mm": [
+     220,
+     230
+    ],
+    "scan_top_z": 67.6,
+    "cad_top_z": 76.6,
+    "scan_bottom_z": 6.3,
+    "cad_bottom_z": 9.5,
+    "top_diff": -9.0,
+    "bottom_diff": 3.1
+   },
+   {
+    "x_mm": [
+     230,
+     240
+    ],
+    "scan_top_z": 66.5,
+    "cad_top_z": 76.6,
+    "scan_bottom_z": 6.5,
+    "cad_bottom_z": 8.8,
+    "top_diff": -10.1,
+    "bottom_diff": 2.3
+   },
+   {
+    "x_mm": [
+     240,
+     250
+    ],
+    "scan_top_z": 66.1,
+    "cad_top_z": 76.6,
+    "scan_bottom_z": 6.5,
+    "cad_bottom_z": 8.2,
+    "top_diff": -10.5,
+    "bottom_diff": 1.7
+   }
+  ]
+ },
+ "coverage": {
+  "observed": "gun-right (-Y) side, the X-Z side profile from the bottom edge, stock X -300..-35, grip, trigger guard bow, receiver, forend start to X ~250",
+  "not_observed": [
+   "gun-left (+Y) side (lay on the table; only its edges were seen)",
+   "receiver/rib top surface (faced away; under 8 % of points above Z 60 face up)",
+   "forend X 250..484, magazine cap, barrel, butt end X < -300"
+  ],
+  "consequences": [
+   "widths (Y) and the top profile cannot be verified from this capture",
+   "the registration to gun_body is weakly constrained in Y (one side missing): expect a possible 1-2 mm Y offset",
+   "deviations on gun-left and top are missing data, not CAD errors"
+  ]
+ }
+}

@@ -4,3 +4,4 @@
 *.png binary
 *.step -diff
 *.gcode -diff
+*.MOV filter=lfs diff=lfs merge=lfs -text
