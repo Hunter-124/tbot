@@ -76,6 +76,13 @@ def rot_rpy(roll: float, pitch: float, yaw: float) -> np.ndarray:
 
 def dir_to_azel(d: np.ndarray) -> tuple[np.ndarray | float, np.ndarray | float]:
     """Direction(s) -> (azimuth, elevation) in radians: az = atan2(y, x), el = asin(z)."""
+    arr = np.asarray(d, dtype=np.float64)
+    if arr.shape == (3,) and np.isfinite(arr).all():
+        x, y, z = map(float, arr)
+        n = math.sqrt(x * x + y * y + z * z)
+        if n == 0.0:
+            return float("nan"), float("nan")
+        return math.atan2(y / n, x / n), math.asin(max(-1.0, min(1.0, z / n)))
     pts, single = _points(d, 3, "dir_to_azel")
     n = np.linalg.norm(pts, axis=1)
     safe = np.where(n > 0.0, n, 1.0)
@@ -221,8 +228,25 @@ class CameraModel:
         t2 = theta * theta
         return theta * (1.0 + t2 * (k1 + t2 * (k2 + t2 * (k3 + t2 * k4))))
 
+    def _theta_from_theta_d_scalar(self, theta_d: float) -> float:
+        k1, k2, k3, k4 = map(float, self.D)
+        theta = min(max(theta_d, 0.0), math.pi)
+        for _ in range(_NEWTON_ITERS):
+            t2 = theta * theta
+            f = theta * (1.0 + t2 * (k1 + t2 * (k2 + t2 * (k3 + t2 * k4)))) - theta_d
+            df = 1.0 + t2 * (3.0 * k1 + t2 * (5.0 * k2 + t2 * (7.0 * k3 + t2 * 9.0 * k4)))
+            if abs(df) < 1e-12:
+                df = 1e-12
+            step = f / df
+            theta = min(max(theta - step, 0.0), math.pi)
+            if abs(step) < _NEWTON_TOL:
+                break
+        return theta
+
     def _theta_from_theta_d(self, theta_d: np.ndarray) -> np.ndarray:
         """Newton inversion of theta_d = theta * (1 + k1 t^2 + k2 t^4 + k3 t^6 + k4 t^8)."""
+        if theta_d.shape == (1,) and math.isfinite(float(theta_d[0])):
+            return np.array([self._theta_from_theta_d_scalar(float(theta_d[0]))], dtype=np.float64)
         k1, k2, k3, k4 = self.D
         theta = np.clip(theta_d.astype(np.float64, copy=True), 0.0, math.pi)
         for _ in range(_NEWTON_ITERS):
@@ -238,6 +262,19 @@ class CameraModel:
 
     def pixel_to_ray(self, uv: np.ndarray) -> np.ndarray:
         """Distorted pixel(s) -> unit ray(s) in the camera frame. (N,2)->(N,3), (2,)->(3,)."""
+        arr = np.asarray(uv, dtype=np.float64)
+        if arr.shape == (2,) and np.isfinite(arr).all():
+            if self.model == "fisheye":
+                y = (float(arr[1]) - self.cy) / self.fy
+                x = (float(arr[0]) - self.cx) / self.fx - self.skew * y
+                theta_d = math.hypot(x, y)
+                theta = self._theta_from_theta_d_scalar(theta_d)
+                scale = math.sin(theta) / theta_d if theta_d > 0.0 else 0.0
+                return np.array([x * scale, y * scale, math.cos(theta)], dtype=np.float64)
+            xy = cv2.undistortPoints(arr.reshape(1, 1, 2), self.K, self.D).reshape(2)
+            x, y = float(xy[0]), float(xy[1])
+            norm = math.sqrt(x * x + y * y + 1.0)
+            return np.array([x / norm, y / norm, 1.0 / norm], dtype=np.float64)
         pts, single = _points(uv, 2, "pixel_to_ray")
         if pts.shape[0] == 0:
             return np.zeros((0, 3), dtype=np.float64)
@@ -258,6 +295,26 @@ class CameraModel:
 
     def ray_to_pixel(self, rays: np.ndarray) -> np.ndarray:
         """Camera-frame direction(s) -> distorted pixel(s); rows with z <= 1e-9 give nan."""
+        arr = np.asarray(rays, dtype=np.float64)
+        if arr.shape == (3,):
+            x, y, z = map(float, arr)
+            if not (math.isfinite(x) and math.isfinite(y) and math.isfinite(z) and z > _Z_EPS):
+                return np.full(2, np.nan, dtype=np.float64)
+            if self.model == "fisheye":
+                a, b = x / z, y / z
+                r = math.hypot(a, b)
+                theta = math.atan(r)
+                k1, k2, k3, k4 = map(float, self.D)
+                t2 = theta * theta
+                theta_d = theta * (1.0 + t2 * (k1 + t2 * (k2 + t2 * (k3 + t2 * k4))))
+                scale = theta_d / r if r > 0.0 else 1.0
+                return np.array(
+                    [self.fx * (a * scale + self.skew * b * scale) + self.cx,
+                     self.fy * b * scale + self.cy], dtype=np.float64
+                )
+            zeros = np.zeros(3, dtype=np.float64)
+            img, _ = cv2.projectPoints(arr.reshape(1, 1, 3), zeros, zeros, self.K, self.D)
+            return np.asarray(img, dtype=np.float64).reshape(2)
         pts, single = _points(rays, 3, "ray_to_pixel")
         out = np.full((pts.shape[0], 2), np.nan, dtype=np.float64)
         ok = np.isfinite(pts).all(axis=1) & (pts[:, 2] > _Z_EPS)

@@ -1,7 +1,7 @@
 # Prototyping: Pi ↔ laptop, wiring, and the parts the software needs
 
 How to work on the thing before it is a finished gun-mounted box: getting a shell and the debug stream off the
-Pi 3B, what is wired where, and which electrical parts the software assumes exist but `hardware/design/BOM.md` does not
+Pi 3B, what is wired where, and which electrical parts the software assumes exist but `design/BOM.md` does not
 list yet.
 
 ## 1. Connecting the Pi 3 Model B to a laptop
@@ -48,9 +48,31 @@ The stream is rate-limited to `stream.fps = 10` at `jpeg_quality = 70` so it doe
 it is a debug view, not a recording. For data, use `tbot record` and copy the session:
 
 ```bash
-rsync -a pi@tbot.local:~/tbot/software/sessions/20261026-141230-rec sessions/
-scp -r pi@tbot.local:~/tbot/software/calib calib-from-pi      # calibration files, to compare
+rsync -a pi@tbot.local:~/TBOT/software/sessions/20261026-141230-rec sessions/
+scp -r pi@tbot.local:~/TBOT/software/calib calib-from-pi      # calibration files, to compare
 ```
+
+For the [HITL bench](HITL.md), run the rig on the Pi and connect the laptop by wired Ethernet; the laptop
+drives the monitor and opens the target page served by the Pi on port 8090. Point the camera at the monitor
+1–2 m away, with the bore line on screen toward the targets' exit side for a longer sweep runway. Use full
+brightness; the rig waits for the browser to enter fullscreen before measuring (`--allow-windowed` overrides
+this). Keep the monitor and camera fixed after geometry calibration.
+
+From the laptop, deploy and retrieve rig data without overwriting the Pi's calibration:
+
+```bash
+software/scripts/deploy.sh push                    # code -> ~/TBOT/software
+software/scripts/deploy.sh ssh                     # interactive shell
+software/scripts/deploy.sh pull                    # sessions, calib, local.pi.toml -> software/pi-pulls/<date>-<id>/
+TBOT_HOST=pi@192.168.50.2 software/scripts/deploy.sh push
+software/scripts/deploy.sh pull pi@192.168.50.2    # explicit host overrides TBOT_HOST
+```
+
+`push` excludes `.venv`, Python caches, sessions, calibration, `config/local.toml`, and prior pulls;
+it does not delete remote files. Both machines need rsync 3.2 or newer. For a local dry-run test,
+create an empty temporary directory and run
+`TBOT_DEPLOY_LOCAL_ROOT=/path/to/temp TBOT_RSYNC_DRY_RUN=1 software/scripts/deploy.sh push`.
+The local root stands in for the Pi's `~/TBOT/software`; SSH is unavailable in this test mode.
 
 ### "USB" — read this before buying a cable
 
@@ -139,61 +161,82 @@ Conflicts to know about: **PWM0 on GPIO18 is shared with the analogue audio outp
 required for a stable servo pulse (`scripts/pi_setup.sh` sets it). GPIO 2/3 have fixed 1.8 kΩ pull-ups to 3.3 V on
 the board — fine for I2C, unusable as general inputs.
 
-**Grounds.** The Pi, the actuator driver, the actuator supply and the arming switch share one ground. The PQ12's
-12 V and the servo's 5–6 V come from the battery/BEC, never from the Pi's 5 V pin.
+**Grounds.** The Pi, the actuator driver, the actuator supply and the arming switch share one ground. The PQ12
+fallback needs 12 V; the installed servo uses a separate 7.0 V XL4015, never the Pi's 5 V pin.
 
-## 4. Hardware the software needs that is not on `hardware/design/BOM.md`
+## 4. Electrical hardware and calibration fixtures
 
-`hardware/design/BOM.md` covers the printed parts, fasteners, battery, buck module and the two trigger actuators. The
-electrical pieces below are assumed by the code and the calibration tools, and are missing from it:
+`design/BOM.md` covers the printed parts, fasteners, power supplies and trigger sets. The table below gives
+electrical details and calibration fixtures; the PQ12 driver is needed only for the fallback:
 
 | Item | Why | Notes |
 |---|---|---|
-| **H-bridge / DC motor driver for the PQ12**, rated ≥ 12 V | `actuator.pq12` drives two GPIOs (extend/retract); the PQ12-100-12-S is a bare 12 V DC motor with internal limit switches and no driver of its own | **TB6612FNG** (15 V max, 1.2 A continuous / 3 A peak) fits: PQ12 stall is 210 mA @ 12 V (layout.md, datasheet Rev D). **DRV8833 is only 10.8 V max — do not use it on 12 V.** L298N works but wastes ~2 V and a lot of board space. Wire `AIN1/AIN2` to BCM 23/24 and the driver's **STBY/enable through the arming switch** (§5). |
-| **Separate 5–6 V supply (BEC) for the MG996R** | The servo's stall current is far beyond what the Pi's 5 V rail can source; brown-outs reboot the Pi mid-shot | ~2.5 A stall `[INFERENCE: typical for an MG996R-class metal-gear servo at 6 V; not published by TowerPro]`. A 3 A UBEC off the 12 V pack, or a second XL4015 set to 6.0 V. Common ground with the Pi; **never** from the Pi 5 V pin. 6 V also buys speed: 0.14 s/60° vs 0.17 s/60° at 4.8 V (TowerPro). |
+| **H-bridge / DC motor driver for the PQ12 fallback**, rated ≥ 12 V | Not needed for the servo build. `actuator.pq12` drives two GPIOs (extend/retract); the PQ12-100-12-S is a bare 12 V DC motor with internal limit switches and no driver of its own | **TB6612FNG** (15 V max, 1.2 A continuous / 3 A peak) fits: PQ12 stall is 210 mA @ 12 V (layout.md, datasheet Rev D). **DRV8833 is only 10.8 V max — do not use it on 12 V.** L298N works but wastes ~2 V and a lot of board space. Wire `AIN1/AIN2` to BCM 23/24; a hardware-gated **STBY/enable** is an uninstalled recommendation (§5). |
+| **Separate servo supply for the MG996R** | The servo's stall current is far beyond what the Pi's 5 V rail can source; brown-outs reboot the Pi mid-shot | The installed second XL4015 is set to 7.0 V. ~2.5 A stall `[INFERENCE: typical for an MG996R-class metal-gear servo at 6 V; not published by TowerPro]`. Common ground with the Pi; **never** from the Pi 5 V pin. At 6 V the stated speed is 0.14 s/60° vs 0.17 s/60° at 4.8 V (TowerPro). |
 | **Latency LED + 330 Ω resistor** | `tbot latency-camera` needs a light the camera can see, switched from BCM 27 | Any 3 mm/5 mm LED. 330 Ω keeps the pin at ~5 mA. Position it in frame, not pointing into the lens. |
 | **Break-sense microswitch + bench fixture** | `tbot latency-actuator` times command → trigger break from a real contact on BCM 22 | A lever microswitch (NO contact to GND) on a jig that holds the trigger set with the sear travel reproduced. Cheap, and the only way to get a real `cmd_to_break_ms`. |
+| **USB microphone / USB audio capture** | `tbot hitl run --live --mic` records the unloaded dry-fire click | The Pi 3B has no audio input; connect the USB microphone to the rig, not the laptop driving the display. Install `alsa-utils`, select a capture device with `tbot hitl mics`, measure mic-to-trigger distance, and calibrate capture latency against break-sense. |
+| **HITL monitor and wired Ethernet** | Known, clock-synchronised targets for end-to-end camera-to-trigger timing | Laptop drives a bright fullscreen monitor; connect it to the Pi via Ethernet (§1). See [HITL.md](HITL.md) for setup and limitations. |
 | **USB-to-TTL serial cable (3.3 V)** — optional | Console when the network is down or the boot fails | CP2102/CH340/FT232 with 3.3 V levels. See §1. |
-| Dupont/JST leads, heat-shrink, a 2-pole connector for the actuator | Field-serviceability: the trigger set has to come off the gun | With a Pi 5 + AI HAT+, standard Dupont housings will not fit under the barrel — solder or use low-profile connectors (`hardware/design/assembly_sequence.md`, open issue 3). |
+| Dupont/JST leads, heat-shrink, a 2-pole connector for the actuator | Field-serviceability: the trigger set has to come off the gun | Use connectors that fit the installed assembly. |
 
-### 5. The hardware interlock (do this)
+### 5. Arming interlock and power isolation
 
-The software interlock is real — `Actuator.fire()` refuses unless the arming switch reads armed, disarm aborts to
-rest within one control step, `fire.live` is false by default — but it is still software. Wire the arming switch
-so it also **gates the driver**:
+The installed interlock is **software only**: `Actuator.fire()` refuses unless the BCM17 arming switch reads armed,
+disarm aborts to rest within one control step, and `fire.live` is false by default. The normally-open switch goes
+to GND; an open circuit reads disarmed. There is **no hardware cut** in the servo supply. Open the battery lever
+connector to make the actuator safe. A powered servo can move on a glitched signal; software is not a power cut.
 
-- **PQ12:** switch in series with the H-bridge `STBY`/enable input (pull-down on the driver side, so open = standby).
-- **MG996R:** switch (or a small MOSFET/relay it drives) in series with the **servo's 5–6 V supply**, not its
-  signal line. A servo with no power cannot move; a servo with power and a glitched signal can.
+An additional hardware interlock is recommended but **not installed**: for the MG996R, use a switch or
+MOSFET/relay in series with its supply, not its signal line. For the PQ12 fallback, gate the H-bridge
+`STBY`/enable with a driver-side pull-down so open means standby. Retain the switch's GPIO connection so the
+software knows when it is held.
 
-Keep the switch's GPIO connection as well — the software needs to *know* it is held, and the open-circuit =
-disarmed behaviour is what makes a cut lead safe. One switch, two jobs: it tells the software, and it feeds the
-driver.
+## 6. Actuator decision: MG996R servo
 
-## 6. Which actuator: latency is the whole argument
-
-Both trigger sets are supported (`actuator.type = servo | pq12`) and both are modelled in CAD. They are not
-equivalent in the only dimension that matters for a moving target:
+The build uses the MG996R (`actuator.type = "servo"`). The PQ12 remains supported in software as a fallback
+(`actuator.type = "pq12"`). The estimates behind the decision are:
 
 | | MG996R servo | Actuonix PQ12-100-12-S |
 |---|---|---|
 | Command → trigger break | ~0.1 s (`latency.servo_cmd_to_break_ms = 115` @ 4.8 V, loaded) `[INFERENCE]` | **~0.7–1.1 s** (`pq12_cmd_to_break_ms = 900`) `[INFERENCE: ~6.7 mm of travel to break at the datasheet 6–10 mm/s, layout.md]` |
-| Source of the delay | gear train + 50 Hz frame quantisation (`jitter_ms = 6`, = 20 ms/√12) | screw drive speed; it is simply slow |
+| Source of the delay | gear train + 50 Hz frame quantisation | screw drive speed |
 | Clay travel at 20 m/s during that delay | ~2 m | ~14–22 m |
 | Holding force unpowered | none (needs holding torque) | back-drive 35 N — holds position unpowered |
 | Power | 5–6 V, ~2.5 A stall `[INFERENCE]` | 12 V, 210 mA stall |
 
-A full second of lead on a crossing clay is far more prediction than the tracker can honestly provide. Measure
-both before choosing — that is exactly what `tbot latency-actuator --type servo` / `--type pq12` and then
-`tbot latency-report` are for: the report's "clay moves [m] / [deg]" column turns each measured delay into the
-lead the solver must predict at a reference range, and the configured actuator is marked with `*`.
+The servo requires substantially less prediction over the actuator delay. Its 50 Hz PWM frame quantisation is
+the expected dominant jitter source: commands wait 0–20 ms for the next frame, or 20/√12 ≈ 5.8 ms one-sigma
+for uniformly distributed phase. These timings are estimates, not measurements of the installed rig. Measure
+the selected servo with `tbot latency-actuator --type servo`, then use `tbot latency-report` to see the lead at
+the reference range. Measure the PQ12 separately only if the fallback is fitted.
 
 ## 7. Bring-up order on the Pi
 
 1. `sudo ./scripts/pi_setup.sh`, reboot.
 2. `tbot hwcheck` until there is no FAIL; `tbot hwcheck --interactive` to prove the arming button both ways.
-3. Gun UNLOADED, trigger set fitted: `tbot jog servo` (or `tbot jog pq12`) to set and `save` the end positions.
-4. Break-sense fixture: `tbot latency-actuator`, then `tbot latency-report`.
+3. Gun UNLOADED, servo trigger set fitted: `tbot jog servo` to set and `save` the end positions.
+4. Break-sense fixture: `tbot latency-actuator --type servo`, then `tbot latency-report`.
 5. `tbot run --stream` from the laptop browser (`http://<pi>:8080`), dry run; watch `health` in `/telemetry` for
    under-voltage or throttling while the actuator moves.
 6. Calibration in the order of [CALIBRATION.md](CALIBRATION.md).
+7. [HITL bench](HITL.md): dry run first; if timing the actuator, gun unloaded and arming held for each press.
+
+### Measured on the first Pi 3B (2026-10-27)
+
+Raspberry Pi OS Lite 64-bit trixie (2026-10-06 image, kernel 6.18, libcamera 0.7.2), Python 3.13.5, numpy 2.2.4,
+OpenCV 4.10.0. The SD card was prepared headless with the image's cloud-init files on the boot partition:
+`user-data` (hostname `tbot`, user `pi` with an SSH key, `enable_ssh: true`) and `network-config` (eth0 DHCP).
+The `rpi: {i2c, serial}` keys from the Raspberry Pi blog example were rejected by this image's cloud-init
+("Unsupported key"); `pi_setup.sh` enables those interfaces anyway. The Pi's clock was ~3 weeks behind on first boot
+until NTP synced — apt refuses repositories while the clock is wrong (`sudo date -s` fixes it).
+
+- `pi_setup.sh`: completed; it now also loads `i2c-dev` (without it there is no `/dev/i2c-1`).
+- `python3 -m pytest`: all tests pass on the Pi.
+- `tbot hwcheck` with nothing but power and Ethernet connected: platform, boot, gpio PASS; camera FAIL (no camera
+  listed), imu FAIL (bus 1 empty) — expected with those devices not wired; **power FAIL: under-voltage and
+  throttled to 600 MHz** on a micro-USB supply. Use a 5.1 V / 2.5 A supply (or the XL4015 at 5.1 V) before any
+  timing measurement.
+- `tbot bench --source synthetic` while throttled at 600 MHz: detect 32 ms, track 11 ms, solve 6.5 ms p50
+  (overlay 48 ms, encode 13 ms are stream-only) → ~8.5 fps with the overlay, far below `camera.fps = 120`.
+  Re-run `tbot bench` on a proper supply before deciding the frame rate; these numbers are not representative.

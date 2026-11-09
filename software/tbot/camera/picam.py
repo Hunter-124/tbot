@@ -31,8 +31,8 @@ _NO_CAMERA = (
     "  * 'libcamera-hello --list-cameras' lists the sensor"
 )
 
-# Largest plausible difference between SensorTimestamp and time.monotonic_ns() before the two are
-# assumed to be different clocks (they agree on the Pi; see the class docstring).
+# Largest plausible difference between SensorTimestamp and time.monotonic_ns() before warning.
+# CLOCK_BOOTTIME includes suspend time; CLOCK_MONOTONIC does not (see class docstring).
 _CLOCK_SANITY_NS = 1_000_000_000
 
 
@@ -112,12 +112,14 @@ class PicamSource(SourceBase):
     request and keeps only the newest frame (`dropped` counts the overwritten ones), so a slow
     consumer can never stall the camera or exhaust the buffer pool.
 
-    Timing: `SensorTimestamp` is the kernel's start-of-frame stamp, i.e. the start of readout, which
-    on a global-shutter sensor is the end of the exposure -- so mid-exposure is half an ExposureTime
-    earlier: t_exposure = SensorTimestamp - ExposureTime/2 + offset. [INFERENCE: libcamera stamps it
-    from the CSI receiver and it is on the same clock as time.monotonic_ns() on the Pi;
-    `tbot latency-camera` measures the residual and stores it in calib/latency.json
-    "camera.timestamp_offset_ns", which is the offset added here.]
+    Timing: on the Raspberry Pi pipeline SensorTimestamp approximates the CSI start-of-frame
+    interrupt, after the first pixels have been exposed:
+    https://github.com/raspberrypi/picamera2/issues/821
+    For the global shutter we assume mid-exposure is half an ExposureTime earlier, and add the
+    measured camera.timestamp_offset_ns from `tbot latency-camera`. Libcamera specifies the clock
+    as CLOCK_BOOTTIME, while monotonic_ns uses CLOCK_MONOTONIC; they agree only without suspend.
+    Re-measure the offset after suspend. CSI timing and the achieved frame rate must be measured on
+    the actual Pi; FrameDurationLimits requests a rate, it does not guarantee it.
     """
 
     def __init__(self, cfg, calib) -> None:
@@ -173,6 +175,8 @@ class PicamSource(SourceBase):
 
     # ----------------------------------------------------------------------------- lifecycle
     def start(self) -> None:
+        if self._camera_closed:
+            raise RuntimeError("camera source cannot be restarted after stop()")
         if self._thread is not None:
             return
         self._stop.clear()
@@ -195,6 +199,12 @@ class PicamSource(SourceBase):
             self._slot = None
             self._cond.notify_all()
 
+    def set_exposure_us(self, exposure_us: float) -> None:
+        """Change the manual exposure while streaming (`tbot hitl` display test). Frames carry the applied
+        ExposureTime in their metadata, so the switch-over frames report their real exposure."""
+        self._exposure_us = float(exposure_us)
+        self._picam2.set_controls({"AeEnable": False, "ExposureTime": int(round(self._exposure_us))})
+
     # ----------------------------------------------------------------------------- capture
     def _capture_loop(self) -> None:
         try:
@@ -206,7 +216,8 @@ class PicamSource(SourceBase):
                     metadata = request.get_metadata()
                 finally:
                     request.release()
-                self._publish(self._make_frame(array, metadata, t_capture_ns))
+                if not self._stop.is_set():
+                    self._publish(self._make_frame(array, metadata, t_capture_ns))
         except BaseException as exc:  # noqa: BLE001 - surfaced to the consumer in read()
             if not self._stop.is_set():
                 with self._cond:

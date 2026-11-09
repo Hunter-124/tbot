@@ -260,7 +260,7 @@ class Pq12Actuator(_BaseActuator):
 
 
 class SimActuator(_BaseActuator):
-    """Software actuator with a cfg.actuator.sim.delay_ms command->break delay.
+    """Software actuator with fixed or servo-frame-quantized command-to-break timing.
 
     Records every fire and the resulting (ideal) break time; when a SimGpio and a break-sense pin are
     given it also drives that pin low at the break and high again after the return to rest, so the
@@ -279,6 +279,16 @@ class SimActuator(_BaseActuator):
     ):
         super().__init__(arming)
         self.delay_s = max(0.0, float(cfg.actuator.sim.delay_ms) / 1000.0)
+        model = cfg.actuator.sim.model
+        if model not in ("fixed", "servo"):
+            raise ValueError(f"actuator.sim.model must be fixed|servo, got {model!r}")
+        self._frame_period_ns = 0
+        if model == "servo":
+            frame_hz = float(cfg.actuator.sim.frame_hz)
+            if not 0.0 < frame_hz <= 1e9:
+                raise ValueError("actuator.sim.frame_hz must be positive and at most 1e9 Hz")
+            self._frame_period_ns = int(1e9 / frame_hz)
+        self._frame_origin_ns = time.monotonic_ns()
         self.hold_s = max(0.0, float(hold_ms) / 1000.0)
         self._gpio = gpio
         self._break_pin = None if break_pin is None else int(break_pin)
@@ -305,17 +315,18 @@ class SimActuator(_BaseActuator):
             self.last_rest_ns = None
             self._busy = True
             self.fire_times.append(t_ns)
-            self.break_times.append(t_ns + int(self.delay_s * 1e9))
+            wait_ns = ((self._frame_origin_ns - t_ns) % self._frame_period_ns
+                       if self._frame_period_ns else 0)
+            self.break_times.append(t_ns + wait_ns + int(self.delay_s * 1e9))
         self._forget_finished()
-        self._schedule(self.delay_s, self._on_break)
+        self._schedule(self.delay_s + wait_ns / 1e9, self._on_break)
         return True
 
     def _on_break(self) -> None:
         with self._lock:
             if not self._busy or self.last_fire_ns is None:
                 return
-            # Edge timestamps are the ideal ones (fire + delay), not the timer's wake-up time, so the
-            # simulated latency is exactly delay_ms however jittery the host scheduler is.
+            # Use ideal timestamps rather than the timer's scheduler-dependent wake-up time.
             t_break = self.break_times[-1]
         self._sense(0, t_break)
         self._schedule(self.hold_s, self._on_rest)

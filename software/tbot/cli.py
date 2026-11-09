@@ -10,6 +10,7 @@ COMMANDS: dict[str, tuple[str, str]] = {
     "sim": ("tbot.tools.sim_eval", "closed-loop evaluation on synthetic scenarios"),
     "record": ("tbot.app.record", "record a session (frames + timestamps + IMU) for replay"),
     "board": ("tbot.tools.make_board", "write a printable calibration chessboard"),
+    "focus": ("tbot.tools.focus", "headless focus and exposure calibration"),
     "calib-intrinsics": ("tbot.tools.calib_intrinsics", "fisheye intrinsic calibration -> calib/intrinsics.json"),
     "calib-boresight": ("tbot.tools.calib_boresight", "camera-to-bore alignment -> calib/boresight.json"),
     "calib-imu": ("tbot.tools.calib_imu", "IMU bias / axis check / camera-IMU time sync -> calib/imu.json"),
@@ -20,6 +21,11 @@ COMMANDS: dict[str, tuple[str, str]] = {
     "bench": ("tbot.tools.bench", "per-stage processing time at the configured resolution"),
     "hwcheck": ("tbot.tools.hwcheck", "check every fitted device: camera, IMU, arming switch, PWM/actuator, power, temperature"),
     "jog": ("tbot.tools.jog", "bench setup of the trigger actuator (servo pulse widths / PQ12 pulses); arming button held"),
+    "hitl": ("tbot.tools.hitl", "hardware-in-the-loop bench: camera films a monitor, every delay photon -> trigger break"),
+    "doctor": ("tbot.tools.doctor", "offline config, calibration and layout consistency checks (no hardware)"),
+    "sensitivity": ("tbot.tools.sensitivity", "error budget: miss vs latency, range, PWM jitter for the MG996R build"),
+    "tune": ("tbot.tools.tune", "offline parameter search over the synthetic closed-loop evaluation"),
+    "explain": ("tbot.tools.explain", "why did (or didn't) it fire: per-frame decision funnel over a run"),
 }
 
 

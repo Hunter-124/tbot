@@ -1,7 +1,7 @@
 # Optics: what this camera can actually see
 
 The camera decides what the rest of the software can do, and this one is monochrome. Everything below is either
-quoted from a source (innomaker CAM-MIPIOV9281 V2 user manual V1.4, `hardware/design/layout.md`, a datasheet) or marked
+quoted from a source (innomaker CAM-MIPIOV9281 V2 user manual V1.4, `design/layout.md`, a datasheet) or marked
 `[INFERENCE]` — an estimate to be replaced by a calibration measurement.
 
 ## 1. The hardware on the BOM
@@ -218,7 +218,7 @@ grub screw) once set — a lens that creeps changes `psf_px` and therefore every
 
 ## 7. Camera pose, the barrel, and parallax
 
-From `hardware/design/layout.md` (pod_cap AS BUILT) and `config/default.toml [mount]`:
+From `design/layout.md` (pod_cap AS BUILT) and `config/default.toml [mount]`:
 
 | Fact | Value |
 |---|---|

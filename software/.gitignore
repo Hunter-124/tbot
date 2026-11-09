@@ -3,3 +3,6 @@ __pycache__/
 *.tmp
 config/local.toml
 .pytest_cache/
+pi-pulls/
+/calib/
+*.pstats

@@ -1,7 +1,7 @@
 # TBOT software — architecture contract
 
-Runs on a Raspberry Pi 3 Model B v1.2 (BCM2837, 4x Cortex-A53 1.2 GHz, 1 GB) now and on a Pi 5 + AI HAT+
-later; every module also runs on a laptop for prototyping (webcam, recorded sessions, synthetic scenes).
+Runs on a Raspberry Pi 3 Model B v1.2 (BCM2837, 4x Cortex-A53 1.2 GHz, 1 GB); every module also runs on
+a laptop for prototyping (webcam, recorded sessions, synthetic scenes).
 Python >= 3.11, numpy >= 1.24 (1.x and 2.x), OpenCV >= 4.6 (4.x and 5.x). Pi packages come from apt
 (`python3-opencv python3-numpy python3-picamera2 python3-lgpio python3-smbus2`), laptop from pip.
 No other runtime dependencies. Never import `picamera2`, `lgpio`, `smbus2`/`smbus` at module top level:
@@ -20,7 +20,7 @@ Compatibility rules (both environments are tested):
 - Every timestamp is an `int` in nanoseconds on `time.monotonic_ns()`'s clock (or the simulated clock that
   stands in for it, see Clock). Durations in config are ms or s as their key suffix says; internal math SI.
 
-## Hardware facts the code depends on (sources: hardware/design/layout.md, hardware/design/BOM.md, innomaker manual V1.4)
+## Hardware facts the code depends on (sources: design/layout.md, design/BOM.md, innomaker manual V1.4)
 - Camera: innomaker CAM-MIPIOV9281 V2 — OmniVision OV9281 **MONOCHROME** global shutter, 1280x800, 3 um
   pixels, 1/4", 2-lane CSI, RAW8/RAW10, modes 1280x800 / 1280x720 / 640x400 (binned), up to ~144 fps at
   1280x800 and 210-309 fps at 640x400 (Pi 3B achieved rate unverified). Kernel overlay `dtoverlay=ov9281`,
@@ -148,6 +148,8 @@ camera; replay/synthetic data is stored upright).
   when cfg.camera.rotate_180. Capture thread keeps only the newest request (`dropped` counts the rest).
   `t_exposure_ns = SensorTimestamp - ExposureTime*1000/2 + calib latency camera timestamp offset`;
   `t_capture_ns = monotonic_ns()` when the request is dequeued; exposure_us/gain from metadata.
+  `set_exposure_us(exposure_us: float) -> None` changes manual exposure at runtime for the HITL display
+  test; that test restores the configured operational exposure afterward.
 - `CvSource(cfg, spec)`: cv2.VideoCapture for `cv:<index>` (live) and `video:<path>` (file; timestamps from
   CAP_PROP_POS_MSEC or seq/fps on a SimClock). `cfg.camera.emulate_mono`: "none" (BGR colour frames),
   "luma" (gray), "red" (R channel = mono sensor behind an orange/red long-pass filter).
@@ -281,6 +283,9 @@ Every actuator subscribes to arming.on_change and calls abort() on disarm; abort
 one control step. `tbot latency-actuator`: N fire/rest cycles (arming must be HELD by the operator; the
 tool never bypasses the interlock), break-sense input edge timestamps -> cmd->break and cmd->rest stats ->
 merged into calib/latency.json under actuator.<type>.
+`[actuator.sim]` selects `model = "fixed"` (default) or `"servo"`; `delay_ms` is the fixed command-to-break
+delay, or servo travel time after the next PWM frame boundary. `frame_hz` (default 50 Hz) sets the simulated
+servo frame frequency and its phase-dependent wait; it is not a hardware measurement.
 
 ### tbot/tools/calib_intrinsics.py, calib_boresight.py, make_board.py [calib]
 - `tbot board`: chessboard PNG/PDF-ready image (cfg-free; --cols --rows --square-mm --dpi).
@@ -294,16 +299,19 @@ merged into calib/latency.json under actuator.<type>.
 ### tbot/app/run.py, stream.py, overlay.py, tbot/tools/sim_eval.py [app]
 - `Pipeline(cfg, calib, source, gpio=None, actuator=None, arming=None, imu=None)`: `.step() -> dict | None`
   processes one frame: read -> imu drain -> attitude -> detect -> track -> solve -> actuator (only when
-  cfg.fire.live) -> telemetry dict (timings per stage, fps, armed, decision, tracks) ; `.run()` loop with
-  watchdog (no frame for cfg.fire.watchdog_ms => actuator.abort()), SIGINT clean shutdown, ring recorder
-  hooks, debug stream publish. `main(argv)` = `tbot run`.
+  cfg.fire.live) -> telemetry dict (timings per stage, fps, armed, decision, tracks). It forecasts solve duration
+  with an EMA and evaluates at solve-start plus that forecast, the intended command time; a live command waits
+  until that time if solving finishes early, but may be later if solving overruns. Telemetry `t_ns` is that
+  solver evaluation time, `decide_ahead_ms` is the forecast, and `cmd_t_ns` is the actual attempted actuator
+  call timestamp or null when no call occurs (including dry runs). `.run()` adds the watchdog, clean shutdown,
+  recorder hooks and debug stream. `main(argv)` = `tbot run`.
 - `DebugServer(cfg)`: ThreadingHTTPServer on cfg.stream.host:port: `/` page, `/stream.mjpg`,
   `/snapshot.jpg`, `/telemetry` (JSON); `publish(bgr, telemetry)`, rate-limited to cfg.stream.fps.
 - `overlay.draw(image, *, detections, tracks, decision, mask, bore_px, telemetry, project_w=None) -> BGR image`
   (`project_w(dir_w) -> (u, v) | None` projects a world direction into the current frame; more keyword-only
   params may be added with defaults).
 - `tbot sim`: closed loop over synthetic scenarios x seeds with a SimActuator -> detection rate, track
-  latency, fire count, predicted-miss stats, hit rate from the shot model -> table + JSON.
+  latency, fire count, predicted-miss stats and truth-matched hit rate scored at actual command time -> table + JSON.
 
 ### tbot/tools/latency_camera.py, latency_report.py, bench.py [latency]
 - `tbot latency-camera`: LED on cfg.gpio.latency_led_pin in view of the camera, random toggles, first lit
@@ -311,8 +319,84 @@ merged into calib/latency.json under actuator.<type>.
   brightness interpolation, global shutter) -> calib/latency.json "camera".
 - `tbot latency-report`: print the full LatencyBudget (config defaults vs measured), per actuator.
 - `tbot bench`: per-stage timing of detector/tracker/solver/overlay on synthetic frames at the configured
-  resolution (+ optional live source), percentiles, verdict vs the frame period; saves calib/bench.json.
+  resolution (+ optional live source), percentiles, verdict vs frame period; saves calib/bench.json.
+  `--profile [N]` profiles a separate run, `--profile-out` saves pstats, `--no-overlay` excludes overlay and
+  JPEG, and `--compare FILE` compares a previous result.
+ 
+### tbot/tools/doctor.py, sensitivity.py, tune.py, explain.py [analysis]
+- `tbot doctor`: offline config, calibration and layout checks with PASS/WARN/FAIL.
+- `tbot sensitivity`: MG996R latency, range and PWM error budget, isolated tolerances and measurement ranking.
+- `tbot tune`: synthetic parameter grid or sample, safety scenarios and Pareto comparison; `--write-best` writes
+  overrides, not evidence of real-world safety.
+- `tbot explain`: per-frame decision funnel, reasons, sigma contributions and biggest blocker; synthetic funnels
+  use truth matching. See [PREFLIGHT.md](PREFLIGHT.md) for the workflow and limitations.
 - Shared helper `tbot/stats.py: summarize(values) -> {"mean","std","p50","p95","min","max","n"}` [contract].
+
+### tbot/hitl/*, tbot/tools/hitl.py [hitl]
+
+The monitor-and-camera bench runs the real `Pipeline`; see [HITL.md](HITL.md) for procedure and interpretation.
+The actuator remains behind the ordinary arming interlock. Times are rig monotonic ns except wire `rig_ms`.
+```
+scene.Disc(id, t0, t1, x0, y0, r, level, vx=0.0, vy=0.0, ax=0.0, ay=0.0, kind="disc")
+scene.Rect(id, t0, t1, x, y, w, h, level, kind="rect")
+scene.active(item: Item, t_ms: float) -> bool
+scene.HitlStore(clock_ns=time.monotonic_ns, bg: int = 170)
+    .rig_ms(t_ns: int | None = None) -> float; .ns(rig_ms: float) -> int
+    .new_id() -> int; .add(item: Item) -> int; .end(item_id: int, t1_ms: float | None = None) -> None
+    .clear() -> None; .prune(before_ms: float) -> None; .set_background(level: int) -> None
+    .set_status(show: bool, message: str | None = None) -> None; .program() -> dict
+    .post_log(payload: dict, received_ns: int) -> None
+    .frames(t0_ms: float | None = None, t1_ms: float | None = None) -> tuple[np.ndarray, list[tuple]]
+    .first_drawn(item_id: int) -> float | None; .connected(max_age_s: float = 1.0) -> bool
+    .screen_size() -> tuple[int, int] | None
+server.HitlServer(store, host: str = "0.0.0.0", port: int = 8090)
+    .start() -> HitlServer; .stop() -> None; .url: str
+geometry.fit_homography(src: np.ndarray, dst: np.ndarray) -> np.ndarray
+geometry.screen_pose_homography(screen_w: int, screen_h: int, *, distance_m: float, width_m: float,
+    roll_deg: float = 0.0, pitch_deg: float = 0.0, yaw_deg: float = 0.0,
+    offset_m: tuple[float, float] = (0.0, 0.0)) -> np.ndarray
+geometry.ScreenMap(H: np.ndarray, screen_w: int, screen_h: int, cam: CameraModel)
+    .fit(screen_xy, uv, cam: CameraModel, screen_w: int, screen_h: int) -> ScreenMap  # classmethod
+    .to_ray(xy), .to_pixel(xy), .from_ray(rays), .from_pixel(uv), .px_angle(xy) -> np.ndarray
+    .radius_for(xy, angular_radius_rad: float) -> float; .camera_mask(width, height, inset_px=0.0) -> np.ndarray
+    .to_dict() -> dict; .from_dict(d: dict, cam: CameraModel) -> ScreenMap  # classmethod
+rig.Rig(cfg, calib, source, store: HitlStore, *, gpio, arming, actuator=None, imu=None, log=print)
+    .start() -> None; .close() -> None; .step() -> dict | None; .drive(gen: Iterator)
+    .set_screen_mask(screen_mask: np.ndarray | None) -> None
+procedures.Bench(rig, store, cfg, cam, mount, live, bg, level, out_dir, rng, log=print,
+    operator=None, mic=None, sense=None, actuator=None, smap=None, allow_windowed=False, raw=<new dict>)
+    .clay_radius_m: float; .bore_screen(range_m: float) -> np.ndarray
+procedures.wait_page(b, timeout_s=600.0)
+procedures.geometry(b, cols=5, rows=4, margin=0.15)
+procedures.display(b, trials=30, range_m=20.0, exposure_us=None)
+procedures.flash(b, trials=20, range_m=20.0)
+procedures.sweep(b, trials=20, speeds_dps=(30.0, 60.0), range_m=20.0, directions="auto")
+procedures.detect(b, ranges_m=(10.0, 20.0, 30.0, 40.0), positions=5, frames_each=30, range_m=20.0)
+audio.StreamClock(fs_nominal: float, window_s: float = 0.5)
+    .add(n_end: int, t_arrival_ns: int) -> None; .time_of(n: float) -> int; .index_at(t_ns: int) -> float
+audio.ArecordMic(device="default", fs=48000, latency_ms=0.0, period_us=2000, buffer_us=20000, keep_s=30.0)
+    .start() -> None; .stop() -> None; .clip(t0_ns: int, t1_ns: int) -> tuple[np.ndarray, int, float] | None
+    .stats() -> dict
+audio.detect_onset(samples: np.ndarray, fs: float, t_first_ns: int, *,
+    search_from_ns: int | None = None, search_to_ns: int | None = None, noise_to_ns: int | None = None) -> dict | None
+analysis.analyze(raw: dict) -> dict; analysis.format_report(rep: dict) -> str
+report_html.write_html(rep: dict, path: Path) -> Path
+tools.hitl.main(argv: list[str] | None = None) -> int
+```
+`page.PAGE_HTML` implements the browser client; `sim` supplies the simulated display, camera and click path.
+Procedures are generators driven one camera frame per yield; the CLI waits for a connected fullscreen page
+(unless `--allow-windowed`), then orders geometry → display → flash → sweep → detect independently of
+`--tests` order. Omitted geometry must exist in `calib/hitl.json`. The CLI passes sweep speeds `20,40` by
+default, distinct from the procedure's Python defaults, and defaults to `--sweep-dir auto`. `run` and `analyze`
+write `report.txt`, `report.json` and a self-contained `report.html` in the run directory.
+
+**Wire protocol.** `rig_ms = (monotonic_ns - epoch_ns)/1e6`. `GET /hitl/sync` returns `{"t": rig_ms}`;
+the browser uses its send/receive `performance.now()` midpoint, selects low-RTT samples and fits offset/drift.
+`GET /hitl/scene` returns `{v,bg,status,message,items}`: each item has `kind`, ID, `t0`, nullable `t1`,
+level and device-pixel coordinates; discs additionally carry radius, velocity (px/ms) and acceleration
+(px/ms²). Each rAF evaluates the program at synced rig time and logs `{i,t,ids}`. `POST /hitl/log` batches
+these entries and page status (canvas size, fullscreen, sync and cadence); `GET /hitl/state` exposes rig state.
+All HTTP responses are no-store; this is a trusted bench LAN, not an authenticated public service.
 
 ## Calibration files (paths.calib_dir, default `software/calib/`)
 - intrinsics.json: {"model","width","height","K":[[..]],"D":[..],"rms_px","n_views","created","notes"}
@@ -323,6 +407,11 @@ merged into calib/latency.json under actuator.<type>.
   "actuator":{"servo":{"cmd_to_break_ms":{stats},"cmd_to_rest_ms":{stats}},"pq12":{...},"sim":{...}},"created"}
   where {stats} = {"mean","std","p50","p95","min","max","n"}.
 - detector.json: {<DetectorConfig field>: value, ...} — applied over cfg.detector.
+- hitl.json: `{"created", "screen":{"H_screen_to_norm":[[...]],"screen_w","screen_h","cam_w","cam_h",
+  "rms_px","max_px","n_points"}, "display":{"rise":{...},"fall":{...},"exposure_us"}, "page":{"w","h",
+  "refresh_hz","ua"}}`. Rise/fall models contain `n`, `d0_ms`, `scanout_ms`, `resid_std_ms`, partial count,
+  bracket uncertainty and per-row stats when sampled. Non-sim runs merge measured values unless `--no-write`;
+  geometry reuse checks camera and page dimensions, not physical alignment.
 - mask.png: uint8, 255 = usable; any size (resized NEAREST to the runtime size).
 
 ## Safety model (binding for every slice)
@@ -330,5 +419,6 @@ merged into calib/latency.json under actuator.<type>.
 2. The actuator layer enforces the arming interlock itself (fire() refuses unless armed; disarm => abort()).
 3. One shot per press by default (cfg.fire.max_shots_per_arm).
 4. Watchdog: no processed frame for cfg.fire.watchdog_ms => abort to rest.
-5. Hardware recommendation (docs): put the arming switch in series with the actuator driver enable/power
-   as well, so a software fault cannot fire without the button held.
+5. The installed BCM17 interlock is software only; no hardware cut is installed in the servo supply. Open the
+   battery lever connector to make the actuator safe. An additional series actuator power/driver-enable
+   interlock is recommended but not installed; software is not a substitute for a hardware cut.

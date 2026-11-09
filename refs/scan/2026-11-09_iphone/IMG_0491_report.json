@@ -1,0 +1,146 @@
+{
+ "mm_per_unit": 159.81363972773582,
+ "scale_source": "two identical ChArUco 7x10 boards, DICT_4X4_50, ASSUMED 25.0 mm squares / 18.0 mm markers",
+ "boards": {
+  "A": {
+   "dims": [
+    7,
+    10
+   ],
+   "mm_per_unit": 159.9705437559207,
+   "rms_mm": 1.7526293031337465,
+   "max_mm": 9.792598721335342,
+   "n_markers": 37,
+   "dup_ids": 2
+  },
+  "B": {
+   "dims": [
+    7,
+    10
+   ],
+   "mm_per_unit": 159.60630226192006,
+   "rms_mm": 1.4239200389434221,
+   "max_mm": 4.247736775867698,
+   "n_markers": 28,
+   "dup_ids": 0
+  }
+ },
+ "ratio_A_over_B": 1.0022821247584752,
+ "T_scene_mm_to_gun_axis_seeded": [
+  [
+   -0.9807324460621755,
+   0.18999433098655596,
+   -0.045453530488537376,
+   485.0253789069365
+  ],
+  [
+   -0.18867942857870118,
+   -0.86091273321817,
+   0.4724715219079708,
+   68.9415035702912
+  ],
+  [
+   0.050635387547802765,
+   0.47194429753498507,
+   0.8801730724988656,
+   -349.4964133048575
+  ],
+  [
+   0.0,
+   0.0,
+   0.0,
+   1.0
+  ]
+ ],
+ "registration_note": "axis->+X, table normal->+Z, muzzle pinned at X819 (percentile of barrel points), not ICP-refined (unconstrained ICP drifted 64 mm / 8 deg)",
+ "stations_vs_gun_body": [
+  {
+   "x0": -50,
+   "n": 15081,
+   "signed_median_mm": 0.74,
+   "abs_p50_mm": 2.94,
+   "abs_p90_mm": 6.87
+  },
+  {
+   "x0": 0,
+   "n": 11774,
+   "signed_median_mm": -2.14,
+   "abs_p50_mm": 3.16,
+   "abs_p90_mm": 7.07
+  },
+  {
+   "x0": 50,
+   "n": 15961,
+   "signed_median_mm": -2.75,
+   "abs_p50_mm": 4.01,
+   "abs_p90_mm": 7.19
+  },
+  {
+   "x0": 100,
+   "n": 15312,
+   "signed_median_mm": 0.55,
+   "abs_p50_mm": 3.76,
+   "abs_p90_mm": 7.07
+  },
+  {
+   "x0": 150,
+   "n": 12824,
+   "signed_median_mm": -2.29,
+   "abs_p50_mm": 3.21,
+   "abs_p90_mm": 6.47
+  },
+  {
+   "x0": 200,
+   "n": 13799,
+   "signed_median_mm": -0.25,
+   "abs_p50_mm": 1.27,
+   "abs_p90_mm": 5.07
+  },
+  {
+   "x0": 250,
+   "n": 12905,
+   "signed_median_mm": 0.15,
+   "abs_p50_mm": 1.87,
+   "abs_p90_mm": 5.34
+  },
+  {
+   "x0": 300,
+   "n": 19534,
+   "signed_median_mm": 0.69,
+   "abs_p50_mm": 2.03,
+   "abs_p90_mm": 5.87
+  },
+  {
+   "x0": 350,
+   "n": 19357,
+   "signed_median_mm": 0.63,
+   "abs_p50_mm": 2.28,
+   "abs_p90_mm": 6.22
+  },
+  {
+   "x0": 400,
+   "n": 18024,
+   "signed_median_mm": 0.53,
+   "abs_p50_mm": 1.76,
+   "abs_p90_mm": 5.15
+  },
+  {
+   "x0": 450,
+   "n": 21153,
+   "signed_median_mm": 0.21,
+   "abs_p50_mm": 1.83,
+   "abs_p90_mm": 4.45
+  },
+  {
+   "x0": 500,
+   "n": 8632,
+   "signed_median_mm": 1.27,
+   "abs_p50_mm": 1.36,
+   "abs_p90_mm": 3.81
+  }
+ ],
+ "frames": 252,
+ "registered": 252,
+ "reproj_px": 1.18,
+ "gaussians": 387043
+}

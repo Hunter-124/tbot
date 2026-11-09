@@ -14,15 +14,19 @@ import math
 import numpy as np
 
 from ..config import Config
-from ..optics import CameraModel, MountModel, azel_to_dir, dir_to_azel, range_from_size
+from ..optics import CameraModel, MountModel, dir_to_azel, range_from_size
 from ..types import Detection, Track
 
 _TAU = 2.0 * math.pi
 
-# Initial 1-sigma of the unobserved states of a brand new track: a clay crosses at up to ~1.5 rad/s
-# at skeet ranges (20 m/s at 20 m) and its angular acceleration peaks around 10 rad/s^2. [INFERENCE]
+# A nearly constant-velocity initial model speeds up static/slow targets. For a young moving
+# track, allow both radial perspective acceleration and a change of angular velocity on a short
+# maneuver timescale. These are uncertainty priors, not bounds on clay motion. [INFERENCE]
 _NEW_VEL_SIGMA = 1.5  # rad/s
-_NEW_ACC_SIGMA = 10.0  # rad/s^2
+_NEW_ACC_SIGMA = 0.2  # rad/s^2
+_MAX_YOUNG_ACC_SIGMA = 10.0  # rad/s^2
+_YOUNG_ACCEL_HITS = 8
+_YOUNG_MANEUVER_TIME_S = 0.1
 
 # Range filter: random walk with the clay's own line-of-sight speed scale (launch speed class). [INFERENCE]
 _RANGE_WALK_MPS = 15.0
@@ -69,18 +73,19 @@ def _process_noise(dt: float, q: float) -> np.ndarray:
     return qm
 
 
-def _propagate(x: np.ndarray, p: np.ndarray, dt: float, q: float) -> tuple[np.ndarray, np.ndarray]:
-    if dt <= 0.0:
-        return x.copy(), p.copy()
-    f = _transition(dt)
-    return f @ x, f @ p @ f.T + _process_noise(dt, q)
-
-
 def _inv2(m: np.ndarray) -> np.ndarray:
     det = m[0, 0] * m[1, 1] - m[0, 1] * m[1, 0]
     if not det or not math.isfinite(det):
         return np.full((2, 2), np.inf)
     return np.array([[m[1, 1], -m[0, 1]], [-m[1, 0], m[0, 0]]], dtype=np.float64) / det
+
+
+def _position_var(p: np.ndarray, i: int, dt: float, h: float, noise: float) -> float:
+    return (p[i, i] + dt * (p[i, i + 1] + p[i + 1, i])
+            + h * (p[i, i + 2] + p[i + 2, i])
+            + dt * dt * p[i + 1, i + 1]
+            + dt * h * (p[i + 1, i + 2] + p[i + 2, i + 1])
+            + h * h * p[i + 2, i + 2] + noise)
 
 
 class ClayTracker:
@@ -110,7 +115,18 @@ class ClayTracker:
         """Advance every track to t_ns, associate the detections and return the live tracks."""
         t_ns = int(t_ns)
         rot = np.asarray(R_wg, dtype=np.float64).reshape(3, 3)
-        preds = [_propagate(tr.x, tr.P, max(0.0, (t_ns - tr.t_ns) * 1e-9), self._q) for tr in self.tracks]
+        # Tracks normally share an exposure timestamp; construct the fixed matrices only once per dt.
+        matrices = {}
+        preds = []
+        for tr in self.tracks:
+            dt = max(0.0, (t_ns - tr.t_ns) * 1e-9)
+            if dt <= 0.0:
+                preds.append((tr.x.copy(), tr.P.copy()))
+            else:
+                if dt not in matrices:
+                    matrices[dt] = (_transition(dt), _process_noise(dt, self._q))
+                f, noise = matrices[dt]
+                preds.append((f @ tr.x, f @ tr.P @ f.T + noise))
 
         n_det = len(detections)
         if n_det:
@@ -128,21 +144,17 @@ class ClayTracker:
                 d_az = _wrap_pi(float(az_m[i]) - float(xp[0]))
                 d_el = float(el_m[i]) - float(xp[3])
                 floor_az = self._floor_var / max(math.cos(float(el_m[i])), _MIN_COS_EL) ** 2
-                s = np.array(
-                    [
-                        [pp[0, 0] + sig_az[i] ** 2 + floor_az, pp[0, 3]],
-                        [pp[3, 0], pp[3, 3] + sig_el[i] ** 2 + self._floor_var],
-                    ],
-                    dtype=np.float64,
-                )
-                inv = _inv2(s)
-                d2 = (
-                    inv[0, 0] * d_az * d_az
-                    + (inv[0, 1] + inv[1, 0]) * d_az * d_el
-                    + inv[1, 1] * d_el * d_el
-                )
-                if d2 >= 0.0 and math.sqrt(d2) <= self._gate:
-                    pairs.append((math.sqrt(d2), j, i))
+                s00 = pp[0, 0] + sig_az[i] ** 2 + floor_az
+                s01 = pp[0, 3]
+                s10 = pp[3, 0]
+                s11 = pp[3, 3] + sig_el[i] ** 2 + self._floor_var
+                det = s00 * s11 - s01 * s10
+                if det <= 0.0 or not math.isfinite(det):
+                    continue
+                d2 = (s11 * d_az * d_az - (s01 + s10) * d_az * d_el
+                      + s00 * d_el * d_el) / det
+                if self._gate >= 0.0 and 0.0 <= d2 <= self._gate * self._gate:
+                    pairs.append((d2, j, i))
 
         # Greedy globally-nearest assignment (tracks and detections are few; ties broken by index).
         pairs.sort()
@@ -169,6 +181,13 @@ class ClayTracker:
                 det = detections[i]
                 tr.x, tr.P = _kf_update(xp, pp, float(az_m[i]), float(el_m[i]), float(sig_az[i]), float(sig_el[i]))
                 tr.hits += 1
+                if 3 <= tr.hits <= _YOUNG_ACCEL_HITS:
+                    speed = math.hypot(float(tr.x[1]) * math.cos(float(tr.x[3])), float(tr.x[4]))
+                    acc = max(2.0 * _RANGE_WALK_MPS * speed / max(tr.range_m, _RANGE_MIN_M),
+                              speed / _YOUNG_MANEUVER_TIME_S)
+                    acc_var = min(acc, _MAX_YOUNG_ACC_SIGMA) ** 2
+                    tr.P[2, 2] = max(float(tr.P[2, 2]), acc_var)
+                    tr.P[5, 5] = max(float(tr.P[5, 5]), acc_var)
                 tr.misses = 0
                 tr.last_detection = det
                 if tr.hits >= self.cfg.tracker.confirm_hits:
@@ -194,15 +213,26 @@ class ClayTracker:
 
     def predict(self, track: Track, t_ns: int) -> tuple[float, float, float]:
         """(az, el, sigma_rad) of the track at t_ns; sigma is the on-sphere 1-sigma of the mean."""
-        x, p = _propagate(track.x, track.P, max(0.0, (int(t_ns) - track.t_ns) * 1e-9), self._q)
-        el = float(x[3])
-        var = math.cos(el) ** 2 * float(p[0, 0]) + float(p[3, 3])
-        return float(x[0]), el, math.sqrt(max(var, 0.0))
+        dt = max(0.0, (int(t_ns) - track.t_ns) * 1e-9)
+        h = 0.5 * dt * dt
+        x, p = track.x, track.P
+        az = float(x[0] + dt * x[1] + h * x[2])
+        el = float(x[3] + dt * x[4] + h * x[5])
+        # Only the two position variances are needed, not a full 6x6 propagation.
+        noise = self._q * dt**5 / 20.0
+        var = (math.cos(el) ** 2 * _position_var(p, 0, dt, h, noise)
+               + _position_var(p, 3, dt, h, noise))
+        return az, el, math.sqrt(max(float(var), 0.0))
 
     def predict_dir(self, track: Track, t_ns: int) -> np.ndarray:
         """Unit world direction to the track at t_ns."""
-        az, el, _ = self.predict(track, t_ns)
-        return np.asarray(azel_to_dir(az, el), dtype=np.float64).reshape(3)
+        dt = max(0.0, (int(t_ns) - track.t_ns) * 1e-9)
+        h = 0.5 * dt * dt
+        x = track.x
+        az = float(x[0] + dt * x[1] + h * x[2])
+        el = float(x[3] + dt * x[4] + h * x[5])
+        ce = math.cos(el)
+        return np.array([ce * math.cos(az), ce * math.sin(az), math.sin(el)], dtype=np.float64)
 
     def best(self) -> Track | None:
         """Confirmed track with the most hits (ties: the most recently created one)."""

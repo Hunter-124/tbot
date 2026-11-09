@@ -17,7 +17,7 @@ from typing import Sequence
 import numpy as np
 
 from tbot.app.run import Pipeline
-from tbot.camera.synthetic import SyntheticSource
+from tbot.camera.synthetic import SyntheticSource, T0_NS
 from tbot.config import Calibration, Config, add_common_args, load_from_args, now_iso, resolve_path, save_json
 from tbot.hw.gpio import SimGpio, open_gpio
 from tbot.sim.scenario import SCENARIOS
@@ -91,6 +91,11 @@ def shot_outcome(source: SyntheticSource, mount, shot, cfg: Config, t_fire_ns: i
     impact = muzzle_w + rng * bore_w - np.array([0.0, 0.0, drop], dtype=np.float64)
     miss = float(np.linalg.norm(clay - impact))
     radius = float(shot.pattern_radius(rng))
+    # The trajectory curve clamps outside its domain for swing construction.  It is
+    # not a stationary target before launch or after the simulated flight ends.
+    arrival_s = (t_arrive_ns - T0_NS) * 1e-9
+    curve = source.scenario.clay_curve
+    in_flight = curve is not None and source.scenario.launch_t_s <= arrival_s <= curve.t_end
     return {
         "t_fire_ns": int(t_fire_ns),
         "t_exit_ns": t_exit_ns,
@@ -99,8 +104,8 @@ def shot_outcome(source: SyntheticSource, mount, shot, cfg: Config, t_fire_ns: i
         "tof_s": tof,
         "miss_m": miss,
         "pattern_radius_m": radius,
-        "hit": bool(miss <= radius),
-        "reason": "",
+        "hit": bool(in_flight and miss <= radius),
+        "reason": "" if in_flight else "no clay in flight at shot arrival",
     }
 
 
@@ -158,24 +163,32 @@ def evaluate_run(
             reason = str(tele["decision"]["reason"])
             reasons[reason] = reasons.get(reason, 0) + 1
             if tele["fired"]:
-                fire_events.append((int(tele["t_ns"]), dict(tele["decision"]), bool(tele["armed"])))
+                command_t = tele["cmd_t_ns"] if tele.get("cmd_t_ns") is not None else tele["t_ns"]
+                fire_events.append((int(command_t), dict(tele["decision"]), bool(tele["armed"])))
 
             truth = source.truth(t)
             px = truth.get("clay_px")
+            matched = []
             if bool(truth.get("visible")) and px is not None:
                 if t_first_visible is None:
                     t_first_visible = t
                 visible += 1
                 u0, v0 = float(px[0]), float(px[1])
-                if any(math.hypot(float(d.u) - u0, float(d.v) - v0) <= det_tol_px for d in pipe.detections):
-                    detected += 1
+                matched = [d for d in pipe.detections
+                           if math.hypot(float(d.u) - u0, float(d.v) - v0) <= det_tol_px]
+                detected += int(bool(matched))
 
+            # A confirmed background track is not a confirmed clay.  In particular,
+            # it can otherwise produce a negative latency before the clay appears.
+            matched_tracks = [tr for tr in pipe.tracks if tr.misses == 0 and tr.confirmed
+                              and any(tr.last_detection is d for d in matched)]
+            if matched_tracks and t_first_confirmed is None:
+                t_first_confirmed = t
             best = pipe.tracker.best()
-            if best is not None and best.confirmed:
-                if t_first_confirmed is None:
-                    t_first_confirmed = t
+            future_truth = source.truth(t + lead_ns)
+            if best is not None and any(best is tr for tr in matched_tracks) and future_truth.get("visible"):
                 pred = _vec3(pipe.tracker.predict_dir(best, t + lead_ns))
-                true_dir = _vec3(source.truth(t + lead_ns).get("clay_dir_w"))
+                true_dir = _vec3(future_truth.get("clay_dir_w"))
                 if pred is not None and true_dir is not None:
                     lead_err.append(_angle_deg(pred, true_dir))
 

@@ -6,13 +6,14 @@ fires the gun — the **gun stays unloaded** for all of it, including the actuat
 
 | # | Step | Writes | Needs the gun? |
 |---|---|---|---|
-| 0 | Hardware bring-up (`tbot hwcheck`, `tbot jog`) | `config/local.toml` (servo pulses / PQ12 pins) | trigger set fitted (unloaded) |
+| 0 | Hardware bring-up (`tbot hwcheck`, `tbot jog servo`) | `config/local.toml` (servo pulses) | trigger set fitted (unloaded) |
 | 1 | Focus + exposure check | — | camera only |
 | 2 | Intrinsics | `calib/intrinsics.json` | camera only |
 | 3 | Detector + mask | `calib/detector.json`, `calib/mask.png` | pod on the gun |
 | 4 | IMU | `calib/imu.json` | pod on the gun |
 | 5 | Boresight | `calib/boresight.json` | pod on the gun |
 | 6 | Latency | `calib/latency.json`, `calib/bench.json` | trigger set fitted (unloaded) |
+| 6e | End-to-end HITL bench | `calib/hitl.json`, run reports; optionally `calib/latency.json` | trigger set fitted for live test (unloaded) |
 | 7 | Dry run on the range | session recordings | everything |
 
 Re-run step 2 if the lens is touched, step 3 if the camera or pod moves, step 5 if anything in the camera/barrel
@@ -22,13 +23,17 @@ chain is disturbed, step 6 if the actuator or the frame rate changes.
 
 ## 0. Hardware bring-up — `tbot hwcheck`, `tbot jog`
 
-**Purpose.** Prove every device answers before calibrating anything, and set the trigger actuator's end positions.
+**Purpose.** Prove every device answers before calibrating anything, and set the MG996R servo's end positions.
+The servo uses its own 7.0 V XL4015 supply and a common ground with the Pi. The BCM17 interlock is software
+only; no hardware supply cut is installed. Open the battery lever connector to make the actuator safe.
+Before connecting hardware, run `tbot doctor` for offline configuration, layout and calibration checks; fix
+FAILs and review WARNs. See [PREFLIGHT.md](PREFLIGHT.md) for the complete pre-assembly workflow.
 
 ```bash
 tbot hwcheck                       # boot overlays, camera fps, IMU, GPIO, PWM/H-bridge, power, temperature, calib status
 tbot hwcheck --interactive         # also asks you to press and release the arming button
 tbot jog servo                     # MG996R: <us>, +/-, rest, fire, test, save, q  (moves only while the button is held)
-tbot jog pq12                      # PQ12: e <ms>, r <ms>, home, test, swap, save, q
+tbot jog pq12                      # fallback only: e <ms>, r <ms>, home, test, swap, save, q
 ```
 
 **Pass.** `hwcheck` shows no FAIL (camera at >= 90 % of `camera.fps`, IMU at >= 90 % of `imu.sample_rate_hz`,
@@ -46,12 +51,19 @@ inflated blur wrecks size-based ranging.
 Daylight.
 
 ```bash
-tbot run --stream                     # then open http://<pi>:8080 from the laptop
+tbot focus                            # headless over SSH: live sharpness, % of peak, saturation, fps, exposure/gain
+tbot focus --stream                   # same, with the score overlaid on http://<pi>:8080 from the laptop
+tbot run --stream                     # the full pipeline view
 tbot record --seconds 10 --out sessions/focus-check   # keep a frame set to pixel-peep later
 ```
 
 **Do.** Loosen the M12 lens ring, focus at infinity (the distant detail, not the barrel — the barrel is supposed to
-be soft), lock the ring. Watch the telemetry pane: `exposure_us` should be the configured 500 µs and the image
+be soft, and `tbot focus` excludes the barrel mask), turn the ring slowly through the peak until `sharp` reads
+~100 % of `peak` again, and lock the ring. All four quadrant scores should rise and fall together; one corner
+peaking at a different ring position means a tilted lens or board. `tbot focus` also prints the saturated-pixel
+percentage, mean/median DN, frame rate and the `exposure_us`/gain from the frame metadata; `--roi 0.3` narrows
+the central window, `--json` prints a final summary. The score is relative (mean squared gradient, DN²): compare it
+only within one session and scene. `exposure_us` should be the configured 500 µs and the image
 should not be clipping. In open daylight with no filter, raise `camera.analogue_gain` before `exposure_us`
 (exposure buys motion blur, see docs/OPTICS.md §6):
 
@@ -124,7 +136,7 @@ tbot record --seconds 60 --out sessions/swing-01
 ```
 
 Record *while swinging*: the static-pixel mask needs the background to move. Copy the session to the laptop for
-tuning (`rsync -a pi@tbot.local:~/tbot/software/sessions/swing-01 sessions/`).
+tuning (`rsync -a pi@tbot.local:~/TBOT/software/sessions/swing-01 sessions/`).
 
 ### 3b. Barrel / static mask
 
@@ -191,7 +203,7 @@ actually resolved. Re-run at a second range and check the two agree within ~0.2 
 the actuator delay. Bias → drift; wrong axes → the track flies the wrong way; wrong time offset → a lead error
 proportional to the swing rate.
 
-**Setup.** Pod on the gun, GY-521 wired to I2C bus 1 (BCM 2/3), `i2cdetect -y 1` shows `68`.
+**Setup.** Pod on the gun, GY-521 wired to I2C bus 1 (BCM 2/3), `sudo i2cdetect -y 1` shows `68`.
 
 ### 4a. Bias
 
@@ -218,7 +230,7 @@ Follow the prompts (muzzle up / roll left / swing left). The CAD axis map from l
 
 **Pass criteria.** The fitted matrix is a signed permutation (entries ≈ 0 or ±1) and **equals** the configured
 map. If it does, you do not need `--write` at all. If it differs by a sign or a swapped axis, the board is mounted
-differently than the CAD says — fix the mount or `--write` the fit, then note it in `hardware/design/layout.md`. Never
+differently than the CAD says — fix the mount or `--write` the fit, then note it in `design/layout.md`. Never
 `--write` a matrix with intermediate values (0.3, 0.7 …): that is a bad fit, not a rotated board.
 
 ### 4c. Camera–IMU time offset
@@ -299,6 +311,8 @@ for the example. A shotgun pattern centre is a statistic — use several pattern
 
 **Purpose.** The solver fires at `now + fire_delay`, so the whole photon → shot chain has to be measured, not
 guessed. The defaults in `[latency]` are marked `[INFERENCE]` for a reason.
+Run `tbot sensitivity` to compare latency, range and PWM jitter against the pattern and inspect the isolated
+tolerance table and measurement ranking. Its assumptions are synthetic, not a substitute for these measurements.
 
 ### 6a. Camera: exposure → userspace, and the timestamp offset
 
@@ -335,15 +349,15 @@ frame-drop count it prints).
   the trigger breaking closes it (internal pull-up: break = falling edge, sear reset = rising edge).
 - The **operator holds the arming button** (BCM 17, header pin 11) for the whole run. The tool waits for it, pauses
   the moment it is released, and never bypasses the interlock.
-- Actuator powered from its own supply (12 V via an H-bridge for the PQ12, 5–6 V BEC for the MG996R), grounds
-  common with the Pi — see docs/PROTOTYPING.md.
+- MG996R powered from its separate 7.0 V XL4015, with ground common with the Pi — see docs/PROTOTYPING.md.
+  The arming interlock is software only, with no hardware supply cut; open the battery lever connector to
+  make the actuator safe. The PQ12 fallback instead needs 12 V through an H-bridge.
 
 ```bash
-tbot latency-actuator --trials 20                       # the configured actuator.type
-tbot latency-actuator --trials 20 --type servo
-tbot latency-actuator --trials 20 --type pq12 --timeout-s 3.0
-tbot latency-actuator --trials 20 --notes "MG996R, 6 V BEC, lever arm 12.5 mm"
-tbot latency-actuator --sim                             # self-test with the simulated GPIO/actuator
+tbot latency-actuator --type servo --trials 20
+tbot latency-actuator --type servo --trials 20 --notes "MG996R, 6 V BEC, lever arm 12.5 mm"
+tbot latency-actuator --type pq12 --trials 20 --timeout-s 3.0   # fallback only
+tbot latency-actuator --sim                                    # self-test with simulated GPIO/actuator
 ```
 
 The tool prints the wiring procedure before it starts and inserts a random pause between trials so the operator
@@ -351,10 +365,11 @@ cannot anticipate the shot.
 
 **Writes.** `calib/latency.json` → `actuator.<type>.cmd_to_break_ms` and `.cmd_to_rest_ms` (full stats).
 
-**Pass criteria.** `timeouts: 0 of N`; a tight distribution (p95 − p50 of a few ms for the servo). Compare against
-the config defaults: `servo_cmd_to_break_ms = 115` `[INFERENCE]`, `pq12_cmd_to_break_ms = 900` `[INFERENCE]`. If
-no break edge is ever seen, the fixture or the actuator direction is wrong (`actuator.servo.rest_us`/`fire_us` may
-be swapped — confirm on the bench, the direction is explicitly unconfirmed in the config).
+**Pass criteria.** `timeouts: 0 of N`; inspect the measured distribution rather than requiring a p95 − p50 of
+only a few ms. The expected dominant servo jitter is 50 Hz PWM frame quantisation: 0–20 ms command wait, or
+about 5.8 ms one-sigma assuming uniform phase. Compare the measured servo delay against the inferred
+`servo_cmd_to_break_ms = 115` default. If no break edge is ever seen, the fixture or the actuator direction is
+wrong (`actuator.servo.rest_us`/`fire_us` may be swapped — confirm on the bench).
 
 ### 6c. Processing time
 
@@ -369,7 +384,7 @@ tbot bench --frames 300 --threads 2 --scenario skeet_crossing --json
 640 × 400, raise `detector.bg_downscale`, or reduce `tracker.max_tracks` — and re-run, because the solver's
 `horizon_frames` look-ahead assumes the configured frame period.
 
-### 6d. The budget, and choosing the actuator
+### 6d. The latency budget
 
 ```bash
 tbot latency-report
@@ -378,12 +393,22 @@ tbot latency-report --range-m 20 --speed-mps 20 --json
 
 It prints every component (measured vs config default, with its source), the shot time of flight to the reference
 range, and per actuator: `cmd→break`, jitter, decision→muzzle, photon→arrival, and how far the reference clay
-moves in that time — in metres and degrees. That last column is the lead the solver has to predict, and it is the
-number that decides **MG996R vs PQ12**: ~0.1 s versus ~0.7–1.1 s of command-to-break means roughly 2 m versus
-14–22 m of clay travel at 20 m/s. Read it after every re-measurement.
+moves in that time — in metres and degrees. That last column is the lead the solver has to predict. The selected
+MG996R's estimated ~0.1 s command-to-break means ~2 m at 20 m/s, versus 14–22 m for the PQ12 fallback's
+~0.7–1.1 s. Read the report after every re-measurement.
 
-**Pass criteria.** Every row of the table says `measured`, not `default`. Rows still saying `default` are
-calibrations you have not done.
+**Pass criteria.** The components measured for the fitted rig say `measured`, not `default`. Defaults for the
+unfitted fallback need not be measured.
+
+### 6e. End-to-end check on the HITL bench
+
+With the calibrated camera, detector, boresight and latency budget, point the rig at a monitor and run the
+[HITL bench procedure](HITL.md). It measures display and pipeline timing, tests detection and tracking, and
+compares moving-target lead against the known screen trajectory. Aim the bore toward the targets' exit side
+for a longer sweep runway; the rig waits for the page to enter fullscreen. Start dry; for live actuator timing
+the gun must be **unloaded** and the operator must hold the arming button. The bench writes `calib/hitl.json`
+and run reports including self-contained `report.html`; `--write-latency` explicitly merges measured actuator
+latency into `calib/latency.json`.
 
 ---
 
@@ -426,5 +451,7 @@ tbot sim --not-armed              # interlock check: must produce zero shots
 python3 -m pytest                 # the unit suite
 ```
 
-Only after all of this, and with the hardware interlock wired (README, safety model), does `tbot run --live` make
-sense — on a range, with the muzzle downrange, your hand on the gun and your finger on the arming button.
+Only after all of this does `tbot run --live` make sense — on a range, with the muzzle downrange, your hand on
+the gun and your finger on the arming button. The interlock is software only; no hardware cut is installed.
+Open the battery lever connector to make the actuator safe. An additional series hardware cut is recommended
+but not installed (README, safety model).

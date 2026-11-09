@@ -552,8 +552,8 @@ def check_imu(cfg: Config, calib: Calibration | None = None, env: CheckEnv | Non
     if skip is not None:
         return skip
     dev = Path(env.i2c_dev_path.format(bus=int(cfg.imu.i2c_bus)))
-    fix = (f"add dtparam=i2c_arm=on to config.txt and reboot; {dev} needs the 'i2c' group "
-           "(sudo usermod -aG i2c $USER)")
+    fix = (f"add dtparam=i2c_arm=on to config.txt, load i2c-dev at boot (sudo ./scripts/pi_setup.sh does both) "
+           f"and reboot; {dev} needs the 'i2c' group (sudo usermod -aG i2c $USER)")
     if not dev.exists():
         return CheckResult("imu", FAIL, f"no {dev}", fix, {"device": str(dev)})
     if not os.access(dev, os.R_OK | os.W_OK):
@@ -797,7 +797,7 @@ def _check_pq12(cfg: Config, env: CheckEnv) -> CheckResult:
 # --------------------------------------------------------------------------------------------- power
 def check_power(cfg: Config | None = None, calib: Calibration | None = None,
                 env: CheckEnv | None = None) -> CheckResult:
-    """Supply and SoC temperature: the XL4015 rail sagging under the actuator shows up here first."""
+    """Pi supply and SoC temperature; firmware flags do not measure the separate 7.0 V servo rail."""
     env = env or CheckEnv()
     health = env.health_reader() or {}
     temp = health.get("cpu_temp_c")
@@ -817,7 +817,7 @@ def check_power(cfg: Config | None = None, calib: Calibration | None = None,
 
     if throttled and throttled.get("under_voltage_now"):
         return CheckResult("power", FAIL, summary,
-                           "UNDER-VOLTAGE NOW: raise the XL4015 output to 5.1 V, shorten/thicken the "
+                           "UNDER-VOLTAGE NOW: raise the Pi XL4015 output to 5.1 V, shorten/thicken the "
                            "5 V leads, check the 3S pack under load", data)
     if temp is not None and temp > TEMP_FAIL_C:
         return CheckResult("power", FAIL, summary,
@@ -833,8 +833,8 @@ def check_power(cfg: Config | None = None, calib: Calibration | None = None,
                            f"SoC above {TEMP_WARN_C:g} C: add airflow/a heatsink to the pod", data)
     if throttled and throttled.get("occurred"):
         return CheckResult("power", WARN, summary,
-                           "it happened since boot (the flags latch): watch the supply under an actuator "
-                           "stroke; clear with a reboot", data)
+                           "it happened since boot (the flags latch): check the Pi supply; inspect the separate "
+                           "servo supply independently; clear with a reboot", data)
     return CheckResult("power", PASS, summary, "", data)
 
 

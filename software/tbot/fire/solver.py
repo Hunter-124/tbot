@@ -14,7 +14,7 @@ import numpy as np
 from ..config import Config, LatencyBudget
 from ..optics import MountModel
 from ..types import FireDecision, Track
-from .ballistics import ShotModel
+from .ballistics import G_MPS2, ShotModel
 
 _UP_W = np.array([0.0, 0.0, 1.0], dtype=np.float64)
 _TOF_ITERS = 3  # fixed-point passes on time of flight (converges in 2 at skeet ranges)
@@ -23,6 +23,8 @@ _DTOF_STEP_M = 0.5  # finite-difference step for d(ToF)/d(range)
 # Polar quadrature of the aim-error Gaussian over the pattern disc (no scipy, no Bessel overflow).
 _QUAD_R_X, _QUAD_R_W = np.polynomial.legendre.leggauss(16)
 _QUAD_T_X, _QUAD_T_W = np.polynomial.legendre.leggauss(32)
+_QUAD_T_UNIT = 0.5 * (_QUAD_T_X + 1.0)
+_QUAD_T_HALF_W = 0.5 * _QUAD_T_W
 _QUAD_NSIG = 6.0  # integrate only where the Gaussian has mass; beyond 6 sigma it is < 1e-8
 
 
@@ -44,12 +46,10 @@ def _hit_probability(miss: float, pattern: float, sigma: float) -> float:
         ang = 2.0 * math.pi * np.exp(-r * r * inv2s2)
     else:
         # Angular window where |p - m| <= _QUAD_NSIG sigma, i.e. cos(theta) >= c.
-        with np.errstate(divide="ignore", invalid="ignore"):
-            c = (r * r + miss * miss - (_QUAD_NSIG * sigma) ** 2) / (2.0 * r * miss)
-        c = np.where(r > 0.0, c, -1.0)
+        c = (r * r + miss * miss - (_QUAD_NSIG * sigma) ** 2) / (2.0 * r * miss)
         th_max = np.arccos(np.clip(c, -1.0, 1.0))
-        th = 0.5 * th_max[:, None] * (_QUAD_T_X[None, :] + 1.0)  # (nr, nt) over [0, th_max]
-        wt = 0.5 * th_max[:, None] * _QUAD_T_W[None, :]
+        th = th_max[:, None] * _QUAD_T_UNIT[None, :]
+        wt = th_max[:, None] * _QUAD_T_HALF_W[None, :]
         d2 = r[:, None] ** 2 + miss * miss - 2.0 * miss * r[:, None] * np.cos(th)
         ang = 2.0 * np.sum(wt * np.exp(-d2 * inv2s2), axis=1)  # symmetric in +/- theta
     p = float(np.sum(wr * r * ang)) * inv2s2 / math.pi
@@ -58,21 +58,38 @@ def _hit_probability(miss: float, pattern: float, sigma: float) -> float:
 
 def _rotvec(v: np.ndarray) -> np.ndarray:
     """Rodrigues: rotation matrix of the rotation vector v (axis * angle, radians)."""
-    theta = float(np.linalg.norm(v))
+    x, y, z = map(float, v)
+    theta = math.sqrt(x * x + y * y + z * z)
     if theta < 1e-12:
         return np.eye(3, dtype=np.float64)
-    k = v / theta
-    kx = np.array([[0.0, -k[2], k[1]], [k[2], 0.0, -k[0]], [-k[1], k[0], 0.0]], dtype=np.float64)
-    return np.eye(3, dtype=np.float64) + math.sin(theta) * kx + (1.0 - math.cos(theta)) * (kx @ kx)
+    x, y, z = x / theta, y / theta, z / theta
+    s, c = math.sin(theta), 1.0 - math.cos(theta)
+    return np.array(
+        [[1.0 - c * (y * y + z * z), c * x * y - s * z, c * x * z + s * y],
+         [c * y * x + s * z, 1.0 - c * (x * x + z * z), c * y * z - s * x],
+         [c * z * x - s * y, c * z * y + s * x, 1.0 - c * (x * x + y * y)]],
+        dtype=np.float64,
+    )
 
 
 def _angle_between(a: np.ndarray, b: np.ndarray) -> float:
-    return math.atan2(float(np.linalg.norm(np.cross(a, b))), float(np.dot(a, b)))
+    ax, ay, az = map(float, a)
+    bx, by, bz = map(float, b)
+    x, y, z = ay * bz - az * by, az * bx - ax * bz, ax * by - ay * bx
+    return math.atan2(math.sqrt(x * x + y * y + z * z), ax * bx + ay * by + az * bz)
 
 
 def _unit(v: np.ndarray) -> np.ndarray:
     n = float(np.linalg.norm(v))
     return v / n if n > 0.0 else v
+
+def _tof(shot, distance: float) -> float:
+    # np.interp already clamps at the table ends, so the scalar np.clip in
+    # ShotModel._lookup is unnecessary here. Preserve custom shot models.
+    if type(shot) is ShotModel:
+        return float(np.interp(distance, shot._x, shot._t))
+    return float(shot.time_of_flight(distance))
+
 
 
 class FireSolver:
@@ -192,20 +209,24 @@ class FireSolver:
         bore_w = _unit(rot_exit @ self._bore_g)
         muzzle_w = rot_exit @ self._muzzle_g
 
+        shot = self.shot
+        tabulated = type(shot) is ShotModel
         rng = float(track.range_m)
         t_arr_ns = t_exit_ns
         p_clay = rng * tracker.predict_dir(track, t_arr_ns)
         dist = float(np.linalg.norm(p_clay - muzzle_w))
-        tof = float(self.shot.time_of_flight(dist))
+        tof = _tof(shot, dist)
         for _ in range(_TOF_ITERS):
             t_arr_ns = t_exit_ns + int(round(tof * 1e9))
             p_clay = rng * tracker.predict_dir(track, t_arr_ns)
             dist = float(np.linalg.norm(p_clay - muzzle_w))
-            tof = float(self.shot.time_of_flight(dist))
+            tof = _tof(shot, dist)
 
         to_clay = p_clay - muzzle_w
         lead_dir = _unit(to_clay)
-        drop = float(self.shot.drop(dist, math.asin(max(-1.0, min(1.0, float(bore_w[2]))))))
+        elevation = math.asin(max(-1.0, min(1.0, float(bore_w[2]))))
+        drop = (float(0.5 * G_MPS2 * tof * tof * np.cos(elevation)) if tabulated
+                else float(shot.drop(dist, elevation)))
         to_shot = bore_w * dist - drop * _UP_W
         miss = _angle_between(to_clay, to_shot)
 
@@ -215,7 +236,7 @@ class FireSolver:
         omega_clay = math.hypot(float(track.x[1]) * math.cos(el), float(track.x[4]))
         h = _DTOF_STEP_M
         lo = max(dist - h, 1e-3)
-        dtof_dr = (float(self.shot.time_of_flight(dist + h)) - float(self.shot.time_of_flight(lo))) / (
+        dtof_dr = (_tof(shot, dist + h) - _tof(shot, lo)) / (
             dist + h - lo
         )
         sigma = math.sqrt(
@@ -223,7 +244,8 @@ class FireSolver:
             + (omega_clay * jitter_s) ** 2
             + (omega_clay * dtof_dr * float(track.range_sigma_m)) ** 2
         )
-        pattern = float(self.shot.pattern_radius(dist)) / dist
+        pattern = (max(shot._pattern_min_m, shot._pattern_ref_m * dist / shot._pattern_ref_range_m)
+                   if tabulated else float(shot.pattern_radius(dist))) / dist
 
         return {
             "t_exit_ns": t_exit_ns,

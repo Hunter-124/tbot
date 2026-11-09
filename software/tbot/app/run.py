@@ -45,6 +45,7 @@ log = logging.getLogger("tbot.run")
 
 LEAD_PREVIEW_S = overlay_mod.LEAD_PREVIEW_S  # overlay velocity arrow horizon
 FPS_EMA_ALPHA = 0.1
+SOLVE_EMA_ALPHA = 0.1
 
 
 def _ms(t0_ns: int, t1_ns: int) -> float:
@@ -126,6 +127,7 @@ class Pipeline:
         self._stop = threading.Event()
         self._prev_exposure_ns: int | None = None
         self._last_step_ns: int | None = None
+        self._expected_solve_ns = 0.0
         self._last_frame_wall: float | None = None
         self._wd_thread: threading.Thread | None = None
         self._wd_stop = threading.Event()
@@ -355,18 +357,39 @@ class Pipeline:
         self.tracks = self.tracker.update(int(frame.t_exposure_ns), self.detections, R_wg)
         t_trk = time.perf_counter_ns()
 
-        now = int(self.source.clock.now_ns())
+        solve_start_ns = int(self.source.clock.now_ns())
+        decide_ahead_ns = int(self._expected_solve_ns)
+        now = solve_start_ns + decide_ahead_ns
         armed = bool(self.arming.armed)
         decision = self.solver.evaluate(now, self.tracker, self.attitude, armed, self.frame_period_s)
         self.decision = decision
         t_sol = time.perf_counter_ns()
+        solve_end_ns = int(self.source.clock.now_ns())
+        solve_ns = max(0, solve_end_ns - solve_start_ns)
+        self._expected_solve_ns = (
+            solve_ns if self.frames == 0
+            else (1.0 - SOLVE_EMA_ALPHA) * self._expected_solve_ns + SOLVE_EMA_ALPHA * solve_ns
+        )
 
         fired = False
+        cmd_t_ns = None
         if decision.fire and self.arming.try_consume_shot():
             if cfg.fire.live and self.actuator is not None:
-                fired = bool(self.actuator.fire(now))
-                if not fired:
-                    log.warning("actuator refused the fire command (interlock open?)")
+                cmd_t_ns = int(self.source.clock.now_ns())
+                while cmd_t_ns < now:
+                    time.sleep((now - cmd_t_ns) / 1e9)
+                    next_ns = int(self.source.clock.now_ns())
+                    if next_ns <= cmd_t_ns:
+                        # A stopped source clock cannot establish a safe command time.
+                        cmd_t_ns = None
+                        break
+                    cmd_t_ns = next_ns
+                if cmd_t_ns is not None:
+                    fired = bool(self.actuator.fire(cmd_t_ns))
+                    if not fired:
+                        log.warning("actuator refused the fire command (interlock open?)")
+                else:
+                    log.warning("actuator command skipped: source clock did not advance")
             else:
                 fired = True
                 log.info(
@@ -395,6 +418,8 @@ class Pipeline:
             "frames": self.frames,
             "t_exposure_ns": int(frame.t_exposure_ns),
             "t_ns": now,
+            "cmd_t_ns": cmd_t_ns,
+            "decide_ahead_ms": decide_ahead_ns / 1e6,
             "age_ms": (now - int(frame.t_exposure_ns)) / 1e6,
             "fps": float(self.fps),
             "dropped": int(getattr(self.source, "dropped", 0)),
@@ -444,6 +469,7 @@ class Pipeline:
         if fired:
             ev = {
                 "t_ns": now,
+                "cmd_t_ns": cmd_t_ns,
                 "type": "fire",
                 "live": bool(cfg.fire.live),
                 "track_id": tele["decision"]["track_id"],

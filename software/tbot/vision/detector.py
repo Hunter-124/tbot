@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import math
 import time
+from functools import lru_cache
 
 import cv2
 import numpy as np
@@ -118,8 +119,10 @@ class ClayDetector:
         self._smooth = np.empty((dh, dw), np.uint8)
         self._bg = np.empty((h, w), np.uint8)
         self._contrast = np.empty((h, w), np.int16)
-        self._bin = np.empty((h, w), np.bool_)
-        self._bin2 = np.empty((h, w), np.bool_)
+        # inRange writes byte masks; bool views also work with NumPy's logical operations.
+        self._bin = np.empty((h, w), np.uint8).view(np.bool_)
+        self._bin2 = np.empty((h, w), np.uint8).view(np.bool_)
+        self._orange = np.empty((h, w), np.uint8) if color else None
         self._gray = np.empty((h, w), np.uint8) if color else None
         self._hsv = np.empty((h, w, 3), np.uint8) if color else None
         self._key = key
@@ -172,7 +175,21 @@ class ClayDetector:
         thr = max(float(det.k_sigma) * sigma, float(det.min_contrast))
 
         binary = self._bin
-        if det.polarity == "bright":
+        if math.isfinite(thr):
+            # Contrast is integral in [-255, 255], so strict float comparisons reduce to
+            # inclusive integer ranges. OpenCV writes the byte mask without converting the
+            # entire frame to floating point, and accepts reusable destination buffers.
+            bright_lo = max(-256, min(256, math.floor(thr) + 1))
+            dark_hi = max(-256, min(256, math.ceil(-thr) - 1))
+            if det.polarity == "bright":
+                cv2.inRange(contrast, bright_lo, 255, dst=binary.view(np.uint8))
+            elif det.polarity == "dark":
+                cv2.inRange(contrast, -255, dark_hi, dst=binary.view(np.uint8))
+            else:
+                cv2.inRange(contrast, bright_lo, 255, dst=binary.view(np.uint8))
+                cv2.inRange(contrast, -255, dark_hi, dst=self._bin2.view(np.uint8))
+                np.logical_or(binary, self._bin2, out=binary)
+        elif det.polarity == "bright":
             np.greater(contrast, thr, out=binary)
         elif det.polarity == "dark":
             np.less(contrast, -thr, out=binary)
@@ -185,7 +202,8 @@ class ClayDetector:
             hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV, dst=self._hsv)
             lo = np.asarray(det.hsv_lo, dtype=np.uint8)
             hi = np.asarray(det.hsv_hi, dtype=np.uint8)
-            orange = cv2.inRange(hsv, lo, hi).astype(np.bool_)
+            cv2.inRange(hsv, lo, hi, dst=self._orange)
+            orange = self._orange.view(np.bool_)
             if det.color_combine == "and":
                 np.logical_and(binary, orange, out=binary)
             else:
@@ -203,9 +221,9 @@ class ClayDetector:
             dets = dets[: int(det.max_detections)]
 
         if det.debug:
-            debug = {"contrast": contrast.copy(), "binary": binary.view(np.uint8) * 255}
+            debug = {"contrast": contrast.copy(), "binary": np.where(binary, 255, 0).astype(np.uint8)}
             if use_hsv:
-                debug["orange"] = orange.view(np.uint8) * 255
+                debug["orange"] = np.where(orange, 255, 0).astype(np.uint8)
             self.debug = debug
         elif self.debug:
             self.debug = {}
@@ -343,6 +361,12 @@ class ClayDetector:
         return out
 
 
+@lru_cache(maxsize=82)
+def _moment_axes(h: int, w: int) -> tuple[np.ndarray, np.ndarray]:
+    """Coordinates for the small adaptive windows; shared and never modified."""
+    return np.arange(w, dtype=np.float32), np.arange(h, dtype=np.float32).reshape(-1, 1)
+
+
 def _adaptive_moments(img: np.ndarray, cx: float, cy: float,
                       sxx: float, sxy: float, syy: float) -> tuple[float, float, float, float, float]:
     """Adaptive (Gaussian-weighted, weight-deconvolved) centroid and second moments of `img`.
@@ -357,8 +381,7 @@ def _adaptive_moments(img: np.ndarray, cx: float, cy: float,
     come back unchanged.
     """
     h, w = img.shape
-    xs = np.arange(w, dtype=np.float32)
-    ys = np.arange(h, dtype=np.float32).reshape(-1, 1)
+    xs, ys = _moment_axes(h, w)
     oxx, oxy, oyy = sxx, sxy, syy
     for _ in range(ADAPTIVE_ITERS):
         kxx = max(ADAPTIVE_ALPHA * oxx, MIN_WEIGHT_VAR)

@@ -1,8 +1,8 @@
 """Raspberry Pi power and thermal health (contract: docs/ARCHITECTURE.md [hw]).
 
-The pod runs off an XL4015 buck from a 3S Li-ion pack with an MG996R (or a PQ12) hanging off the same
-5 V rail, so the firmware's under-voltage flag is the single most useful diagnostic on the whole rig: a
-sagging rail shows up here long before it shows up as a missed shot. Sources, in order of preference:
+The Pi and MG996R servo have separate XL4015 supplies from a 3S Li-ion pack: 5.1 V for the Pi and 7.0 V
+for the servo. The firmware undervoltage flag diagnoses the Pi supply; it does not measure the servo rail.
+Sources, in order of preference:
 
 * ``/sys/class/thermal/thermal_zone0/temp``                     -- SoC temperature in milli-degrees C
 * ``/sys/devices/platform/soc/soc:firmware/get_throttled``      -- the firmware throttle word (no fork)

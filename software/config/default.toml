@@ -1,6 +1,6 @@
 # TBOT default configuration. Every key is required here; override files (--config) and --set key=value
 # only change values. Units are in the key suffix. Gun frame (mm): +X muzzle, +Y gun-left, +Z up, origin at
-# the trigger face (hardware/design/layout.md). [INFERENCE] = estimate to be replaced by a measurement/calibration.
+# the trigger face (design/layout.md). [INFERENCE] = estimate to be replaced by a measurement/calibration.
 
 [camera]
 source = "picam"              # picam | cv:<index> | video:<path> | replay:<session_dir> | synthetic[:<scenario>]
@@ -10,7 +10,7 @@ fps = 120.0                   # Pi 3B processing budget; sensor does more at 640
 exposure_us = 500.0           # short exposure = no motion blur on a 20 m/s clay; daylight at F2.2
 analogue_gain = 1.0
 auto_exposure = false
-rotate_180 = true             # pod_cap mounts the board rotated 180 deg about the lens axis (layout.md REV E)
+rotate_180 = true             # camera board rotated 180 deg about the lens axis (design/layout.md)
 emulate_mono = "none"         # cv/video sources only: none | luma | red (red = mono sensor behind an orange long-pass)
 buffer_count = 4
 
@@ -19,9 +19,8 @@ model = "fisheye"             # fisheye (cv2.fisheye, equidistant base) | pinhol
 focal_length_mm = 2.8
 pixel_pitch_um = 3.0          # at full resolution
 sensor_width_px = 1280
-sensor_height_px = 800
 
-[mount]                       # gun frame, mm (hardware/design/layout.md REV E.1 pod_cap)
+[mount]                       # gun frame, mm (design/layout.md)
 cam_pos_mm = [670.0, 0.0, 17.0]      # optical centre: lens axis Y0 Z17; X = lens tip 675.6 - ~5.6 [INFERENCE +/-5]
 cam_rpy_deg = [0.0, 0.0, 0.0]        # mount error about gun X,Y,Z; calib/boresight.json overrides
 lens_tip_x_mm = 675.6
@@ -54,7 +53,8 @@ gate_sigma = 4.0
 gate_min_deg = 0.4
 confirm_hits = 3
 max_misses = 6
-jerk_psd_deg = 2000.0         # CA-model process noise: jerk spectral density, deg^2/s^5 (sqrt shown in deg)
+jerk_psd_deg = 2000.0         # CA-model jerk spectral density, deg^2/s^5 (sqrt shown in deg).
+                              # Synthetic tuning trades more shots at lower PSD against crossing-prediction accuracy; validate on real clay.
 meas_sigma_px = 0.7
 range_prior_m = 20.0          # skeet crossing distance class [INFERENCE]
 range_prior_sigma_m = 8.0
@@ -129,7 +129,9 @@ extend_ms = 2500.0            # full 20 mm stroke at >= 8 mm/s, ends on the inte
 retract_ms = 2500.0
 
 [actuator.sim]
-delay_ms = 100.0
+model = "fixed"              # timing model: fixed | servo (dimensionless) [INFERENCE]
+frame_hz = 50.0              # servo PWM frame frequency (Hz) [INFERENCE]
+delay_ms = 100.0             # command-to-break delay, or servo travel after frame boundary (ms) [INFERENCE]
 
 [gpio]
 backend = "auto"              # auto (lgpio on a Pi, else sim) | lgpio | sim

@@ -298,7 +298,7 @@ def _cmd_axes(args: argparse.Namespace) -> int:
     print(f"  it differs from the current R_gun_imu by {delta:.2f} deg")
     if delta > 20.0:
         print("  WARNING: that is more than a mounting tolerance — check the pose prompts and the "
-              "axis map in hardware/design/layout.md before writing it")
+              "axis map in design/layout.md before writing it")
 
     if not args.write:
         print("\nnot written (pass --write to store it in calib/imu.json)")

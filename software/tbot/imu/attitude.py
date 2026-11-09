@@ -27,14 +27,19 @@ MIN_ACCEL_NORM = 1e-3
 def exp_so3(v: np.ndarray) -> np.ndarray:
     """Rotation matrix of a rotation vector (Rodrigues, exact; Taylor series near zero)."""
     w = np.asarray(v, dtype=np.float64).reshape(3)
-    theta2 = float(w @ w)
-    K = np.array([[0.0, -w[2], w[1]], [w[2], 0.0, -w[0]], [-w[1], w[0], 0.0]], dtype=np.float64)
+    x, y, z = map(float, w)
+    theta2 = x * x + y * y + z * z
     if theta2 < 1e-16:
         a, b = 1.0 - theta2 / 6.0, 0.5 - theta2 / 24.0
     else:
         theta = math.sqrt(theta2)
         a, b = math.sin(theta) / theta, (1.0 - math.cos(theta)) / theta2
-    return np.eye(3) + a * K + b * (K @ K)
+    return np.array(
+        [[1.0 - b * (y * y + z * z), b * x * y - a * z, b * x * z + a * y],
+         [b * y * x + a * z, 1.0 - b * (x * x + z * z), b * y * z - a * x],
+         [b * z * x - a * y, b * z * y + a * x, 1.0 - b * (x * x + y * y)]],
+        dtype=np.float64,
+    )
 
 
 def log_so3(R: np.ndarray) -> np.ndarray:
@@ -197,6 +202,8 @@ class AttitudeEstimator:
             return self._Rs[0].copy()
         i = bisect.bisect_right(self._ts, t)
         t0, t1 = self._ts[i - 1], self._ts[i]
+        if t == t0:
+            return self._Rs[i - 1].copy()
         R0, R1 = self._Rs[i - 1], self._Rs[i]
         f = (t - t0) / float(t1 - t0)
         return R0 @ exp_so3(f * log_so3(R0.T @ R1))
@@ -206,11 +213,12 @@ class AttitudeEstimator:
         if not self._ts:
             return np.zeros(3)
         t = int(t_ns)
-        i = bisect.bisect_left(self._ts, t)
-        if i <= 0:
-            return self._ws[0].copy()
-        if i >= len(self._ts):
+        if t >= self._ts[-1]:
             return self._ws[-1].copy()
+        if t <= self._ts[0]:
+            return self._ws[0].copy()
+        i = bisect.bisect_left(self._ts, t)
+        # t is strictly between the endpoints.
         before, after = self._ts[i - 1], self._ts[i]
         return self._ws[i - 1].copy() if (t - before) <= (after - t) else self._ws[i].copy()
 

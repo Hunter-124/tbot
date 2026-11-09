@@ -173,7 +173,7 @@ def test_register_field_helpers():
 
 
 def test_calibration_maps_chip_axes_to_the_gun_frame(tmp_path):
-    """layout.md REV E: chip +X -> gun -Z, chip +Y -> gun -Y, chip +Z -> gun -X."""
+    """design/layout.md: chip +X -> gun -Z, chip +Y -> gun -Y, chip +Z -> gun -X."""
     cfg = make_cfg()
     cal = ImuCalibration.from_config(cfg, calib(tmp_path))
     accel = np.array([[0.0, 0.0, G_MPS2]])  # level gun: specific force along chip +Z

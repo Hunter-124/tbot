@@ -42,7 +42,6 @@ class OpticsConfig:
     focal_length_mm: float
     pixel_pitch_um: float
     sensor_width_px: int
-    sensor_height_px: int
 
 
 @dataclass
@@ -174,6 +173,8 @@ class Pq12Config:
 @dataclass
 class SimActuatorConfig:
     delay_ms: float
+    model: str = "fixed"
+    frame_hz: float = 50.0
 
 
 @dataclass

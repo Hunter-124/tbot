@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # TBOT Raspberry Pi provisioning. Idempotent: run it as often as you like.
 #
-#   cd ~/tbot/software && sudo ./scripts/pi_setup.sh
+#   cd ~/TBOT/software && sudo ./scripts/pi_setup.sh
 #
 # Installs the apt packages the Pi path needs, enables the OV9281 camera overlay, I2C (400 kHz),
 # hardware PWM0 on GPIO18 and the serial console in config.txt, puts the invoking user in the
@@ -15,7 +15,7 @@ BLOCK_END="# --- end tbot ---"
 # Lines that must exist exactly once, inside our block, in config.txt.
 CONFIG_LINES=(
 	"camera_auto_detect=0"            # the OV9281 is not auto-detectable: load it explicitly
-	"dtoverlay=ov9281"                # innomaker CAM-MIPIOV9281 V2 (manual V1.4)
+	"dtoverlay=ov9281"                # no parameter needed on Pi 3B: https://www.inno-maker.com/product/cam-mipi9281raw-v2/
 	"dtparam=i2c_arm=on"              # GY-521 / MPU-6050 on bus 1 (BCM 2/3)
 	"dtparam=i2c_arm_baudrate=400000" # imu.sample_rate_hz = 500 needs fast-mode I2C
 	"dtoverlay=pwm,pin=18,func=2"     # PWM0 on BCM 18 for the MG996R servo
@@ -34,7 +34,7 @@ APT_PACKAGES=(
 	python3-numpy
 	python3-picamera2
 	python3-lgpio
-	python3-smbus2
+	python3-smbus                     # available on Bookworm and Trixie; smbus2 is not in Trixie
 	i2c-tools
 	python3-venv
 	python3-pytest
@@ -104,6 +104,8 @@ for candidate in /boot/firmware/config.txt /boot/config.txt; do
 	fi
 done
 [[ -n ${CONFIG_TXT} ]] || die "no config.txt at /boot/firmware/config.txt or /boot/config.txt"
+# Raspberry Pi OS Bookworm and later mount the firmware partition at /boot/firmware:
+# https://www.raspberrypi.com/documentation/computers/config_txt.html
 info "firmware config: ${CONFIG_TXT}"
 
 BACKUP="${CONFIG_TXT}.tbot-backup"
@@ -118,8 +120,13 @@ NEW_CONFIG="$(mktemp)"
 STRIPPED="$(mktemp)"
 trap 'rm -f "${NEW_CONFIG}" "${STRIPPED}"' EXIT
 
-# Drop any previous tbot block (from the begin marker to the end marker, or to EOF if the end
-# marker was deleted by hand), then comment out conflicting settings elsewhere in the file.
+# Refuse a damaged managed block rather than silently deleting the rest of config.txt.
+awk -v b="${BLOCK_BEGIN}" -v e="${BLOCK_END}" '
+	$0 == b { if (inside) exit 1; inside = 1; next }
+	$0 == e { if (!inside) exit 1; inside = 0 }
+	END { if (inside) exit 1 }
+' "${CONFIG_TXT}" || die "unbalanced tbot block in ${CONFIG_TXT}; repair it before rerunning"
+# Drop the previous tbot block and comment out conflicting settings elsewhere.
 awk -v b="${BLOCK_BEGIN}" -v e="${BLOCK_END}" '
 	$0 == b { skip = 1; next }
 	$0 == e { skip = 0; next }
@@ -152,6 +159,18 @@ else
 	REBOOT_NEEDED=1
 fi
 
+# --------------------------------------------------------------------------- i2c-dev
+# dtparam=i2c_arm=on only binds the controller; /dev/i2c-1 (smbus, i2cdetect) needs the i2c-dev
+# module, which raspi-config normally adds. Measured on Trixie 2026-10-06 Lite: no /dev/i2c-* without it.
+I2C_DEV_CONF=/etc/modules-load.d/tbot-i2c-dev.conf
+if [[ -f ${I2C_DEV_CONF} ]] || grep -qsx 'i2c-dev' /etc/modules /etc/modules-load.d/*.conf; then
+	note "i2c-dev already loaded at boot"
+else
+	echo "i2c-dev" >"${I2C_DEV_CONF}"
+	info "i2c-dev added to ${I2C_DEV_CONF}"
+fi
+modprobe i2c-dev || note "modprobe i2c-dev failed; it loads at the next boot"
+
 # --------------------------------------------------------------------------- groups
 for grp in video gpio i2c; do
 	if ! getent group "${grp}" >/dev/null; then
@@ -168,6 +187,8 @@ done
 # --------------------------------------------------------------------------- venv
 if [[ -x "${VENV_DIR}/bin/python" ]]; then
 	info "venv already present: ${VENV_DIR}"
+	"${VENV_DIR}/bin/python" -c 'import sys; assert sys.prefix != sys.base_prefix; import cv2, numpy, picamera2, lgpio, smbus' ||
+		die "existing venv cannot import the Pi apt packages; recreate ${VENV_DIR} with --system-site-packages"
 else
 	info "creating venv ${VENV_DIR} (--system-site-packages)"
 	runuser -u "${TARGET_USER}" -- python3 -m venv --system-site-packages "${VENV_DIR}"
@@ -202,13 +223,13 @@ if ((REBOOT_NEEDED)); then
 	cat <<EOF
   1. sudo reboot                        # config.txt / group changes need it
   2. rpicam-hello --list-cameras        # the OV9281 must appear (1280x800 mono)
-  3. i2cdetect -y 1                     # the MPU-6050 must answer at 0x68
+  3. sudo i2cdetect -y 1                # the MPU-6050 must answer at 0x68
   4. ${VENV_DIR}/bin/tbot run --stream
 EOF
 else
 	cat <<EOF
   1. rpicam-hello --list-cameras        # the OV9281 must appear (1280x800 mono)
-  2. i2cdetect -y 1                     # the MPU-6050 must answer at 0x68
+  2. sudo i2cdetect -y 1                # the MPU-6050 must answer at 0x68
   3. ${VENV_DIR}/bin/tbot run --stream
 EOF
 fi
