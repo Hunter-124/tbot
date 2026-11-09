@@ -1,0 +1,365 @@
+{
+  "schema": "chudware.print_job/1",
+  "part": "04h01m_carrier_L",
+  "source": {
+    "kind": "plate",
+    "parts": [
+      {
+        "part": "03_carrier_l_1",
+        "source": {
+          "kind": "file",
+          "path": "/home/hunter/Desktop/TBOT/scratch/print_archive_v2_2026-11-09/.13h04m_nose_clamps_carrier_L.slice/03_carrier_l_1.stl"
+        },
+        "copies": 1
+      }
+    ]
+  },
+  "copies": 1,
+  "printer": {
+    "name": "Creality Ender-3 (0.4 mm nozzle)",
+    "vendor": "Creality",
+    "bed_polygon": [
+      [
+        3.0,
+        3.0
+      ],
+      [
+        228.0,
+        3.0
+      ],
+      [
+        228.0,
+        228.0
+      ],
+      [
+        3.0,
+        228.0
+      ]
+    ],
+    "max_height_mm": 250.0
+  },
+  "presets": {
+    "print": "0.20 mm NORMAL (0.4 mm nozzle) @CREALITY",
+    "filament": "Generic PLA @CREALITY"
+  },
+  "goal": "balanced",
+  "settings_changed": {
+    "fill_density": "25%",
+    "perimeters": "5",
+    "temperature": "210",
+    "first_layer_temperature": "210",
+    "bed_temperature": "60",
+    "first_layer_bed_temperature": "60",
+    "support_material": "1",
+    "support_material_auto": "1",
+    "support_material_style": "organic",
+    "support_material_threshold": "10",
+    "support_material_buildplate_only": "0",
+    "dont_support_bridges": "1",
+    "brim_width": "0",
+    "binary_gcode": "0",
+    "overhangs": "1",
+    "complete_objects": "0",
+    "fill_pattern": "gyroid",
+    "filament_max_volumetric_speed": "10",
+    "disable_fan_first_layers": "2",
+    "elefant_foot_compensation": "0.2",
+    "skirts": "0",
+    "infill_anchor": "2.5",
+    "infill_anchor_max": "12",
+    "solid_infill_below_area": "15",
+    "support_material_contact_distance": "0.2",
+    "support_material_xy_spacing": "0.45",
+    "support_material_interface_layers": "2",
+    "support_material_interface_spacing": "0.2",
+    "thick_bridges": "1",
+    "bridge_flow_ratio": "0.95",
+    "bridge_speed": "25",
+    "extra_perimeters_on_overhangs": "1",
+    "enable_dynamic_overhang_speeds": "1",
+    "overhang_speed_0": "15",
+    "overhang_speed_1": "20",
+    "overhang_speed_2": "25",
+    "overhang_speed_3": "30",
+    "overhang_fan_speed_0": "100",
+    "overhang_fan_speed_1": "100",
+    "overhang_fan_speed_2": "100",
+    "overhang_fan_speed_3": "100",
+    "avoid_crossing_perimeters": "1",
+    "avoid_crossing_perimeters_max_detour": "5",
+    "retract_before_travel": "2",
+    "travel_speed": "150",
+    "retract_lift": "0",
+    "seam_position": "aligned",
+    "scarf_seam_placement": "nowhere",
+    "seam_gap_distance": "15%",
+    "staggered_inner_seams": "1"
+  },
+  "effective": {
+    "layer_height": "0.20",
+    "first_layer_height": "0.2",
+    "perimeters": "5",
+    "fill_density": "25%",
+    "fill_pattern": "gyroid",
+    "top_solid_layers": "5",
+    "bottom_solid_layers": "4",
+    "support_material": "1",
+    "support_material_style": "organic",
+    "support_material_threshold": "10",
+    "dont_support_bridges": "1",
+    "overhangs": "1",
+    "brim_width": "0",
+    "temperature": "210",
+    "first_layer_temperature": "210",
+    "bed_temperature": "60",
+    "first_layer_bed_temperature": "60",
+    "nozzle_diameter": "0.4",
+    "retract_length": "5",
+    "complete_objects": "0",
+    "extruder_clearance_radius": "55",
+    "extruder_clearance_height": "25"
+  },
+  "orientation": null,
+  "plate": {
+    "complete_individual_objects": false,
+    "objects": [
+      {
+        "object": "03_carrier_l_1#1",
+        "part": "03_carrier_l_1",
+        "copy": 1,
+        "print_order": 1,
+        "offset_mm": [
+          115.5,
+          115.5
+        ],
+        "bbox_mm": [
+          83.5,
+          94.8,
+          147.5,
+          136.2
+        ],
+        "height_mm": 94.4,
+        "gcode_label": "01_03_carrier_l_1_1.stl",
+        "mesh_sha256": "325880a64413242c5af6338bfef9751fd2ac65ba59a9da02d903e82fae4a254a"
+      }
+    ],
+    "gap_mm": 6.0,
+    "min_object_gap_mm": null,
+    "edge_margin_mm": 1.0,
+    "usable_rect_mm": [
+      4.0,
+      4.0,
+      227.0,
+      227.0
+    ],
+    "clearance": null,
+    "parts": [
+      {
+        "part": "03_carrier_l_1",
+        "copies": 1,
+        "source": {
+          "kind": "file",
+          "path": "/home/hunter/Desktop/TBOT/scratch/print_archive_v2_2026-11-09/.13h04m_nose_clamps_carrier_L.slice/03_carrier_l_1.stl"
+        },
+        "orientation": {
+          "build_dir": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "yaw_deg": 0.0,
+          "source": "as_is",
+          "why": "model +Z kept as the build direction"
+        },
+        "estimate": {
+          "part_volume_mm3": 21266.544,
+          "support_volume_mm3": 1246.57,
+          "material_g": 26.602,
+          "support_g": 0.232,
+          "time_h": 0.66,
+          "layers": 473,
+          "support_share": 0.009,
+          "method": "deterministic shell/infill/flow ranking estimate, not slicer output"
+        },
+        "printability": {
+          "status": "fail",
+          "issues": [
+            {
+              "check": "min_wall",
+              "status": "fail",
+              "note": "Minimum measured wall 0.067 mm; required 2.2 mm.",
+              "fix": [
+                "thicken to >= 2.2 mm (5 perimeters at 0.44 mm)"
+              ]
+            },
+            {
+              "check": "overhang",
+              "status": "fail",
+              "note": "95.3 mm2 needs support above 45 deg from vertical (bridges and bed contact excluded).",
+              "fix": [
+                "shorten ceiling to a bridgeable span or reorient"
+              ]
+            },
+            {
+              "check": "bridges",
+              "status": "fail",
+              "note": "Largest two-sided bridge span 16.000 mm; clean bridge limit 5 mm, fail above 10 mm.",
+              "fix": [
+                "shorten bridge span or add accessible supports"
+              ]
+            },
+            {
+              "check": "support",
+              "status": "warn",
+              "note": "Support envelope 1246.6 mm3; 61.6 mm2 lands on model; 0.0 mm3 enclosed/unremovable.",
+              "fix": [
+                "reorient with optimize_print_orientation; add 45 deg chamfers or split part",
+                "avoid support landing on model surfaces (scars and harder removal)"
+              ]
+            },
+            {
+              "check": "small_holes",
+              "status": "not_evaluated",
+              "note": "Raw mesh has no CAD cylinder attribution; hole sizing is not reliably evaluated."
+            }
+          ]
+        }
+      }
+    ],
+    "support_for": [
+      "03_carrier_l_1"
+    ],
+    "brim_for": []
+  },
+  "slicer": {
+    "kind": "flatpak",
+    "argv_prefix": [
+      "/usr/bin/flatpak",
+      "run",
+      "--user",
+      "--command=prusa-slicer",
+      "com.prusa3d.PrusaSlicer"
+    ],
+    "version": "2.9.6",
+    "profiles_dir": "/home/hunter/.local/share/flatpak/app/com.prusa3d.PrusaSlicer/x86_64/stable/bf3534e4ffc688bbaf625206f27f9333b1b8820d3425dae19d3083b47e08ce79/files/share/PrusaSlicer/profiles",
+    "source": "flatpak_user",
+    "identity": "bf3534e4ffc688bbaf625206f27f9333b1b8820d3425dae19d3083b47e08ce79",
+    "usable": true
+  },
+  "config_sha256": "216e3aaad31034eb0a7682a911e45c267bf244ab4a038bfb52060d6a55bab537",
+  "mesh_sha256": "bce425d4af41043f17db622283a8217a4bba4a40a982b1339976b94873e3a3a1",
+  "gcode": "/home/hunter/Desktop/TBOT/print/creality_ender_3_0_4_mm_nozzle/04h01m_carrier_L.gcode",
+  "gcode_sha256": "bffdc08f691f44a7ba5664a6e79cd4a0eace4ae4dae73e55458170b9f934a863",
+  "project_3mf": "/home/hunter/Desktop/TBOT/print/creality_ender_3_0_4_mm_nozzle/04h01m_carrier_L.3mf",
+  "stats": {
+    "layers": 472,
+    "height_mm": 94.4,
+    "filament_mm": 8672.223,
+    "filament_g": 25.87,
+    "print_time_s": 14471.0,
+    "support_share": 0.0788,
+    "by_type_mm": {
+      "Bridge infill": 768.236,
+      "Custom": 260.0,
+      "External perimeter": 84920.343,
+      "Internal infill": 8194.308,
+      "Overhang perimeter": 379.208,
+      "Perimeter": 122065.866,
+      "Solid infill": 27133.445,
+      "Support material": 21029.138,
+      "Support material interface": 153.693,
+      "Top solid infill": 4070.468
+    },
+    "slicer": "PrusaSlicer 2.9.6"
+  },
+  "estimate": [
+    {
+      "part": "03_carrier_l_1",
+      "estimate": {
+        "part_volume_mm3": 21266.544,
+        "support_volume_mm3": 1246.57,
+        "material_g": 26.602,
+        "support_g": 0.232,
+        "time_h": 0.66,
+        "layers": 473,
+        "support_share": 0.009,
+        "method": "deterministic shell/infill/flow ranking estimate, not slicer output"
+      }
+    }
+  ],
+  "printability": {
+    "status": "fail",
+    "issues": [
+      {
+        "check": "min_wall",
+        "status": "fail",
+        "note": "Minimum measured wall 0.067 mm; required 2.2 mm.",
+        "fix": [
+          "thicken to >= 2.2 mm (5 perimeters at 0.44 mm)"
+        ],
+        "part": "03_carrier_l_1"
+      },
+      {
+        "check": "overhang",
+        "status": "fail",
+        "note": "95.3 mm2 needs support above 45 deg from vertical (bridges and bed contact excluded).",
+        "fix": [
+          "shorten ceiling to a bridgeable span or reorient"
+        ],
+        "part": "03_carrier_l_1"
+      },
+      {
+        "check": "bridges",
+        "status": "fail",
+        "note": "Largest two-sided bridge span 16.000 mm; clean bridge limit 5 mm, fail above 10 mm.",
+        "fix": [
+          "shorten bridge span or add accessible supports"
+        ],
+        "part": "03_carrier_l_1"
+      },
+      {
+        "check": "support",
+        "status": "warn",
+        "note": "Support envelope 1246.6 mm3; 61.6 mm2 lands on model; 0.0 mm3 enclosed/unremovable.",
+        "fix": [
+          "reorient with optimize_print_orientation; add 45 deg chamfers or split part",
+          "avoid support landing on model surfaces (scars and harder removal)"
+        ],
+        "part": "03_carrier_l_1"
+      },
+      {
+        "check": "small_holes",
+        "status": "not_evaluated",
+        "note": "Raw mesh has no CAD cylinder attribution; hole sizing is not reliably evaluated.",
+        "part": "03_carrier_l_1"
+      }
+    ]
+  },
+  "gcode_check": {
+    "status": "warn",
+    "issues": [
+      {
+        "check": "support_towers",
+        "status": "warn",
+        "note": "5 distinct tall/slender support islands (height >=20 mm, height/width >8)",
+        "fix": [
+          "Use a flatter orientation or grid/organic supports with wider anchored bases.",
+          "Add a support sheath/brim and reduce unsupported tower height."
+        ]
+      }
+    ]
+  },
+  "slicer_warnings": [],
+  "slicer_mesh_repairs": {
+    "available": true,
+    "volumes": 1,
+    "counts": {
+      "edges_fixed": 0,
+      "degenerate_facets": 0,
+      "facets_removed": 0,
+      "facets_reversed": 0,
+      "backwards_edges": 0
+    }
+  },
+  "print_ready": false
+}

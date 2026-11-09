@@ -1,0 +1,348 @@
+{
+  "schema": "chudware.print_job/1",
+  "part": "02h03m_cover_L",
+  "source": {
+    "kind": "plate",
+    "parts": [
+      {
+        "part": "01_cover_l_1",
+        "source": {
+          "kind": "file",
+          "path": "/home/hunter/Desktop/TBOT/scratch/print_archive_v2_2026-11-09/.03h30m_covers_L_belly.slice/01_cover_l_1.stl"
+        },
+        "copies": 1
+      }
+    ]
+  },
+  "copies": 1,
+  "printer": {
+    "name": "Creality Ender-3 (0.4 mm nozzle)",
+    "vendor": "Creality",
+    "bed_polygon": [
+      [
+        3.0,
+        3.0
+      ],
+      [
+        228.0,
+        3.0
+      ],
+      [
+        228.0,
+        228.0
+      ],
+      [
+        3.0,
+        228.0
+      ]
+    ],
+    "max_height_mm": 250.0
+  },
+  "presets": {
+    "print": "0.20 mm NORMAL (0.4 mm nozzle) @CREALITY",
+    "filament": "Generic PLA @CREALITY"
+  },
+  "goal": "balanced",
+  "settings_changed": {
+    "fill_density": "15%",
+    "perimeters": "4",
+    "temperature": "210",
+    "first_layer_temperature": "210",
+    "bed_temperature": "60",
+    "first_layer_bed_temperature": "60",
+    "support_material": "1",
+    "support_material_auto": "1",
+    "support_material_style": "organic",
+    "support_material_threshold": "30",
+    "support_material_buildplate_only": "0",
+    "brim_width": "0",
+    "binary_gcode": "0",
+    "overhangs": "1",
+    "complete_objects": "0",
+    "fill_pattern": "gyroid",
+    "filament_max_volumetric_speed": "10",
+    "disable_fan_first_layers": "2",
+    "elefant_foot_compensation": "0.2",
+    "skirts": "0",
+    "infill_anchor": "2.5",
+    "infill_anchor_max": "12",
+    "solid_infill_below_area": "15",
+    "support_material_contact_distance": "0.2",
+    "support_material_xy_spacing": "0.45",
+    "support_material_interface_layers": "2",
+    "support_material_interface_spacing": "0.2",
+    "dont_support_bridges": "1",
+    "thick_bridges": "1",
+    "bridge_flow_ratio": "0.95",
+    "bridge_speed": "25",
+    "extra_perimeters_on_overhangs": "1",
+    "enable_dynamic_overhang_speeds": "1",
+    "overhang_speed_0": "15",
+    "overhang_speed_1": "20",
+    "overhang_speed_2": "25",
+    "overhang_speed_3": "30",
+    "overhang_fan_speed_0": "100",
+    "overhang_fan_speed_1": "100",
+    "overhang_fan_speed_2": "100",
+    "overhang_fan_speed_3": "100",
+    "avoid_crossing_perimeters": "1",
+    "avoid_crossing_perimeters_max_detour": "5",
+    "retract_before_travel": "2",
+    "travel_speed": "150",
+    "retract_lift": "0",
+    "seam_position": "aligned",
+    "scarf_seam_placement": "nowhere",
+    "seam_gap_distance": "15%",
+    "staggered_inner_seams": "1"
+  },
+  "effective": {
+    "layer_height": "0.20",
+    "first_layer_height": "0.2",
+    "perimeters": "4",
+    "fill_density": "15%",
+    "fill_pattern": "gyroid",
+    "top_solid_layers": "5",
+    "bottom_solid_layers": "4",
+    "support_material": "1",
+    "support_material_style": "organic",
+    "support_material_threshold": "30",
+    "dont_support_bridges": "1",
+    "overhangs": "1",
+    "brim_width": "0",
+    "temperature": "210",
+    "first_layer_temperature": "210",
+    "bed_temperature": "60",
+    "first_layer_bed_temperature": "60",
+    "nozzle_diameter": "0.4",
+    "retract_length": "5",
+    "complete_objects": "0",
+    "extruder_clearance_radius": "55",
+    "extruder_clearance_height": "25"
+  },
+  "orientation": null,
+  "plate": {
+    "complete_individual_objects": false,
+    "objects": [
+      {
+        "object": "01_cover_l_1#1",
+        "part": "01_cover_l_1",
+        "copy": 1,
+        "print_order": 1,
+        "offset_mm": [
+          115.5,
+          115.5
+        ],
+        "bbox_mm": [
+          68.375,
+          83.5,
+          162.625,
+          147.5
+        ],
+        "height_mm": 26.6,
+        "gcode_label": "01_01_cover_l_1_1.stl",
+        "mesh_sha256": "6e983233af099172f32da3913974b156c81c40fa887e12ebde95f997cdadf6d6"
+      }
+    ],
+    "gap_mm": 6.0,
+    "min_object_gap_mm": null,
+    "edge_margin_mm": 1.0,
+    "usable_rect_mm": [
+      4.0,
+      4.0,
+      227.0,
+      227.0
+    ],
+    "clearance": null,
+    "parts": [
+      {
+        "part": "01_cover_l_1",
+        "copies": 1,
+        "source": {
+          "kind": "file",
+          "path": "/home/hunter/Desktop/TBOT/scratch/print_archive_v2_2026-11-09/.03h30m_covers_L_belly.slice/01_cover_l_1.stl"
+        },
+        "orientation": {
+          "build_dir": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "yaw_deg": 0.0,
+          "source": "as_is",
+          "why": "model +Z kept as the build direction"
+        },
+        "estimate": {
+          "part_volume_mm3": 12646.231,
+          "support_volume_mm3": 2975.628,
+          "material_g": 16.235,
+          "support_g": 0.553,
+          "time_h": 0.317,
+          "layers": 134,
+          "support_share": 0.034,
+          "method": "deterministic shell/infill/flow ranking estimate, not slicer output"
+        },
+        "printability": {
+          "status": "fail",
+          "issues": [
+            {
+              "check": "min_wall",
+              "status": "fail",
+              "note": "Minimum measured wall 1.337 mm; required 1.76 mm.",
+              "fix": [
+                "thicken to >= 1.76 mm (4 perimeters at 0.44 mm)"
+              ]
+            },
+            {
+              "check": "overhang",
+              "status": "fail",
+              "note": "854.5 mm2 needs support above 45 deg from vertical (bridges and bed contact excluded).",
+              "fix": [
+                "shorten ceiling to a bridgeable span or reorient"
+              ]
+            },
+            {
+              "check": "support",
+              "status": "fail",
+              "note": "Support envelope 2975.6 mm3; 129.1 mm2 lands on model; 103.5 mm3 enclosed/unremovable.",
+              "fix": [
+                "reorient with optimize_print_orientation; add 45 deg chamfers or split part",
+                "add an access opening >= 3 mm for support removal",
+                "avoid support landing on model surfaces (scars and harder removal)"
+              ]
+            },
+            {
+              "check": "small_holes",
+              "status": "not_evaluated",
+              "note": "Raw mesh has no CAD cylinder attribution; hole sizing is not reliably evaluated."
+            }
+          ]
+        }
+      }
+    ],
+    "support_for": [
+      "01_cover_l_1"
+    ],
+    "brim_for": []
+  },
+  "slicer": {
+    "kind": "flatpak",
+    "argv_prefix": [
+      "/usr/bin/flatpak",
+      "run",
+      "--user",
+      "--command=prusa-slicer",
+      "com.prusa3d.PrusaSlicer"
+    ],
+    "version": "2.9.6",
+    "profiles_dir": "/home/hunter/.local/share/flatpak/app/com.prusa3d.PrusaSlicer/x86_64/stable/bf3534e4ffc688bbaf625206f27f9333b1b8820d3425dae19d3083b47e08ce79/files/share/PrusaSlicer/profiles",
+    "source": "flatpak_user",
+    "identity": "bf3534e4ffc688bbaf625206f27f9333b1b8820d3425dae19d3083b47e08ce79",
+    "usable": true
+  },
+  "config_sha256": "b5fe79521aa615f65e75e3f0411b4749aea853750862ec749829c896c5f31d22",
+  "mesh_sha256": "5c9d77259be7b6a1df028f0d587673708740f8ec3d814b8ffdac12fa109f6f7f",
+  "gcode": "/home/hunter/Desktop/TBOT/print/creality_ender_3_0_4_mm_nozzle/02h03m_cover_L.gcode",
+  "gcode_sha256": "8036dd931e7e6258e6e802ab8b0f89785716e7c6751f3b3a9aae31e4232c67cb",
+  "project_3mf": "/home/hunter/Desktop/TBOT/print/creality_ender_3_0_4_mm_nozzle/02h03m_cover_L.3mf",
+  "stats": {
+    "layers": 133,
+    "height_mm": 26.6,
+    "filament_mm": 5801.582,
+    "filament_g": 17.3,
+    "print_time_s": 7356.0,
+    "support_share": 0.1105,
+    "by_type_mm": {
+      "Custom": 260.0,
+      "External perimeter": 25514.229,
+      "Overhang perimeter": 775.536,
+      "Perimeter": 33557.195,
+      "Solid infill": 86093.792,
+      "Support material": 19548.71,
+      "Support material interface": 399.986,
+      "Top solid infill": 14325.944
+    },
+    "slicer": "PrusaSlicer 2.9.6"
+  },
+  "estimate": [
+    {
+      "part": "01_cover_l_1",
+      "estimate": {
+        "part_volume_mm3": 12646.231,
+        "support_volume_mm3": 2975.628,
+        "material_g": 16.235,
+        "support_g": 0.553,
+        "time_h": 0.317,
+        "layers": 134,
+        "support_share": 0.034,
+        "method": "deterministic shell/infill/flow ranking estimate, not slicer output"
+      }
+    }
+  ],
+  "printability": {
+    "status": "fail",
+    "issues": [
+      {
+        "check": "min_wall",
+        "status": "fail",
+        "note": "Minimum measured wall 1.337 mm; required 1.76 mm.",
+        "fix": [
+          "thicken to >= 1.76 mm (4 perimeters at 0.44 mm)"
+        ],
+        "part": "01_cover_l_1"
+      },
+      {
+        "check": "overhang",
+        "status": "fail",
+        "note": "854.5 mm2 needs support above 45 deg from vertical (bridges and bed contact excluded).",
+        "fix": [
+          "shorten ceiling to a bridgeable span or reorient"
+        ],
+        "part": "01_cover_l_1"
+      },
+      {
+        "check": "support",
+        "status": "fail",
+        "note": "Support envelope 2975.6 mm3; 129.1 mm2 lands on model; 103.5 mm3 enclosed/unremovable.",
+        "fix": [
+          "reorient with optimize_print_orientation; add 45 deg chamfers or split part",
+          "add an access opening >= 3 mm for support removal",
+          "avoid support landing on model surfaces (scars and harder removal)"
+        ],
+        "part": "01_cover_l_1"
+      },
+      {
+        "check": "small_holes",
+        "status": "not_evaluated",
+        "note": "Raw mesh has no CAD cylinder attribution; hole sizing is not reliably evaluated.",
+        "part": "01_cover_l_1"
+      }
+    ]
+  },
+  "gcode_check": {
+    "status": "warn",
+    "issues": [
+      {
+        "check": "support_towers",
+        "status": "warn",
+        "note": "3 distinct tall/slender support islands (height >=20 mm, height/width >8)",
+        "fix": [
+          "Use a flatter orientation or grid/organic supports with wider anchored bases.",
+          "Add a support sheath/brim and reduce unsupported tower height."
+        ]
+      }
+    ]
+  },
+  "slicer_warnings": [],
+  "slicer_mesh_repairs": {
+    "available": true,
+    "volumes": 1,
+    "counts": {
+      "edges_fixed": 0,
+      "degenerate_facets": 0,
+      "facets_removed": 0,
+      "facets_reversed": 0,
+      "backwards_edges": 0
+    }
+  },
+  "print_ready": false
+}

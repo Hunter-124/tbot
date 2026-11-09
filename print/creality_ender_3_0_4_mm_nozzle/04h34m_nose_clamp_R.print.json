@@ -1,0 +1,355 @@
+{
+  "schema": "chudware.print_job/1",
+  "part": "04h34m_nose_clamp_R",
+  "source": {
+    "kind": "plate",
+    "parts": [
+      {
+        "part": "02_nose_clamp_r_1",
+        "source": {
+          "kind": "file",
+          "path": "/home/hunter/Desktop/TBOT/scratch/print_archive_v2_2026-11-09/.13h04m_nose_clamps_carrier_L.slice/02_nose_clamp_r_1.stl"
+        },
+        "copies": 1
+      }
+    ]
+  },
+  "copies": 1,
+  "printer": {
+    "name": "Creality Ender-3 (0.4 mm nozzle)",
+    "vendor": "Creality",
+    "bed_polygon": [
+      [
+        3.0,
+        3.0
+      ],
+      [
+        228.0,
+        3.0
+      ],
+      [
+        228.0,
+        228.0
+      ],
+      [
+        3.0,
+        228.0
+      ]
+    ],
+    "max_height_mm": 250.0
+  },
+  "presets": {
+    "print": "0.20 mm NORMAL (0.4 mm nozzle) @CREALITY",
+    "filament": "Generic PLA @CREALITY"
+  },
+  "goal": "balanced",
+  "settings_changed": {
+    "fill_density": "25%",
+    "perimeters": "5",
+    "temperature": "210",
+    "first_layer_temperature": "210",
+    "bed_temperature": "60",
+    "first_layer_bed_temperature": "60",
+    "support_material": "1",
+    "support_material_auto": "1",
+    "support_material_style": "organic",
+    "support_material_threshold": "10",
+    "support_material_buildplate_only": "0",
+    "dont_support_bridges": "1",
+    "brim_width": "0",
+    "binary_gcode": "0",
+    "overhangs": "1",
+    "complete_objects": "0",
+    "fill_pattern": "gyroid",
+    "filament_max_volumetric_speed": "10",
+    "disable_fan_first_layers": "2",
+    "elefant_foot_compensation": "0.2",
+    "skirts": "0",
+    "infill_anchor": "2.5",
+    "infill_anchor_max": "12",
+    "solid_infill_below_area": "15",
+    "support_material_contact_distance": "0.2",
+    "support_material_xy_spacing": "0.45",
+    "support_material_interface_layers": "2",
+    "support_material_interface_spacing": "0.2",
+    "thick_bridges": "1",
+    "bridge_flow_ratio": "0.95",
+    "bridge_speed": "25",
+    "extra_perimeters_on_overhangs": "1",
+    "enable_dynamic_overhang_speeds": "1",
+    "overhang_speed_0": "15",
+    "overhang_speed_1": "20",
+    "overhang_speed_2": "25",
+    "overhang_speed_3": "30",
+    "overhang_fan_speed_0": "100",
+    "overhang_fan_speed_1": "100",
+    "overhang_fan_speed_2": "100",
+    "overhang_fan_speed_3": "100",
+    "avoid_crossing_perimeters": "1",
+    "avoid_crossing_perimeters_max_detour": "5",
+    "retract_before_travel": "2",
+    "travel_speed": "150",
+    "retract_lift": "0",
+    "seam_position": "aligned",
+    "scarf_seam_placement": "nowhere",
+    "seam_gap_distance": "15%",
+    "staggered_inner_seams": "1"
+  },
+  "effective": {
+    "layer_height": "0.20",
+    "first_layer_height": "0.2",
+    "perimeters": "5",
+    "fill_density": "25%",
+    "fill_pattern": "gyroid",
+    "top_solid_layers": "5",
+    "bottom_solid_layers": "4",
+    "support_material": "1",
+    "support_material_style": "organic",
+    "support_material_threshold": "10",
+    "dont_support_bridges": "1",
+    "overhangs": "1",
+    "brim_width": "0",
+    "temperature": "210",
+    "first_layer_temperature": "210",
+    "bed_temperature": "60",
+    "first_layer_bed_temperature": "60",
+    "nozzle_diameter": "0.4",
+    "retract_length": "5",
+    "complete_objects": "0",
+    "extruder_clearance_radius": "55",
+    "extruder_clearance_height": "25"
+  },
+  "orientation": null,
+  "plate": {
+    "complete_individual_objects": false,
+    "objects": [
+      {
+        "object": "02_nose_clamp_r_1#1",
+        "part": "02_nose_clamp_r_1",
+        "copy": 1,
+        "print_order": 1,
+        "offset_mm": [
+          115.5,
+          115.5
+        ],
+        "bbox_mm": [
+          73.5,
+          90.4,
+          157.5,
+          140.6
+        ],
+        "height_mm": 25.6,
+        "gcode_label": "01_02_nose_clamp_r_1_1.stl",
+        "mesh_sha256": "46620efbfd21a0401ab49a5acf3eb80ae4f3348881b4e87864432a828319bfa6"
+      }
+    ],
+    "gap_mm": 6.0,
+    "min_object_gap_mm": null,
+    "edge_margin_mm": 1.0,
+    "usable_rect_mm": [
+      4.0,
+      4.0,
+      227.0,
+      227.0
+    ],
+    "clearance": null,
+    "parts": [
+      {
+        "part": "02_nose_clamp_r_1",
+        "copies": 1,
+        "source": {
+          "kind": "file",
+          "path": "/home/hunter/Desktop/TBOT/scratch/print_archive_v2_2026-11-09/.13h04m_nose_clamps_carrier_L.slice/02_nose_clamp_r_1.stl"
+        },
+        "orientation": {
+          "build_dir": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "yaw_deg": 0.0,
+          "source": "as_is",
+          "why": "model +Z kept as the build direction"
+        },
+        "estimate": {
+          "part_volume_mm3": 49880.997,
+          "support_volume_mm3": 1921.652,
+          "material_g": 38.122,
+          "support_g": 0.357,
+          "time_h": 0.641,
+          "layers": 129,
+          "support_share": 0.009,
+          "method": "deterministic shell/infill/flow ranking estimate, not slicer output"
+        },
+        "printability": {
+          "status": "fail",
+          "issues": [
+            {
+              "check": "min_wall",
+              "status": "fail",
+              "note": "Minimum measured wall 0.907 mm; required 2.2 mm.",
+              "fix": [
+                "thicken to >= 2.2 mm (5 perimeters at 0.44 mm)"
+              ]
+            },
+            {
+              "check": "overhang",
+              "status": "fail",
+              "note": "1324.4 mm2 needs support above 45 deg from vertical (bridges and bed contact excluded).",
+              "fix": [
+                "shorten ceiling to a bridgeable span or reorient"
+              ]
+            },
+            {
+              "check": "bridges",
+              "status": "fail",
+              "note": "Largest two-sided bridge span 19.092 mm; clean bridge limit 5 mm, fail above 10 mm.",
+              "fix": [
+                "shorten bridge span or add accessible supports"
+              ]
+            },
+            {
+              "check": "support",
+              "status": "warn",
+              "note": "Support envelope 1921.7 mm3; 40.6 mm2 lands on model; 0.0 mm3 enclosed/unremovable.",
+              "fix": [
+                "reorient with optimize_print_orientation; add 45 deg chamfers or split part",
+                "avoid support landing on model surfaces (scars and harder removal)"
+              ]
+            },
+            {
+              "check": "small_holes",
+              "status": "not_evaluated",
+              "note": "Raw mesh has no CAD cylinder attribution; hole sizing is not reliably evaluated."
+            }
+          ]
+        }
+      }
+    ],
+    "support_for": [
+      "02_nose_clamp_r_1"
+    ],
+    "brim_for": []
+  },
+  "slicer": {
+    "kind": "flatpak",
+    "argv_prefix": [
+      "/usr/bin/flatpak",
+      "run",
+      "--user",
+      "--command=prusa-slicer",
+      "com.prusa3d.PrusaSlicer"
+    ],
+    "version": "2.9.6",
+    "profiles_dir": "/home/hunter/.local/share/flatpak/app/com.prusa3d.PrusaSlicer/x86_64/stable/bf3534e4ffc688bbaf625206f27f9333b1b8820d3425dae19d3083b47e08ce79/files/share/PrusaSlicer/profiles",
+    "source": "flatpak_user",
+    "identity": "bf3534e4ffc688bbaf625206f27f9333b1b8820d3425dae19d3083b47e08ce79",
+    "usable": true
+  },
+  "config_sha256": "216e3aaad31034eb0a7682a911e45c267bf244ab4a038bfb52060d6a55bab537",
+  "mesh_sha256": "b827d754371beea0533c4aac51cb74eabc03c6748b6bf829a32ae5e5816ec32f",
+  "gcode": "/home/hunter/Desktop/TBOT/print/creality_ender_3_0_4_mm_nozzle/04h34m_nose_clamp_R.gcode",
+  "gcode_sha256": "b2528142b7c259fda43301b4b72861fcc60722de22e9c5c4650cc29fa297ec4f",
+  "project_3mf": "/home/hunter/Desktop/TBOT/print/creality_ender_3_0_4_mm_nozzle/04h34m_nose_clamp_R.3mf",
+  "stats": {
+    "layers": 128,
+    "height_mm": 25.6,
+    "filament_mm": 12772.249,
+    "filament_g": 38.09,
+    "print_time_s": 16427.0,
+    "support_share": 0.0301,
+    "by_type_mm": {
+      "Bridge infill": 6006.117,
+      "Custom": 260.0,
+      "External perimeter": 44368.829,
+      "Internal infill": 95482.012,
+      "Overhang perimeter": 3280.381,
+      "Perimeter": 164607.758,
+      "Solid infill": 53245.969,
+      "Support material": 7661.909,
+      "Support material interface": 3898.461,
+      "Top solid infill": 5782.503
+    },
+    "slicer": "PrusaSlicer 2.9.6"
+  },
+  "estimate": [
+    {
+      "part": "02_nose_clamp_r_1",
+      "estimate": {
+        "part_volume_mm3": 49880.997,
+        "support_volume_mm3": 1921.652,
+        "material_g": 38.122,
+        "support_g": 0.357,
+        "time_h": 0.641,
+        "layers": 129,
+        "support_share": 0.009,
+        "method": "deterministic shell/infill/flow ranking estimate, not slicer output"
+      }
+    }
+  ],
+  "printability": {
+    "status": "fail",
+    "issues": [
+      {
+        "check": "min_wall",
+        "status": "fail",
+        "note": "Minimum measured wall 0.907 mm; required 2.2 mm.",
+        "fix": [
+          "thicken to >= 2.2 mm (5 perimeters at 0.44 mm)"
+        ],
+        "part": "02_nose_clamp_r_1"
+      },
+      {
+        "check": "overhang",
+        "status": "fail",
+        "note": "1324.4 mm2 needs support above 45 deg from vertical (bridges and bed contact excluded).",
+        "fix": [
+          "shorten ceiling to a bridgeable span or reorient"
+        ],
+        "part": "02_nose_clamp_r_1"
+      },
+      {
+        "check": "bridges",
+        "status": "fail",
+        "note": "Largest two-sided bridge span 19.092 mm; clean bridge limit 5 mm, fail above 10 mm.",
+        "fix": [
+          "shorten bridge span or add accessible supports"
+        ],
+        "part": "02_nose_clamp_r_1"
+      },
+      {
+        "check": "support",
+        "status": "warn",
+        "note": "Support envelope 1921.7 mm3; 40.6 mm2 lands on model; 0.0 mm3 enclosed/unremovable.",
+        "fix": [
+          "reorient with optimize_print_orientation; add 45 deg chamfers or split part",
+          "avoid support landing on model surfaces (scars and harder removal)"
+        ],
+        "part": "02_nose_clamp_r_1"
+      },
+      {
+        "check": "small_holes",
+        "status": "not_evaluated",
+        "note": "Raw mesh has no CAD cylinder attribution; hole sizing is not reliably evaluated.",
+        "part": "02_nose_clamp_r_1"
+      }
+    ]
+  },
+  "gcode_check": {
+    "status": "pass",
+    "issues": []
+  },
+  "slicer_warnings": [],
+  "slicer_mesh_repairs": {
+    "available": true,
+    "volumes": 1,
+    "counts": {
+      "edges_fixed": 0,
+      "degenerate_facets": 0,
+      "facets_removed": 0,
+      "facets_reversed": 0,
+      "backwards_edges": 0
+    }
+  },
+  "print_ready": false
+}

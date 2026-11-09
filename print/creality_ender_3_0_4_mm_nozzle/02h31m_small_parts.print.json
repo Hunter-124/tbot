@@ -1,0 +1,608 @@
+{
+  "schema": "chudware.print_job/1",
+  "part": "02h31m_small_parts",
+  "source": {
+    "kind": "plate",
+    "parts": [
+      {
+        "part": "01_batt_retainer_1",
+        "source": {
+          "kind": "file",
+          "path": "/home/hunter/Desktop/TBOT/scratch/print_archive_v2_2026-11-09/.02h35m_small_parts.slice/01_batt_retainer_1.stl"
+        },
+        "copies": 1
+      },
+      {
+        "part": "02_camera_cover_1",
+        "source": {
+          "kind": "file",
+          "path": "/home/hunter/Desktop/TBOT/scratch/print_archive_v2_2026-11-09/.02h35m_small_parts.slice/02_camera_cover_1.stl"
+        },
+        "copies": 1
+      },
+      {
+        "part": "03_trig_clamp_r_v2_1",
+        "source": {
+          "kind": "file",
+          "path": "/home/hunter/Desktop/TBOT/scratch/print_archive_v2_2026-11-09/.02h35m_small_parts.slice/03_trig_clamp_r_v2_1.stl"
+        },
+        "copies": 1
+      }
+    ]
+  },
+  "copies": 3,
+  "printer": {
+    "name": "Creality Ender-3 (0.4 mm nozzle)",
+    "vendor": "Creality",
+    "bed_polygon": [
+      [
+        3.0,
+        3.0
+      ],
+      [
+        228.0,
+        3.0
+      ],
+      [
+        228.0,
+        228.0
+      ],
+      [
+        3.0,
+        228.0
+      ]
+    ],
+    "max_height_mm": 250.0
+  },
+  "presets": {
+    "print": "0.20 mm NORMAL (0.4 mm nozzle) @CREALITY",
+    "filament": "Generic PLA @CREALITY"
+  },
+  "goal": "balanced",
+  "settings_changed": {
+    "fill_density": "25%",
+    "perimeters": "5",
+    "temperature": "210",
+    "first_layer_temperature": "210",
+    "bed_temperature": "60",
+    "first_layer_bed_temperature": "60",
+    "support_material": "1",
+    "support_material_auto": "1",
+    "support_material_style": "organic",
+    "support_material_threshold": "5",
+    "support_material_buildplate_only": "0",
+    "brim_width": "0",
+    "binary_gcode": "0",
+    "overhangs": "1",
+    "complete_objects": "1",
+    "fill_pattern": "gyroid",
+    "filament_max_volumetric_speed": "10",
+    "disable_fan_first_layers": "2",
+    "elefant_foot_compensation": "0.2",
+    "skirts": "0",
+    "infill_anchor": "2.5",
+    "infill_anchor_max": "12",
+    "solid_infill_below_area": "15",
+    "support_material_contact_distance": "0.2",
+    "support_material_xy_spacing": "0.45",
+    "support_material_interface_layers": "2",
+    "support_material_interface_spacing": "0.2",
+    "dont_support_bridges": "1",
+    "thick_bridges": "1",
+    "bridge_flow_ratio": "0.95",
+    "bridge_speed": "25",
+    "extra_perimeters_on_overhangs": "1",
+    "enable_dynamic_overhang_speeds": "1",
+    "overhang_speed_0": "15",
+    "overhang_speed_1": "20",
+    "overhang_speed_2": "25",
+    "overhang_speed_3": "30",
+    "overhang_fan_speed_0": "100",
+    "overhang_fan_speed_1": "100",
+    "overhang_fan_speed_2": "100",
+    "overhang_fan_speed_3": "100",
+    "avoid_crossing_perimeters": "1",
+    "avoid_crossing_perimeters_max_detour": "5",
+    "retract_before_travel": "2",
+    "travel_speed": "150",
+    "retract_lift": "0",
+    "seam_position": "aligned",
+    "scarf_seam_placement": "nowhere",
+    "seam_gap_distance": "15%",
+    "staggered_inner_seams": "1"
+  },
+  "effective": {
+    "layer_height": "0.20",
+    "first_layer_height": "0.2",
+    "perimeters": "5",
+    "fill_density": "25%",
+    "fill_pattern": "gyroid",
+    "top_solid_layers": "5",
+    "bottom_solid_layers": "4",
+    "support_material": "1",
+    "support_material_style": "organic",
+    "support_material_threshold": "5",
+    "dont_support_bridges": "1",
+    "overhangs": "1",
+    "brim_width": "0",
+    "temperature": "210",
+    "first_layer_temperature": "210",
+    "bed_temperature": "60",
+    "first_layer_bed_temperature": "60",
+    "nozzle_diameter": "0.4",
+    "retract_length": "5",
+    "complete_objects": "1",
+    "extruder_clearance_radius": "55",
+    "extruder_clearance_height": "25"
+  },
+  "orientation": null,
+  "plate": {
+    "complete_individual_objects": true,
+    "objects": [
+      {
+        "object": "01_batt_retainer_1#1",
+        "part": "01_batt_retainer_1",
+        "copy": 1,
+        "print_order": 1,
+        "offset_mm": [
+          71.0001,
+          73.1018
+        ],
+        "bbox_mm": [
+          27.531,
+          44.605,
+          114.469,
+          101.598
+        ],
+        "height_mm": 2.2,
+        "above_clearance_height": false,
+        "gcode_label": "01_01_batt_retainer_1_1.stl",
+        "mesh_sha256": "d57c5a3c1f57142672bee9817db547f66f12b1865c630719e8f7d467fa55c45e"
+      },
+      {
+        "object": "02_camera_cover_1#1",
+        "part": "02_camera_cover_1",
+        "copy": 1,
+        "print_order": 2,
+        "offset_mm": [
+          187.4692,
+          60.6052
+        ],
+        "bbox_mm": [
+          171.469,
+          44.605,
+          203.469,
+          76.605
+        ],
+        "height_mm": 10.3,
+        "above_clearance_height": false,
+        "gcode_label": "02_02_camera_cover_1_1.stl",
+        "mesh_sha256": "b330ef6d91c692038d0f1f3fc32974cb33cf2bd65c097eb36fdbc2708488beb8"
+      },
+      {
+        "object": "03_trig_clamp_r_v2_1#1",
+        "part": "03_trig_clamp_r_v2_1",
+        "copy": 1,
+        "print_order": 3,
+        "offset_mm": [
+          59.2549,
+          172.4966
+        ],
+        "bbox_mm": [
+          27.531,
+          158.598,
+          90.979,
+          186.395
+        ],
+        "height_mm": 24.3,
+        "above_clearance_height": false,
+        "gcode_label": "03_03_trig_clamp_r_v2_1_1.stl",
+        "mesh_sha256": "fd5b0db49661bd9745761795ca50b94b33513af5e0bd77e8fc6d0e2ff7d04a82"
+      }
+    ],
+    "gap_mm": 57.0,
+    "min_object_gap_mm": 57.0,
+    "edge_margin_mm": 1.0,
+    "usable_rect_mm": [
+      4.0,
+      4.0,
+      227.0,
+      227.0
+    ],
+    "clearance": {
+      "extruder_clearance_radius_mm": 55.0,
+      "extruder_clearance_height_mm": 25.0
+    },
+    "parts": [
+      {
+        "part": "01_batt_retainer_1",
+        "copies": 1,
+        "source": {
+          "kind": "file",
+          "path": "/home/hunter/Desktop/TBOT/scratch/print_archive_v2_2026-11-09/.02h35m_small_parts.slice/01_batt_retainer_1.stl"
+        },
+        "orientation": {
+          "build_dir": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "yaw_deg": 0.0,
+          "source": "as_is",
+          "why": "model +Z kept as the build direction"
+        },
+        "estimate": {
+          "part_volume_mm3": 4746.999,
+          "support_volume_mm3": 20.557,
+          "material_g": 5.89,
+          "support_g": 0.004,
+          "time_h": 0.094,
+          "layers": 11,
+          "support_share": 0.001,
+          "method": "deterministic shell/infill/flow ranking estimate, not slicer output"
+        },
+        "printability": {
+          "status": "fail",
+          "issues": [
+            {
+              "check": "min_wall",
+              "status": "fail",
+              "note": "Minimum measured wall 1.514 mm; required 2.2 mm.",
+              "fix": [
+                "thicken to >= 2.2 mm (5 perimeters at 0.44 mm)"
+              ]
+            },
+            {
+              "check": "overhang",
+              "status": "fail",
+              "note": "163.9 mm2 needs support above 45 deg from vertical (bridges and bed contact excluded).",
+              "fix": [
+                "add 45 deg chamfers or reorient"
+              ]
+            },
+            {
+              "check": "small_holes",
+              "status": "not_evaluated",
+              "note": "Raw mesh has no CAD cylinder attribution; hole sizing is not reliably evaluated."
+            }
+          ]
+        }
+      },
+      {
+        "part": "02_camera_cover_1",
+        "copies": 1,
+        "source": {
+          "kind": "file",
+          "path": "/home/hunter/Desktop/TBOT/scratch/print_archive_v2_2026-11-09/.02h35m_small_parts.slice/02_camera_cover_1.stl"
+        },
+        "orientation": {
+          "build_dir": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "yaw_deg": 0.0,
+          "source": "as_is",
+          "why": "model +Z kept as the build direction"
+        },
+        "estimate": {
+          "part_volume_mm3": 3542.624,
+          "support_volume_mm3": 0.0,
+          "material_g": 4.393,
+          "support_g": 0.0,
+          "time_h": 0.094,
+          "layers": 52,
+          "support_share": 0.0,
+          "method": "deterministic shell/infill/flow ranking estimate, not slicer output"
+        },
+        "printability": {
+          "status": "fail",
+          "issues": [
+            {
+              "check": "min_wall",
+              "status": "fail",
+              "note": "Minimum measured wall 0.886 mm; required 2.2 mm.",
+              "fix": [
+                "thicken to >= 2.2 mm (5 perimeters at 0.44 mm)"
+              ]
+            },
+            {
+              "check": "overhang",
+              "status": "warn",
+              "note": "0.3 mm2 needs support above 45 deg from vertical (bridges and bed contact excluded).",
+              "fix": [
+                "shorten ceiling to a bridgeable span or reorient"
+              ]
+            },
+            {
+              "check": "bridges",
+              "status": "warn",
+              "note": "Largest two-sided bridge span 6.500 mm; clean bridge limit 5 mm, fail above 10 mm.",
+              "fix": [
+                "slicer bridges it but expect sag; add support/sacrificial layer or shorten"
+              ]
+            },
+            {
+              "check": "small_holes",
+              "status": "not_evaluated",
+              "note": "Raw mesh has no CAD cylinder attribution; hole sizing is not reliably evaluated."
+            }
+          ]
+        }
+      },
+      {
+        "part": "03_trig_clamp_r_v2_1",
+        "copies": 1,
+        "source": {
+          "kind": "file",
+          "path": "/home/hunter/Desktop/TBOT/scratch/print_archive_v2_2026-11-09/.02h35m_small_parts.slice/03_trig_clamp_r_v2_1.stl"
+        },
+        "orientation": {
+          "build_dir": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "yaw_deg": 0.0,
+          "source": "as_is",
+          "why": "model +Z kept as the build direction"
+        },
+        "estimate": {
+          "part_volume_mm3": 9841.106,
+          "support_volume_mm3": 1799.181,
+          "material_g": 12.448,
+          "support_g": 0.335,
+          "time_h": 0.254,
+          "layers": 122,
+          "support_share": 0.027,
+          "method": "deterministic shell/infill/flow ranking estimate, not slicer output"
+        },
+        "printability": {
+          "status": "fail",
+          "issues": [
+            {
+              "check": "min_wall",
+              "status": "fail",
+              "note": "Minimum measured wall 0.050 mm; required 2.2 mm.",
+              "fix": [
+                "thicken to >= 2.2 mm (5 perimeters at 0.44 mm)"
+              ]
+            },
+            {
+              "check": "overhang",
+              "status": "fail",
+              "note": "281.6 mm2 needs support above 45 deg from vertical (bridges and bed contact excluded).",
+              "fix": [
+                "replace large horizontal hole crown with teardrop/diamond geometry"
+              ]
+            },
+            {
+              "check": "support",
+              "status": "warn",
+              "note": "Support envelope 1799.2 mm3; 64.1 mm2 lands on model; 4.8 mm3 enclosed/unremovable.",
+              "fix": [
+                "reorient with optimize_print_orientation; add 45 deg chamfers or split part",
+                "avoid support landing on model surfaces (scars and harder removal)"
+              ]
+            },
+            {
+              "check": "small_holes",
+              "status": "not_evaluated",
+              "note": "Raw mesh has no CAD cylinder attribution; hole sizing is not reliably evaluated."
+            }
+          ]
+        }
+      }
+    ],
+    "support_for": [
+      "01_batt_retainer_1",
+      "03_trig_clamp_r_v2_1"
+    ],
+    "brim_for": []
+  },
+  "slicer": {
+    "kind": "flatpak",
+    "argv_prefix": [
+      "/usr/bin/flatpak",
+      "run",
+      "--user",
+      "--command=prusa-slicer",
+      "com.prusa3d.PrusaSlicer"
+    ],
+    "version": "2.9.6",
+    "profiles_dir": "/home/hunter/.local/share/flatpak/app/com.prusa3d.PrusaSlicer/x86_64/stable/bf3534e4ffc688bbaf625206f27f9333b1b8820d3425dae19d3083b47e08ce79/files/share/PrusaSlicer/profiles",
+    "source": "flatpak_user",
+    "identity": "bf3534e4ffc688bbaf625206f27f9333b1b8820d3425dae19d3083b47e08ce79",
+    "usable": true
+  },
+  "config_sha256": "50b4b5556a30503165836059c07a294af4696391d6802e0daaa506ca2bdb2cf6",
+  "mesh_sha256": "4291973b2282bef3d3c33b32f21a1d6ad1b9608ce9025ca98b8a77bc01c6ae92",
+  "gcode": "/home/hunter/Desktop/TBOT/print/creality_ender_3_0_4_mm_nozzle/02h31m_small_parts.gcode",
+  "gcode_sha256": "deb84ddfa3185aa32053d2c7001fe15f1ba50bf5a1fbca9d349a0f6a231099e1",
+  "project_3mf": "/home/hunter/Desktop/TBOT/print/creality_ender_3_0_4_mm_nozzle/02h31m_small_parts.3mf",
+  "stats": {
+    "layers": 121,
+    "height_mm": 24.2,
+    "filament_mm": 6847.21,
+    "filament_g": 20.42,
+    "print_time_s": 9031.0,
+    "support_share": 0.004,
+    "by_type_mm": {
+      "Bridge infill": 4461.315,
+      "Custom": 260.0,
+      "External perimeter": 33189.467,
+      "Internal infill": 11553.084,
+      "Overhang perimeter": 534.517,
+      "Perimeter": 106907.546,
+      "Solid infill": 42606.274,
+      "Support material": 809.111,
+      "Support material interface": 21.037,
+      "Top solid infill": 4961.011
+    },
+    "slicer": "PrusaSlicer 2.9.6"
+  },
+  "estimate": [
+    {
+      "part": "01_batt_retainer_1",
+      "estimate": {
+        "part_volume_mm3": 4746.999,
+        "support_volume_mm3": 20.557,
+        "material_g": 5.89,
+        "support_g": 0.004,
+        "time_h": 0.094,
+        "layers": 11,
+        "support_share": 0.001,
+        "method": "deterministic shell/infill/flow ranking estimate, not slicer output"
+      }
+    },
+    {
+      "part": "02_camera_cover_1",
+      "estimate": {
+        "part_volume_mm3": 3542.624,
+        "support_volume_mm3": 0.0,
+        "material_g": 4.393,
+        "support_g": 0.0,
+        "time_h": 0.094,
+        "layers": 52,
+        "support_share": 0.0,
+        "method": "deterministic shell/infill/flow ranking estimate, not slicer output"
+      }
+    },
+    {
+      "part": "03_trig_clamp_r_v2_1",
+      "estimate": {
+        "part_volume_mm3": 9841.106,
+        "support_volume_mm3": 1799.181,
+        "material_g": 12.448,
+        "support_g": 0.335,
+        "time_h": 0.254,
+        "layers": 122,
+        "support_share": 0.027,
+        "method": "deterministic shell/infill/flow ranking estimate, not slicer output"
+      }
+    }
+  ],
+  "printability": {
+    "status": "fail",
+    "issues": [
+      {
+        "check": "min_wall",
+        "status": "fail",
+        "note": "Minimum measured wall 1.514 mm; required 2.2 mm.",
+        "fix": [
+          "thicken to >= 2.2 mm (5 perimeters at 0.44 mm)"
+        ],
+        "part": "01_batt_retainer_1"
+      },
+      {
+        "check": "overhang",
+        "status": "fail",
+        "note": "163.9 mm2 needs support above 45 deg from vertical (bridges and bed contact excluded).",
+        "fix": [
+          "add 45 deg chamfers or reorient"
+        ],
+        "part": "01_batt_retainer_1"
+      },
+      {
+        "check": "small_holes",
+        "status": "not_evaluated",
+        "note": "Raw mesh has no CAD cylinder attribution; hole sizing is not reliably evaluated.",
+        "part": "01_batt_retainer_1"
+      },
+      {
+        "check": "min_wall",
+        "status": "fail",
+        "note": "Minimum measured wall 0.886 mm; required 2.2 mm.",
+        "fix": [
+          "thicken to >= 2.2 mm (5 perimeters at 0.44 mm)"
+        ],
+        "part": "02_camera_cover_1"
+      },
+      {
+        "check": "overhang",
+        "status": "warn",
+        "note": "0.3 mm2 needs support above 45 deg from vertical (bridges and bed contact excluded).",
+        "fix": [
+          "shorten ceiling to a bridgeable span or reorient"
+        ],
+        "part": "02_camera_cover_1"
+      },
+      {
+        "check": "bridges",
+        "status": "warn",
+        "note": "Largest two-sided bridge span 6.500 mm; clean bridge limit 5 mm, fail above 10 mm.",
+        "fix": [
+          "slicer bridges it but expect sag; add support/sacrificial layer or shorten"
+        ],
+        "part": "02_camera_cover_1"
+      },
+      {
+        "check": "small_holes",
+        "status": "not_evaluated",
+        "note": "Raw mesh has no CAD cylinder attribution; hole sizing is not reliably evaluated.",
+        "part": "02_camera_cover_1"
+      },
+      {
+        "check": "min_wall",
+        "status": "fail",
+        "note": "Minimum measured wall 0.050 mm; required 2.2 mm.",
+        "fix": [
+          "thicken to >= 2.2 mm (5 perimeters at 0.44 mm)"
+        ],
+        "part": "03_trig_clamp_r_v2_1"
+      },
+      {
+        "check": "overhang",
+        "status": "fail",
+        "note": "281.6 mm2 needs support above 45 deg from vertical (bridges and bed contact excluded).",
+        "fix": [
+          "replace large horizontal hole crown with teardrop/diamond geometry"
+        ],
+        "part": "03_trig_clamp_r_v2_1"
+      },
+      {
+        "check": "support",
+        "status": "warn",
+        "note": "Support envelope 1799.2 mm3; 64.1 mm2 lands on model; 4.8 mm3 enclosed/unremovable.",
+        "fix": [
+          "reorient with optimize_print_orientation; add 45 deg chamfers or split part",
+          "avoid support landing on model surfaces (scars and harder removal)"
+        ],
+        "part": "03_trig_clamp_r_v2_1"
+      },
+      {
+        "check": "small_holes",
+        "status": "not_evaluated",
+        "note": "Raw mesh has no CAD cylinder attribution; hole sizing is not reliably evaluated.",
+        "part": "03_trig_clamp_r_v2_1"
+      }
+    ]
+  },
+  "gcode_check": {
+    "status": "fail",
+    "issues": [
+      {
+        "check": "floating_extrusion",
+        "status": "fail",
+        "note": "Hard floating: 0.5 mm2/layer, 0.148 mm unanchored run; unanchored air run 10.746 mm (limit 10); backed bridge 0.736 mm; infill/interface spans informational (21.4 mm2 total)",
+        "fix": [
+          "Reorient or support long unanchored outer-wall and bridge paths.",
+          "Review the flagged type, layer and XY positions in PrusaSlicer before printing."
+        ]
+      }
+    ]
+  },
+  "slicer_warnings": [],
+  "slicer_mesh_repairs": {
+    "available": true,
+    "volumes": 3,
+    "counts": {
+      "edges_fixed": 0,
+      "degenerate_facets": 0,
+      "facets_removed": 0,
+      "facets_reversed": 0,
+      "backwards_edges": 0
+    }
+  },
+  "print_ready": false
+}
