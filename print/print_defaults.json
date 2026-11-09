@@ -1,7 +1,7 @@
 {
  "schema": "tbot.print_defaults/3",
  "saved": "2026-11-09 (rev 3)",
- "note": "Use for every slice_part call on this project unless the user overrides. v3 replaces v2 (backup: scratch/print_archive_v2_2026-11-09/ holds the v2 defaults and G-code). Trial-sliced with PrusaSlicer 2.9.6; NOT yet print-tested - print the temp tower first, report real results back and tune.",
+ "note": "Use for every slice_part call on this project unless the user overrides. v3 replaces v2 (backup: scratch/print_archive_v2_2026-11-09/ holds the v2 defaults and G-code). Trial-sliced with PrusaSlicer 2.9.6; NOT yet print-tested - print the temp tower first, report real results back and tune. The slice_part block is the exact call (args + overrides + per-plate rows) that produced the current G-code; pass it as-is.",
  "printer": {
   "query": "ender 3",
   "nozzle_mm": 0.4,
@@ -10,60 +10,169 @@
  "material": "PLA",
  "filament_preset": "Generic PLA @CREALITY (filament on the printer: Elegoo PLA+, rated 205-230 C)",
  "print_preset": "0.20 mm NORMAL (0.4 mm nozzle) @CREALITY",
- "slice_part_args": {
-  "material": "PLA",
-  "goal": "balanced",
-  "layer_height_mm": 0.2,
-  "nozzle_temp_c": 210,
-  "bed_temp_c": 60,
-  "walls": "5 structural plates / 4 cover plates",
-  "supports": "auto",
-  "brim": 0,
-  "complete_individual_objects": "True for small parts (<=25 mm except one tall object printed last); False for large/tall plates",
-  "export_3mf": true,
-  "infill_percent": "25 structural / 15 covers (see infill_by_part)"
- },
- "overrides_all_plates": {
-  "fill_pattern": "gyroid",
-  "filament_max_volumetric_speed": 10,
-  "disable_fan_first_layers": 2,
-  "elefant_foot_compensation": 0.2,
-  "skirts": 0,
-  "infill_anchor": "2.5",
-  "infill_anchor_max": "12",
-  "solid_infill_below_area": "15",
-  "support_material_style": "organic",
-  "support_material_threshold": "PER PLATE (see plates_v3)",
-  "support_material_contact_distance": 0.2,
-  "support_material_xy_spacing": "0.45",
-  "support_material_interface_layers": 2,
-  "support_material_interface_spacing": 0.2,
-  "dont_support_bridges": 1,
-  "thick_bridges": 1,
-  "bridge_flow_ratio": 0.95,
-  "bridge_speed": 25,
-  "extra_perimeters_on_overhangs": 1,
-  "seam_position": "aligned",
-  "scarf_seam_placement": "nowhere",
-  "seam_gap_distance": "15%",
-  "avoid_crossing_perimeters": 1,
-  "avoid_crossing_perimeters_max_detour": "5",
-  "retract_before_travel": "2",
-  "retract_lift": "0",
-  "travel_speed": "150",
-  "brim_width": 0,
-  "overhangs": 1,
-  "enable_dynamic_overhang_speeds": 1,
-  "overhang_speed_0": 15,
-  "overhang_speed_1": 20,
-  "overhang_speed_2": 25,
-  "overhang_speed_3": 30,
-  "overhang_fan_speed_0": 100,
-  "overhang_fan_speed_1": 100,
-  "overhang_fan_speed_2": 100,
-  "overhang_fan_speed_3": 100,
-  "extruder_clearance_radius": "60 on complete-objects plates only",
-  "staggered_inner_seams": 1
+ "slice_part": {
+  "how": "Call slice_part(parts=[{path, orientation:'as_is'}...], name='<HH>h<MM>m_<plate>', output_dir=<TBOT>/print/creality_ender_3_0_4_mm_nozzle, **args, walls/infill_percent from the plate row, complete_individual_objects from the plate row, overrides={**overrides, 'support_material_threshold': str(plate threshold)}). Meshes are oriented per orientations_build_up; the v3 slices used the placed meshes in scratch/print_archive_v2_2026-11-09/.<v2 plate>.slice/.",
+  "args": {
+   "printer": "ender 3",
+   "nozzle_mm": 0.4,
+   "material": "PLA",
+   "goal": "balanced",
+   "print_preset": "0.20 mm NORMAL (0.4 mm nozzle) @CREALITY",
+   "filament_preset": "Generic PLA @CREALITY",
+   "layer_height_mm": 0.2,
+   "nozzle_temp_c": 210,
+   "bed_temp_c": 60,
+   "supports": "auto",
+   "brim": 0,
+   "export_3mf": true
+  },
+  "overrides": {
+   "fill_pattern": "gyroid",
+   "filament_max_volumetric_speed": "10",
+   "disable_fan_first_layers": "2",
+   "elefant_foot_compensation": "0.2",
+   "skirts": "0",
+   "infill_anchor": "2.5",
+   "infill_anchor_max": "12",
+   "solid_infill_below_area": "15",
+   "support_material_style": "organic",
+   "support_material_contact_distance": "0.2",
+   "support_material_xy_spacing": "0.45",
+   "support_material_interface_layers": "2",
+   "support_material_interface_spacing": "0.2",
+   "dont_support_bridges": "1",
+   "thick_bridges": "1",
+   "bridge_flow_ratio": "0.95",
+   "bridge_speed": "25",
+   "extra_perimeters_on_overhangs": "1",
+   "overhangs": "1",
+   "enable_dynamic_overhang_speeds": "1",
+   "overhang_speed_0": "15",
+   "overhang_speed_1": "20",
+   "overhang_speed_2": "25",
+   "overhang_speed_3": "30",
+   "overhang_fan_speed_0": "100",
+   "overhang_fan_speed_1": "100",
+   "overhang_fan_speed_2": "100",
+   "overhang_fan_speed_3": "100",
+   "avoid_crossing_perimeters": "1",
+   "avoid_crossing_perimeters_max_detour": "5",
+   "retract_before_travel": "2",
+   "travel_speed": "150",
+   "retract_lift": "0",
+   "seam_position": "aligned",
+   "scarf_seam_placement": "nowhere",
+   "seam_gap_distance": "15%",
+   "staggered_inner_seams": "1"
+  },
+  "plates": {
+   "small_parts": {
+    "parts": [
+     "trig_clamp_R_v2",
+     "camera_cover",
+     "batt_retainer"
+    ],
+    "support_material_threshold": 5,
+    "walls": 5,
+    "infill_percent": 25,
+    "complete_individual_objects": true,
+    "gcode": "02h31m_small_parts.gcode",
+    "time_h": 2.51,
+    "filament_g": 20.42,
+    "print_ready": false
+   },
+   "nose_clamp_L": {
+    "parts": [
+     "nose_clamp_L"
+    ],
+    "support_material_threshold": 10,
+    "walls": 5,
+    "infill_percent": 25,
+    "complete_individual_objects": false,
+    "gcode": "04h10m_nose_clamp_L.gcode",
+    "time_h": 4.16,
+    "filament_g": 36.51,
+    "print_ready": false
+   },
+   "nose_clamp_R": {
+    "parts": [
+     "nose_clamp_R"
+    ],
+    "support_material_threshold": 10,
+    "walls": 5,
+    "infill_percent": 25,
+    "complete_individual_objects": false,
+    "gcode": "04h34m_nose_clamp_R.gcode",
+    "time_h": 4.56,
+    "filament_g": 38.09,
+    "print_ready": false
+   },
+   "carrier_L": {
+    "parts": [
+     "carrier_L"
+    ],
+    "support_material_threshold": 10,
+    "walls": 5,
+    "infill_percent": 25,
+    "complete_individual_objects": false,
+    "gcode": "04h01m_carrier_L.gcode",
+    "time_h": 4.02,
+    "filament_g": 25.87,
+    "print_ready": false
+   },
+   "carrier_R": {
+    "parts": [
+     "carrier_R"
+    ],
+    "support_material_threshold": 10,
+    "walls": 5,
+    "infill_percent": 25,
+    "complete_individual_objects": false,
+    "gcode": "07h39m_carrier_R.gcode",
+    "time_h": 7.64,
+    "filament_g": 51.22,
+    "print_ready": false
+   },
+   "cover_L": {
+    "parts": [
+     "cover_L"
+    ],
+    "support_material_threshold": 30,
+    "walls": 4,
+    "infill_percent": 15,
+    "complete_individual_objects": false,
+    "gcode": "02h03m_cover_L.gcode",
+    "time_h": 2.04,
+    "filament_g": 17.3,
+    "print_ready": false
+   },
+   "belly_cover": {
+    "parts": [
+     "belly_cover"
+    ],
+    "support_material_threshold": 30,
+    "walls": 4,
+    "infill_percent": 15,
+    "complete_individual_objects": false,
+    "gcode": "01h33m_belly_cover.gcode",
+    "time_h": 1.55,
+    "filament_g": 13.23,
+    "print_ready": false
+   },
+   "cover_R": {
+    "parts": [
+     "cover_R"
+    ],
+    "support_material_threshold": 30,
+    "walls": 4,
+    "infill_percent": 15,
+    "complete_individual_objects": false,
+    "gcode": "02h48m_cover_R.gcode",
+    "time_h": 2.8,
+    "filament_g": 25.81,
+    "print_ready": false
+   }
+  }
  },
  "changes_from_v2": {
   "why": "v2 prints: heavy stringing/hair, surface zits, bad seams (photo predates the nozzle swap and 215->210). Retraction (5 mm @ 60 mm/s, wipe on) and part fan (100% from layer 3) were already correct; the causes below were v2 overrides fighting a Bowden Ender-3 with no Linear Advance.",
@@ -93,8 +202,6 @@
  "stringing": "210 C, retract 5 mm @60 mm/s (Ender preset), wipe, retract_before_travel 2, NO z-hop, avoid_crossing_perimeters (detour 5), travel 150 mm/s, one part per layer-by-layer plate",
  "naming": "<HH>h<MM>m_<plate>  (slice once to get the time, then re-slice with name=; slice_part strips '.' from names so do not use decimals)",
  "plate_rules": "One part per plate unless the plate prints complete-individual-objects (then the Ender-3 25 mm clearance-height rule applies: at most one object taller, printed last). Pack whole parts only; never split a part across plates.",
- "infill_by_part": "infill is per plate in v3 (25 structural plates, 15 cover plates)",
- "infill_pattern": "gyroid",
  "orientations_build_up": {
   "nose_clamp_L": [
    0,
@@ -223,122 +330,6 @@
   "limit": "organic supports ignore dont_support_bridges for some shallow recess ceilings; remaining support in holes is listed in plates_v3.hole_support_mm. Only a teardrop/chamfered crown in CAD removes it fully."
  },
  "orientation_review_2026-11-08": "Scored all 6 axis build directions per part (scratch/orient_score.py: overhang area, bed contact, bore axes vertical vs horizontal). Existing orientations (orientations_build_up) are the best compromise for support AND strength on every part: plates/covers lie flat (loads in layer plane), carriers +X and trig clamp +Z keep most insert bores horizontal. Nose clamps stay flank-down: +-Z puts all bores horizontal but needs 15-25x the support inside the barrel bore.",
- "plates": {
-  "small_parts": {
-   "gcode": "02h31m_small_parts.gcode",
-   "parts": [
-    "trig_clamp_R_v2",
-    "camera_cover",
-    "batt_retainer"
-   ],
-   "time_h": 2.51,
-   "filament_g": 20.42,
-   "threshold": 5,
-   "walls": 5,
-   "infill": 25,
-   "complete_individual_objects": true,
-   "print_ready": false,
-   "hole_support_mm": "not re-measured for v3 (run scratch/hole_support_check.py)"
-  },
-  "nose_clamp_L": {
-   "gcode": "04h10m_nose_clamp_L.gcode",
-   "parts": [
-    "nose_clamp_L"
-   ],
-   "time_h": 4.16,
-   "filament_g": 36.51,
-   "threshold": 10,
-   "walls": 5,
-   "infill": 25,
-   "complete_individual_objects": false,
-   "print_ready": false,
-   "hole_support_mm": "not re-measured for v3 (run scratch/hole_support_check.py)"
-  },
-  "nose_clamp_R": {
-   "gcode": "04h34m_nose_clamp_R.gcode",
-   "parts": [
-    "nose_clamp_R"
-   ],
-   "time_h": 4.56,
-   "filament_g": 38.09,
-   "threshold": 10,
-   "walls": 5,
-   "infill": 25,
-   "complete_individual_objects": false,
-   "print_ready": false,
-   "hole_support_mm": "not re-measured for v3 (run scratch/hole_support_check.py)"
-  },
-  "carrier_L": {
-   "gcode": "04h01m_carrier_L.gcode",
-   "parts": [
-    "carrier_L"
-   ],
-   "time_h": 4.02,
-   "filament_g": 25.87,
-   "threshold": 10,
-   "walls": 5,
-   "infill": 25,
-   "complete_individual_objects": false,
-   "print_ready": false,
-   "hole_support_mm": "not re-measured for v3 (run scratch/hole_support_check.py)"
-  },
-  "carrier_R": {
-   "gcode": "07h39m_carrier_R.gcode",
-   "parts": [
-    "carrier_R"
-   ],
-   "time_h": 7.64,
-   "filament_g": 51.22,
-   "threshold": 10,
-   "walls": 5,
-   "infill": 25,
-   "complete_individual_objects": false,
-   "print_ready": false,
-   "hole_support_mm": "not re-measured for v3 (run scratch/hole_support_check.py)"
-  },
-  "cover_L": {
-   "gcode": "02h03m_cover_L.gcode",
-   "parts": [
-    "cover_L"
-   ],
-   "time_h": 2.04,
-   "filament_g": 17.3,
-   "threshold": 30,
-   "walls": 4,
-   "infill": 15,
-   "complete_individual_objects": false,
-   "print_ready": false,
-   "hole_support_mm": "not re-measured for v3 (run scratch/hole_support_check.py)"
-  },
-  "belly_cover": {
-   "gcode": "01h33m_belly_cover.gcode",
-   "parts": [
-    "belly_cover"
-   ],
-   "time_h": 1.55,
-   "filament_g": 13.23,
-   "threshold": 30,
-   "walls": 4,
-   "infill": 15,
-   "complete_individual_objects": false,
-   "print_ready": false,
-   "hole_support_mm": "not re-measured for v3 (run scratch/hole_support_check.py)"
-  },
-  "cover_R": {
-   "gcode": "02h48m_cover_R.gcode",
-   "parts": [
-    "cover_R"
-   ],
-   "time_h": 2.8,
-   "filament_g": 25.81,
-   "threshold": 30,
-   "walls": 4,
-   "infill": 15,
-   "complete_individual_objects": false,
-   "print_ready": false,
-   "hole_support_mm": "not re-measured for v3 (run scratch/hole_support_check.py)"
-  }
- },
  "calibration": {
   "temp_tower": {
    "gcode": "temp_tower_225_to_200.gcode",
