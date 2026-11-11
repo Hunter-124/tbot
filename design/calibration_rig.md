@@ -1,6 +1,6 @@
 # IMU / swing calibration rig (CalRig)
 
-Status: requirements and mechanical design. **Software is not written yet** (section 3 lists what it has to do).
+Status: candidate B rev B2 built in CAD; software written (section 7), not yet run on hardware.
 Owner of the mechanical side: Hunter. Owner of the software side: Alex (`software/`).
 Units mm unless stated. Rig frame: origin on the turntable axis at the top face of the base plate, +Z up,
 +X toward the motor, yaw angle positive counter-clockwise seen from above.
@@ -109,7 +109,10 @@ None of this is part of the mechanical task. It is listed so the mechanical desi
 | Table angle per 1/16 microstep | 0.01875 deg | |
 | Encoder resolution | 0.088 deg | AS5600 12 bit |
 
-## 4. Mechanical design summary
+## 4. Candidate A: gear-reduced yaw table (parked, over-built for a first rig)
+
+Kept as a potential candidate. Candidate B (simple, direct drive, 2 printed parts) is in section 7. Everything below
+in section 4 describes candidate A only; its assembly is `asm/calrig_A.step+`.
 
 CAD: parts in `parts/calrig/`, motor reference in `refs/stepper_nema17_pinion.step+`, hardware references in
 `refs/hw/` (M8 x 70 bolt, M8 nut, 608 bearing, 500 mm 2020 extrusion), assembly `asm/calrig.step+`. Rig frame:
@@ -243,3 +246,87 @@ Total printed mass is about 1.0 kg (base 359, saddles 340, turntable 83, gear 61
 - The table is driven by a motor with a 6:1 reduction under a 1.2 m, 3 kg lever. Keep hands and face clear of the
   swing arc. The rig has hard stops but a software or power fault can still move the gun a few degrees.
 - Clamp or bolt the base down before powering the motor.
+
+
+## 7. Candidate B: direct-drive rig (2 printed parts) — rev B2, 2026-11-09
+
+Simple rig chosen by Hunter: motor screwed under a printed arch, gun straight on the motor, no gear, no bearings.
+Rev B2 replaces the first B layout (pinion pulled off, barrel cradle). Candidate A (section 4) stays parked.
+
+CAD: `parts/calrig_B/motor_mount_arch.step+`, `parts/calrig_B/yaw_arm.step+`, motor reference
+`refs/stepper_nema17_pinion.step+` (the user's motor, pinion ON), assembly `asm/calrig_B_final.step+`.
+`refs/stepper_nema17_bare.step+` is no longer used. Frame: origin on the shaft axis at the motor face, +Z up,
+motor body Z -37.15..0, bench plane Z -40.
+Software: `software/firmware/calrig_uno/` (Arduino Uno + CNC Shield V3), host and analysis in
+`software/tbot/calrig/`, CLI `tbot calrig`, operator guide `software/docs/CALRIG.md`, interface contract
+`software/docs/CALRIG_PROTOCOL.md`.
+
+### 7.1 Why rev B2 (problems found in the first B layout)
+
+| Problem in first B | Rev B2 |
+|---|---|
+| The pinion had to be pulled off; hub pinched a plain D5 shaft with one M3 (weak, slips) | Pinion stays on. The arm's split hub clamps the pinion tooth tips in a D17.1 socket (pinion OD 16.69) with an M3x16 + nut: ~3x the grip radius, teeth bite into the PLA. Tooth count does not matter |
+| R13 barrel cradle could only grip the barrel ahead of the pod (X > 530), about 300 mm from the gun's balance point (behind X 300): ~10 N m pitch moment on one hose clamp and the motor bearings | 100 deg V saddle on the FOREND underside (forend X 178..484), 80 mm long, slides to the balance point; two strap tunnels |
+| Barrel 115 mm above the bench: stock toe (gun Z -98.6) and grip hit the bench during a swing | V apex at Z 90 = 130 mm above the bench; forend bottom ~137 mm up, stock toe ~32 mm above the bench |
+| 3 mm plate (countersinks left 1.3 mm), 5 mm legs loaded across layers | 5 mm plate, 8 mm legs, R6 leg/flare fillets, R3 plate/leg fillets; feet flare at 54.7 deg |
+| D30 flange: tips at ~0.5 N m imbalance | D54 flange: tips at ~0.9 N m (3.4 kg on r 27) |
+| No home, no lost-step check | Hall home: A3144 lying in a plate-top pocket at (0, +22), 6x3 magnet in the flange underside; feeds the CNC-shield X endstop |
+| Wrong motor model (bare shaft, no connector) | Motor ref corrected from the 2026-11-09 photo: pinion teeth Z 5.5..13.3 (7.8 face, OD 16.69 caliper), shaft to Z 13.3, side connector 16 x 6 x 10 near the rear cap. Assembly rotates the motor 90 deg so the connector faces +Y (open side of the arch) |
+
+### 7.2 Parts
+
+| Part | What | PLA (solid / slicer est.) | Print orientation |
+|---|---|---|---|
+| `motor_mount_arch` | 104 x 56 x 45 arch. 5 mm plate on the motor face (D22.4 pilot hole, 4 x M3 countersunk on 31 mm square for M3x8 FHCS), 8 mm legs, flared feet with 4 head wells (D9.4, 45 deg seats for countersunk/bugle wood screws, D4.6 shank) at (+-44, +-18). Hall pocket 4.6 x 3.4 x 1.9 + lead groove to the +Y edge | 110 g solid / ~47 g at default infill | plate top face on the bed |
+| `yaw_arm` | 80 x 76 x 107. D54 x 5 flange rides on the plate (PTFE tape), D40 clamp hub with 1.2 slit, M3x16 SHCS + M3 nut, D17.1 pinion socket with a 50 deg cone roof, magnet pocket D6.2 x 3.1 at (0, +22) underside, D32 column, lofted neck and 50 deg head flare (support-free), V saddle 100 deg incl. with 8 mm flat floor at Z 90, two 20 mm strap tunnels with peaked roofs | 369 g solid / ~110 g at default infill | flange on the bed, upright |
+
+Hardware: 4 x M3x8 FHCS (motor), 1 x M3x16 SHCS + M3 nut (clamp), 4 x countersunk wood/deck screws ~4.5 shank,
+2 x 20 mm hook-and-loop or ratchet straps (or a 12.7 mm hose band), 1-2 mm EPDM/felt liner in the V, PTFE tape
+under the flange, A3144 hall switch + 6x3 N35 magnet (S pole down, glued), Arduino Uno + CNC Shield V3 + A4988/
+DRV8825/TMC2209, 12 V supply, NC e-stop button on A0.
+
+Load path: gun weight -> V saddle -> column -> flange -> plate -> legs -> bench. The motor face carries none of the
+weight (the flange sits on the plate). The pinion clamp carries only the yaw torque.
+
+### 7.3 Gun attachment
+
+- Forend in the V on a 1-2 mm liner, both straps over the forend/barrel through the tunnels.
+- Slide the gun until it balances over the shaft (expect around gun X 200..300 with the pod fitted); keep the
+  saddle clear of the pod clamp (gun X 431..515). Weigh/balance the real gun: the balance point is not measured.
+- Upright pose: forend in the V. Side poses (roll 90 deg): the forend side lies in the V; check strap tension.
+
+### 7.4 Feasibility numbers (hand estimates, not tested)
+
+| Quantity | Value | Basis |
+|---|---|---|
+| Angle per 1/16 microstep | 0.1125 deg | direct drive, 1.8 deg motor (check label) |
+| Gun yaw inertia | ~0.4 kg m^2 | ASSUMED 3.4 kg, 1.2 m |
+| Motor torque | ~0.3-0.4 N m holding | ASSUMED short-body NEMA 17; read the label |
+| Firmware defaults | 45 deg/s, 20 deg/s^2 (caps 90 deg/s, 60 deg/s^2) | 20 deg/s^2 x 0.4 kg m^2 = 0.14 N m + flange friction ~0.07 N m with PTFE |
+| Pinion clamp torque capacity | ~3 N m | M3 preload ~600 N, mu 0.3, r 8.3; PLA creep lowers it: re-tighten before a session |
+| Column bending at a 50 N shove on the head | ~1.5 MPa | D32, 100 mm lever; interlayer PLA ~15-25 MPa |
+| Legs at the same shove | ~6 MPa across layers | 8 x 56 legs, 2 legs |
+
+What the rig can and cannot do: gyro bias, gyro scale and time offset on the axis that is vertical in a pose, axis
+map/sign from several poses, attitude drift, slow sine sweeps (e.g. 15 deg, 6.5 s period). Not fast swings: clay-rate
+(57-90 deg/s) moves need ~0.4 N m+ and long ramps. The four barrel-roll poses never put the chip axis that runs along
+the barrel under the yaw rate, so its gyro scale needs the muzzle-up/down poses (not possible on this saddle) —
+the analysis reports it as missing rather than guessing. Requirement F10 in section 2 is therefore only partly met.
+Truth angle is the step count; the hall home detects lost steps (HOMED offset, hall-edge repeatability).
+
+### 7.5 Checks run (2026-11-09, tool results)
+
+- `check_interference` on `asm/calrig_B_final`: no interference. Contacts at 0.00 mm are the designed face contacts
+  (motor face/plate, flange/plate). Pinion tips to socket 0.158 mm.
+- `verify_battery`: no FAIL on `motor_mount_arch`, `yaw_arm`, `stepper_nema17_pinion` and the assembly.
+- `dfm_check` (FDM, Ender 3, orientations above): `yaw_arm` support envelope 0.08 cm^3; remaining overhang rows
+  are the bridged ceilings of the screw-head seat, nut trap and slit top (~12 mm^2, spans <= 9.4 mm). `motor_mount_arch`
+  flags the 45.0 deg screw-head seats (8.7 mm^2 each) and passes support. Both report sharp concave edges at pockets
+  and holes (normal for these features) and knife-edge min-wall warnings where pockets break the surface.
+- `find_stress_risers`: hole-ligament candidates between the motor pilot hole and the countersinks (standard NEMA
+  pattern, >= 7.7 mm), the clamp screw crossing the slit (by design), pocket corners. The hub/column step and the
+  flange root are filleted.
+- Not checked: real gun balance point and forend fit in the V, hall switch trigger distance through the PTFE tape,
+  motor torque, the pinion's real tooth profile and the clamp's real holding torque, print accuracy of the D17.1 socket.
+- Software: firmware builds for the Uno (15.4 kB flash, 970 B RAM); host + analysis test suite passes; full run +
+  analysis verified in `--sim` only. Nothing has run on hardware.

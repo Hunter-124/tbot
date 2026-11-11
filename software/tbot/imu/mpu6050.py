@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -135,13 +135,18 @@ def parse_temperature(data: bytes | bytearray) -> float:
 
 @dataclass(eq=False)  # numpy fields: identity comparison only
 class ImuCalibration:
-    """calib/imu.json applied to raw chip-frame samples (biases/scale in the CHIP frame)."""
+    """calib/imu.json applied to raw chip-frame samples (biases/scale in the CHIP frame).
+
+    gyro (rad/s) -> (raw - gyro_bias_rad_s) * gyro_scale per chip axis -> R_gun_imu. gyro_scale is optional in
+    calib/imu.json (written by `tbot calrig analyze --apply`: the multiplier to apply to the chip gyro).
+    """
 
     gyro_bias_rad_s: np.ndarray
     accel_bias_m_s2: np.ndarray
     accel_scale: np.ndarray
     R_gun_imu: np.ndarray
     time_offset_ns: int
+    gyro_scale: np.ndarray = field(default_factory=lambda: np.ones(3, dtype=np.float64))
 
     @classmethod
     def from_config(cls, cfg: "Config", calib: "Calibration | None") -> "ImuCalibration":
@@ -149,6 +154,9 @@ class ImuCalibration:
         gyro_bias = _vec3(imu_json.get("gyro_bias_rad_s"), 0.0, "gyro_bias_rad_s")
         accel_bias = _vec3(imu_json.get("accel_bias_m_s2"), 0.0, "accel_bias_m_s2")
         accel_scale = _vec3(imu_json.get("accel_scale"), 1.0, "accel_scale")
+        gyro_scale = _vec3(imu_json.get("gyro_scale"), 1.0, "gyro_scale")
+        if np.any(gyro_scale <= 0.0):
+            raise ValueError("gyro_scale must be positive")
         rot = imu_json.get("R_gun_imu")
         if rot is None:
             rot = cfg.imu.R_gun_imu
@@ -158,12 +166,12 @@ class ImuCalibration:
         if not np.allclose(R @ R.T, np.eye(3), atol=1e-3) or np.linalg.det(R) < 0:
             raise ValueError("R_gun_imu is not a right-handed rotation matrix")
         return cls(gyro_bias, accel_bias, accel_scale, R,
-                   int(imu_json.get("time_offset_ns", 0) or 0))
+                   int(imu_json.get("time_offset_ns", 0) or 0), gyro_scale)
 
     def apply(self, accel_chip: np.ndarray, gyro_chip: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """Raw chip-frame SI samples -> calibrated GUN-frame samples ((N,3) or (3,))."""
         accel = (np.asarray(accel_chip, dtype=np.float64) - self.accel_bias_m_s2) * self.accel_scale
-        gyro = np.asarray(gyro_chip, dtype=np.float64) - self.gyro_bias_rad_s
+        gyro = (np.asarray(gyro_chip, dtype=np.float64) - self.gyro_bias_rad_s) * self.gyro_scale
         return accel @ self.R_gun_imu.T, gyro @ self.R_gun_imu.T
 
 

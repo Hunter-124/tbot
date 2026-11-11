@@ -178,3 +178,21 @@ render_color = false
 gyro_noise_dps = 0.05
 swing_lag_s = 0.12            # simulated shooter: pursuit lag of the swing behind the clay
 swing_noise_deg = 0.15
+
+[calrig]                      # CalRig B yaw table (docs/CALRIG.md, firmware contract docs/CALRIG_PROTOCOL.md)
+port = "/dev/ttyACM0"         # Arduino Uno USB serial; opening it resets the board (zero is lost, see CALRIG.md)
+baud = 115200
+microsteps = 16               # must equal the firmware MICROSTEPS (checked against INFO usteps=)
+steps_rev = 200               # 1.8 deg motor [INFERENCE: check the label]
+ratio = 1.0                   # direct drive: the yaw arm clamps the motor shaft
+vmax_dps = 45.0               # default table rate limit (deg/s); the firmware clamps to its 90 deg/s cap
+amax_dps2 = 20.0              # default table acceleration (deg/s^2); firmware cap 60 [INFERENCE: ~0.4 kg m^2 gun on ~0.35 N m]
+vmax_cap_dps = 90.0           # host-side refusal limits, mirror the firmware compile-time caps
+amax_cap_dps2 = 60.0
+soft_limit_deg = 90.0         # host and firmware soft limits (+-)
+hard_limit_deg = 100.0        # compiled into the firmware; no mechanical stop on candidate B
+telem_hz = 200                # firmware telemetry rate, checked against INFO telem_hz=
+heartbeat_ms = 250            # HB period while connected (firmware watchdog is 1000 ms)
+home_dir = 1                  # +1 / -1: direction in which the hall edge is approached
+home_rate_dps = 5.0           # HOME seek rate; the stop distance after the edge is v^2 / (2 amax)
+run_root = "runs/calrig"      # run directories <run_root>/<YYYYmmdd-HHMMSS>_<procedure>/ (relative to software/)

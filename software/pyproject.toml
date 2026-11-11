@@ -12,6 +12,7 @@ dependencies = []
 
 [project.optional-dependencies]
 laptop = ["numpy>=1.24", "opencv-python>=4.6"]
+calrig = ["pyserial>=3.4"]    # CalRig B serial link (Pi: sudo apt install python3-serial); --sim needs nothing
 pi = ["smbus2>=0.4"]          # picamera2 and lgpio: apt install python3-picamera2 python3-lgpio
 test = ["pytest>=7"]
 

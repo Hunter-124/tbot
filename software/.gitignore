@@ -6,3 +6,4 @@ config/local.toml
 pi-pulls/
 /calib/
 *.pstats
+/runs/

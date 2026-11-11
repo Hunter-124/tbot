@@ -11,7 +11,7 @@ Assembly: `asm/tbot_full.step+` (front module + MG996R trigger set + harness). F
 
 F1. Heat-set inserts (iron square to the bore, flush or 0.2 mm below):
     - nose_clamp_L: 2 × M3 on the Y = 0 split face (cross screws).
-    - nose clamps: 4 × M3 in the X 431.85 rear face (MI-1, 2 per half: floor (|Y| 12.5, Z 2.0), jaw (|Y| 19.5, Z 12.0)).
+    - nose clamps: 4 × M3 in the X 426.3 rear face (MI-1, 2 per half: floor (|Y| 12.5, Z 2.0), jaw (|Y| 19.5, Z 12.0)).
     - nose_clamp_R: 2 × M3 for the IMU.
     - carrier_L: 3 × M3 (1 belly at (433, +21.5); 2 in the rear-wall cover posts, along −Y at (X 433.4, Z 30.0 / −11.0))
       and 4 × M2 in the Pi standoff blocks (along −Y at X 440.35 / 498.35, Z 36.5 / −12.5).
@@ -27,8 +27,8 @@ F3. Pi: solder pins 2 / 6 (5 V pair), 1 / 3 / 5 / 9 (IMU), 11 / 14 (arming), 12 
 F4. Splices, heat-shrunk: SPL = jack pigtail onto the pack leads (pack side of the lever connector); S1 = 12 V from the
     lever −Y end to both buck feeds; B_R = signal bundle → IMU 4 + 3-wire exit.
 F5. IMU: GY-521 flat in the nose_clamp_R floor pocket, components up, header edge to +Y; 2 × M3 × 6 SHCS. Board axes =
-    gun axes (layout.md "IMU"). Lay the IMU bundle aft along the raised trough (roof Z 1.6) and out of the X 431.85 rear
-    mouth before the bands go on — B1 closes the bottom of the trough.
+    gun axes (layout.md "IMU"). Lay the IMU bundle aft along the raised trough (roof Z 1.6) and down into the belly cavity at the trough's rear end (X 441.4, just ahead of B1; rev Z: the trough no longer runs over B1 or out of the rear
+    face) before the bands go on.
 
 ### On the gun
 
@@ -42,7 +42,7 @@ F8. Bands (SAE #44), directly on the clamp, before the carriers: 0.5 mm tape on 
     each clamp, thread the free end over the barrel under the vent rib, down the gun-left clamp groove, under the clamp
     in its underside groove (B1 under the trough with the IMU bundle inside; B2 under the nose saddle rib), up the
     gun-right groove and back over the barrel into the housing; housing on the gun-right upper run. B1 sits flush with
-    the rear groove behind the 1.8 lip (X 433.95..446.65, 2.1 ahead of the rear face). Snug both, check the bands lie fully in the grooves and the halves still butt
+    the rear groove behind the 1.8 lip (X 428.4..441.1, 2.1 ahead of the rear face; it must pass through the rib window behind the post, not over a post). Snug both, check the bands lie fully in the grooves and the halves still butt
     at Y = 0, tighten, trim the tail and deburr. Cross screw #1 stays reachable; loosen B2 to re-torque cross screw #2.
 F9. carrier_L / carrier_R onto the clamp rear face over the banded clamp: 4 × M3 × 10 (MI-1), driven +X from behind
     under the forend. The carrier inner walls sit 0.6 outside the bands and do not touch them.

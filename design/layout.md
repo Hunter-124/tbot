@@ -36,9 +36,20 @@ specified at rest unless a motion angle is stated. Dimensions marked
   values are caliper readings: just ahead of the forend, and at the tip. The
   IMG_0462 scan puts the muzzle at X 819 ±2, 8 longer than the earlier
   model's 811. The forend-nose barrel underside is Z 51.25. Vent-rib plate
-  Y ±3.5 is Z 74.6..76.6 and runs to X 819. Windows start near X 295, with
-  posts approximately every 45. The fibre sight is X 807..817, Z 80.2.
-  Rib-window stations remain assumptions to check.
+  Y ±3.5 is Z 74.6..76.6 and runs to the muzzle. The fibre sight is X 807..817,
+  Z 80.2.
+- Vent-rib posts (rev Z, measured from the user's ruler photo of 2026-11-09):
+  posts 17.3 long, windows 56.1, pitch 73.4. Scale is 147 px/in from the steel
+  rule. Position is anchored on the forend-nose top edge, and the magazine-cap
+  face cross-checks within 0.4. In this (module/layout) frame the posts start at
+  X 224.9, 298.3, 371.7, 445.1, 518.5, 591.9, 665.3, 738.7 and 812.1 (last one
+  to the muzzle). In `gun_body` / the assembly, which sit +10 in X from this
+  frame, they are `RibPost1..9` at 234.9, 308.3, ... 822.1. Only the three
+  posts near the forend (371.7, 445.1, 518.5 here) are in the photo; the
+  others repeat the pitch. Estimate ±2. The window ends are rounded, so at the
+  barrel surface a post can be up to about 2 longer than modelled. The
+  photo also suggests the window is 3..4 tall rather than the modelled 1.4;
+  the plate height was kept (worst case for the band).
 - Forend nominal span X 178.5..484. Its side-profile points (X,Z) are
   (178.5,10.5), (260,9), (440,8.5), (462,9.5), (469.5,10), then the sloping
   nose to (484,55), (330,58.5), (178.5,62). Plan half-widths are 19.0 at
@@ -111,7 +122,8 @@ rotation about +Y is pull. Model break is 3.5 at contact (7.6°), hard stop
 The printed module occupies X 396.0..531.6 and Y -51.8..+50.4 (102.2 wide;
 rev Y moved the battery-lobe flank out 1.6 and its front forward 7.6 for the
 battery hold-down, the Pi lobe is unchanged). The Pi
-lobe and the clamp start at X 428; only the battery lobe continues rearward
+lobe starts at X 428 and the nose clamps and carrier MI-1 blocks at X 422.45
+(rev Z); only the battery lobe continues rearward
 to X 396.0 as the buck bay (rev U). The lobes are Z -21.2..42.8, with the
 belly keel reaching Z -22.4 (65.2 overall). Rev Y: only the battery lobe stands
 ahead of the clamp nose (cover_R X 531.6, carrier_R lobe X 530.0, still behind the
@@ -147,15 +159,19 @@ was not enlarged for band size).
 
 ### `nose_clamp_L` and `nose_clamp_R`
 
-- Split at Y 0; L is gun-left and R gun-right. Main body begins X 431.85 (rev Z:
-  a 8.15 rear collar so B1 has a rear retaining lip), ends at the camera nose
+- Split at Y 0; L is gun-left and R gun-right. Main body begins X 426.3 (rev Z:
+  a 13.7 rear collar so B1 sits in the rib window behind the post at X 445.1
+  and has a rear retaining lip), ends at the camera nose
   X 524.2, top Z 40 and nose bottom Z -10.2. Outside flank is |Y| 25.6 (24.2 in
   the band grooves). The rear corners are R1.6 (the other corners R3) so the lip
   keeps its thickness at the bottom. Side wall over the forend is at least 3.9
   including the 0.3 gun gap; 2.7 remains from the MI-1 jaw-insert bore to the
-  B1 groove floor.
+  B1 groove flank and 1.6 from the floor-insert bore to the B1 groove floor.
+  Where B1 crosses the clamp top (Z 38..40), the wall between the gun cavity
+  and the band tangent line is only 0.72. The forend is wider there, but that
+  wall is backed by the liner, so it is in compression only.
 - Band seats (rev Z): all clamp material outside the band inner path is removed
-  over X 433.65..446.95 (B1; a 1.8 lip X 431.85..433.65 closes the rear and the
+  over X 428.1..441.4 (B1; a 1.8 lip X 426.3..428.1 closes the rear and the
   body closes the front, so the channel has a wall on both sides) and
   X 501.85..515.15 (B2). Grooves are 1.4 deep on the flanks (|Y| 24.2) and
   B1 underside Z -1.6 (B2 underside kept at Z -9.2, 1.0 deep, to leave a skin
@@ -171,13 +187,13 @@ was not enlarged for band size).
   previously 2.1) around the camera pocket.
 - Each gun cavity is the forend loft offset 0.8 in-plane (rev Z; was 1.2: the
   printed clamp showed visible gaping). Sections are the rev V sections moved
-  0.4 inward along their normals, plus a new first section at X 431 (linear
-  extension of the 435/440 sections) for the rear collar. Offset section
+  0.4 inward along their normals, plus a first section at X 425.3 (linear
+  extension of the 431/440 sections) for the rear collar. Offset section
   (X: Ro, Zc), approximate: 435: 20.99, 28.69; 440: 20.55, 28.25; 445: 20.05,
   28.75; 492: 19.10, 28.30. Cradle-floor low points are Z 7.7 at X 440 (the
   forend underside is kept, raised 0.4). The nose bulkhead rear plane is
   X = 467.449 + 0.301333 × (Z + 0.346).
-- Gun-to-cavity gap over the gripped forend (X 431.85..476, flanks) is 0.76..0.80
+- Gun-to-cavity gap over the gripped forend (X 426.3..476, flanks) is 0.76..0.80
   by construction (rev V: 1.16..1.20 against the rev V gun_body; not re-measured
   against the real forend). Rev U's cavity gave a median 1.95 at
   X 440..452, too loose for the liner. At X 464..476 it went down to 0.03,
@@ -208,11 +224,15 @@ was not enlarged for band size).
   L has two D4.0 × 6.5 M3 insert bores opening at the split face. Screw #1 is
   clear of B1 (7.0 from the B1 groove edge to the bore); screw #2 sits under B2 (loosen B2
   to re-torque it).
-- MI-1 is the rear face at X 431.85 (rev Z; was X 440): four M3 insert bores
-  D4.0 × 6.5 (7.5 deep from X 430.85) along X, at (Y ±12.5, Z 2.0) and
+- MI-1 is the rear face at X 426.3 (rev Z; was X 440): four M3 insert bores
+  D4.0 × 6.5 (7.5 deep from X 425.3) along X, at (Y ±12.5, Z 2.0) and
   (Y ±19.5, Z 12.0). Four M3 × 10 countersunk screws enter from the carriers'
-  X 428 face (M3 × 18 no longer fit: the carrier MI-1 block is now 3.85 thick,
-  2.85 on carrier_R, and the insert bore ends at X 438.4).
+  X 422.45 face (both carrier MI-1 blocks are X 422.45..426.3, 3.85 thick; the
+  insert bore ends at X 432.8). Behind the clamp the carrier_L block joins its
+  lobe through `MI1RearWeb` (X 422.45..429, Y 25.8..28.5, Z -2..37, R1.5 root
+  fillet). The carrier_R block runs into the buck-bay inner wall (profile to
+  Y -26.8), and `ClampCollarRelief` clears the old block region
+  X 426.3..431.9.
 - Front carrier screw (one per side): M3 × 8 ISO 10642 countersunk along ∓Y at
   (X 495.5, Z 3.2), between the IMU window (Z 8..12) and the underside, pocket edge 2.45 clear of
   the B2 groove edge (X 501.85). The carrier inner wall carries a D7.0 × 1.0 spigot
@@ -224,11 +244,11 @@ was not enlarged for band size).
   Features: carrier `FrontClampSpigot` + `FrontClampCountersunkM3`; clamp
   `FrontCarrierSpigotSeat` + `FrontCarrierM3Insert`. Checked: assembly interference
   clear; verify_battery pass on all four parts. Not tested: screw pull-out or recoil load.
-- The underside trough is |Y| ≤ 8.5. Its roof is Z 1.6 over X 430.85..459.0 (open
-  at the new rear face X 431.85) so
-  the IMU bundle runs above the B1 band (centre Z -0.3; 3.2 between the band
-  and the roof; 0.9 web to the screw #1
-  insert bore); it is Z -3..-0.8 at X 500..514.5. The floor pocket between
+- The underside trough is |Y| ≤ 8.5. Its roof is Z 1.6 over X 441.4..459.0
+  (rev Z: it starts at the front edge of the B1 groove and no longer runs over
+  B1 or out of the rear face, so the collar and B1 lip are solid). The IMU
+  bundle comes up from the belly cavity into the trough ahead of B1 (0.9 web to
+  the screw #1 insert bore). The trough is Z -3..-0.8 at X 500..514.5. The floor pocket between
   X 459..500 accommodates the IMU and leads. There are no integral wire-tie
   mounting points.
 
@@ -424,9 +444,9 @@ up to approximately 2 and the lens-screw heads are approximately D3.8.
 ### Hose clamps B1 and B2
 
 - Two SAE #44 worm-drive clamps (1/2" band, nominal 59..83 working diameter;
-  check the actual brand's range), 12.7 × 0.6 band. B1 band X 433.95..446.65
-  (rev Z: moved 6.35 = 0.25" back; it was X 440.3..453.0 and landed on a real
-  rib post);
+  check the actual brand's range), 12.7 × 0.6 band. B1 band X 428.4..441.1
+  (rev Z: 11.9 back from the original X 440.3..453.0, which landed on the real
+  rib post at X 445.1..462.4; 0.25" back was not enough, see "gun_body");
   B2 band X 502.15..514.85. Worm housings (17.0 × 7.0 + flanges) are on the
   gun-right upper straight run, 7.4 down the run from the barrel tangent;
   housing to lobe tops (Z 42.8) at least 2.5. Trim and deburr the tail after
@@ -445,15 +465,16 @@ up to approximately 2 and the lens-screw heads are approximately D3.8.
   is 0.236 in the model. With the calipered barrel, sleeve radius is about
   11.7 at B1 and 11.26 at B2. That leaves B2's R 11.764 barrel arc about 0.5
   slack radially, which band tension takes up, so no band change is needed.
-  The rib posts in `gun_body` (every 45, the first at X 440..445 in the
-  assembly frame) are placeholders and do not match the real gun: the old B1
-  position hit a real post and the real gap needs B1 either 0.25" back (done) or
-  1.25" forward. In the model B1's rear edge overlaps the placeholder post
-  (X 443.95..445.0 in the assembly frame, 4.5 mm³): expected, not a real
-  collision. Forward was rejected: it puts B1 across the IMU header pins
-  (X 474.2..492.0) and just above buck #1. Replace the placeholder posts with
-  measured positions and confirm both 12.7-wide bands pass through the real rib
-  windows.
+  Rib windows (rev Z, from the measured posts): B1 sits in the window
+  X 389.0..445.1 with 4.0 to the post ahead. B2 sits in the window
+  X 462.4..518.5 with 3.65 to the post ahead and 39.8 behind. Groove play
+  (0.3 each side) leaves at least 3.7 (B1) / 3.35 (B2) in the worst groove
+  position.
+  B1 forward (1.25") would centre it in B2's window. It was rejected because
+  B1 would pass through the IMU header pins (X 474.2..492.0) and buck #1, which
+  sit 1 apart in Z under the clamp. If the real post edge at the barrel turns
+  out closer than 2, move B1 further back. That means moving the collar,
+  carrier MI-1 blocks and band ref together (same features as rev Z).
 
 ### Electrical architecture and safety
 
@@ -693,8 +714,9 @@ rev T, and carrier_R, cover_R, carrier_L and belly_cover changed again in
 rev U. Re-slice and re-check every front-module print before printing.
 **Rev U print orientation: carrier_R's two rear faces are no longer one
 plane.** Print it +X with the buck-bay rear face (X 396) on the bed. The
-inboard MI-1 section (MI-1 block, rear tray boss and chin, X 428..440)
-then starts 32 above the bed: add support under its X 428 face only
+inboard MI-1 section (MI-1 block, rear tray boss and chin; rev Z: the block
+is now X 422.45..426.3) then starts about 26 above the bed: add support under
+its X 422.45 face only
 (approximately 400 mm², including the two MI-1 countersinks). The bulkhead
 bridges three sides. In that orientation the buck #2 posts are 3.0
 horizontal cantilevers and the capacitor clip is a horizontal C-ring rooted
@@ -728,34 +750,47 @@ The other front-module print files predate rev U and must be re-sliced before pr
 - Rev Z (hose-clamp fit, from the first print): the printed bands bowed out of
   their channels at the bottom corners (R3 path corners), B1 landed on a real
   rib post, and the clamp-to-forend gap showed. Changes:
-  - `nose_clamp_L/R`: rear collar to X 431.85 (the body was X 440..); B1 seat
-    X 433.65..446.95 with a 1.8 rear lip; flank grooves 1.4 deep (|Y| 24.2), B1
+  - `nose_clamp_L/R`: rear collar to X 426.3 (the body was X 440..); B1 seat
+    X 428.1..441.4 with a 1.8 rear lip; flank grooves 1.4 deep (|Y| 24.2), B1
     underside Z -1.6, B2 underside kept at Z -9.2; R8 bottom / R6 top band-path
     corners on both seats (`Band1SeatProfile` / `Band2SeatProfile`, still fully
     defined); cavity sections moved 0.4 inward (offset 1.2 -> 0.8) with a new
-    section at X 431; MI-1 bores, teardrops, trough and top/band chamfers moved
-    to the new rear face; rear corners R1.6. The obsolete `RearFlankEdgeR0p8`
+    first section at X 425.3; MI-1 bores, teardrops and top/band chamfers moved
+    to the new rear face; trough now starts at X 441.4; rear corners R1.6. The obsolete `RearFlankEdgeR0p8`
     (rear-rim round of the old open groove) was deleted.
-  - `carrier_L/R`: MI-1 block and belly shoulder pad now end at the new rear face
-    (X 431.85); a `TrayBossClampRelief` cut lowers the tray boss top to Z -3.4
-    for X > 431.85 so it stays clear of the clamp collar and B1; MI-1 block
-    fillet targets moved. MI-1 screws are now M3 × 10.
+  - `carrier_L/R`: MI-1 block and belly shoulder pad moved behind the clamp
+    (X 422.45..426.3); carrier_L `MI1RearWeb` ties the block to the lobe,
+    carrier_R `ClampCollarRelief` removes the old block region; a
+    `TrayBossClampRelief` cut lowers the tray boss top to Z -3.4 for X > 426.3
+    so it stays clear of the clamp collar and B1; MI-1 block fillet targets
+    moved. MI-1 screws are now M3 × 10.
+  - `belly_cover`: the rear-closure tongue (|Y| ≤ 8.6 up to Z 5.3) is gone, since
+    the clamp collar now fills that space. The closure wall is Y ±17.3,
+    Z -12..-3.4, and `SignalExitHoleProfile` was rebuilt without its stale
+    external reference.
+  - `refs/gun_body`: `RibPost1..9` placed from the measured photo (see
+    "gun_body"); three placeholder posts deleted.
   - `refs/hose_clamp_rear` / `hose_clamp_front` (`band_B1` / `band_B2`): band
-    path and worm housing rebuilt on the new path; B1 sits at X 433.95..446.65.
-  - Checks run: `verify_battery` passes on nose_clamp_L/R, carrier_L/R and both
-    band refs. Front-module threshold interference (18 components incl.
-    gun_body): only gun_body <-> band_B1 (4.5 mm³, the placeholder rib post, see
-    "Hose clamps") and belly_cover <-> xl4015_pi (0.88 mm³, the known solder
-    envelope). Exact clearances: bands to carriers 1.0, band_B1 to belly 4.35,
-    band_B2 to belly 6.19, B1 / B2 to the IMU 25.9 / 11.4; gun_body to the
-    clamps 0.50 (the cap-to-front-wall design gap). `dfm_check` (FDM, Ender 3)
-    min wall 0.898 (L) / 0.906 (R), unchanged from 0.899 / 0.902 before, but
-    thin-wall area rose (L 292 -> 363, R 302 -> 330 mm²) and knife-edge area
-    (L 73 -> 126, R 76 -> 104 mm²; worst 0.63 at the B1 groove rear-wall corner).
-    The existing fail rows (min wall, overhang, bridges, min feature, sharp
-    internal corners, min pin) remain.
+    path and worm housing rebuilt on the new path; B1 sits at X 428.4..441.1.
+  - Checks run (final): `verify_battery` passes on nose_clamp_L/R, carrier_L/R,
+    belly_cover and band_B1. `gun_body` fails only feature_attachment, on its
+    pre-existing `SafetyBolt` cylinder. Front-module threshold interference
+    (19 components incl. gun_body and the IMU) has no band or clamp overlaps.
+    The only pair is carrier_R <-> xl4015_servo (bay wall, X 402..421): the bay
+    geometry is identical to the pre-rev-Z backup, so this predates rev Z. Exact
+    clearances: gun_body to bands 0.236 (rib plate), bands to carriers 0.9..1.0,
+    band_B1 to belly 1.2, band_B2 to belly 6.10, B1 / B2 to the IMU 31.4 / 11.6,
+    gun_body to clamps 0.50.
+  - `dfm_check` (FDM, Ender 3), clamp L / R: min wall 0.722 / 0.772 (was
+    0.898 / 0.906). The new minimum is the cavity-to-band sliver where B1
+    crosses the clamp top. Knife edges 0.616 sit at the B1 rear lip by the
+    floor-insert bore, area L 154 / R 120 mm². The existing fail rows (min
+    wall, overhang, bridges, min feature, sharp internal corners, min pin)
+    remain.
   - Not done: print files were not regenerated; the 0.8 gap and the band fit
-    were not tested on the real gun; the real rib post positions are unknown.
+    were not tested on the real gun. Rib posts come from one photo (±2), and
+    the harness study was not re-routed for the IMU bundle's new entry ahead
+    of B1.
 
 - Rev X (housing polish, no layout or envelope change): added edge rounds and
   root fillets on carrier_L, carrier_R, cover_L, cover_R, belly_cover and
@@ -795,7 +830,7 @@ The other front-module print files predate rev U and must be re-sliced before pr
   Covers are intended to print front-face-down; cover_L at that orientation still
   shows 120 mm2 overhang / 53 mm3 support in `dfm_check`. Print files not regenerated.
 - Rev Y rear closure: `belly_cover` gets a rear closure wall (X 428..429.6, |Y| <= 17.3,
-  Z -12..-3.4, plus a tongue |Y| <= 8.6 up to Z 5.3 between the carrier MI-1 blocks) with one
+  Z -12..-3.4; its tongue |Y| <= 8.6 up to Z 5.3 was removed in rev Z) with one
   D5.2 wire hole at (Y 14.3, Z -8.2) for the 3-wire signal exit; `carrier_L/R` get
   `RearGapFill` blocks (X 428..433, |Y| 17.5..26.3, Z -11..-1.8) over the tray bosses. The servo
   pair still leaves through the D4.8 bay hole. Convex rim rounds on the new wall's top edge

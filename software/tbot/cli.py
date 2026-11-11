@@ -26,6 +26,7 @@ COMMANDS: dict[str, tuple[str, str]] = {
     "sensitivity": ("tbot.tools.sensitivity", "error budget: miss vs latency, range, PWM jitter for the MG996R build"),
     "tune": ("tbot.tools.tune", "offline parameter search over the synthetic closed-loop evaluation"),
     "explain": ("tbot.tools.explain", "why did (or didn't) it fire: per-frame decision funnel over a run"),
+    "calrig": ("tbot.tools.calrig", "CalRig B yaw table: info, home, jog, run <procedure>, estop, analyze (unloaded gun only)"),
 }
 
 

@@ -229,6 +229,26 @@ class PathsConfig:
 
 
 @dataclass
+class CalrigConfig:
+    port: str
+    baud: int
+    microsteps: int
+    steps_rev: int
+    ratio: float
+    vmax_dps: float
+    amax_dps2: float
+    vmax_cap_dps: float
+    amax_cap_dps2: float
+    soft_limit_deg: float
+    hard_limit_deg: float
+    telem_hz: int
+    heartbeat_ms: int
+    home_dir: int
+    home_rate_dps: float
+    run_root: str
+
+
+@dataclass
 class SimConfig:
     scenario: str
     seed: int
@@ -263,6 +283,7 @@ class Config:
     record: RecordConfig
     paths: PathsConfig
     sim: SimConfig
+    calrig: CalrigConfig
 
     def to_dict(self) -> dict:
         return dataclasses.asdict(self)

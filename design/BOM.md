@@ -24,7 +24,7 @@ is obsolete (no chin since rev S); do not print it.
 | nose_clamp_L | −Y, flank down | 37.0 / 3.7 | G-code pass; not print_ready only for the MI-1/IMU insert-bore teardrops (8.7 mm² model overhang) |
 | nose_clamp_R | +Y, flank down | 38.4 / 4.0 | same (16.8 mm²) |
 | carrier_L | +X, rear face down | 27.9 / 4.1 | G-code warn (9.2 mm air run, < 10); model overhang on the Pi-standoff chins |
-| carrier_R | +X, **buck-bay rear face (X 396) down** (rev U) | 24.3 / 3.7 | re-slice: support under the MI-1 section's X 428 face (~400 mm², 32 mm up) and, since rev Y, under the battery hold-down A post, B boss and C block (~194 mm², C's tree support stands ~92 mm inside the open battery cavity) |
+| carrier_R | +X, **buck-bay rear face (X 396) down** (rev U) | 24.3 / 3.7 | re-slice: support under the MI-1 block's X 422.45 face (rev Z; ~26 mm up) and, since rev Y, under the battery hold-down A post, B boss and C block (~194 mm², C's tree support stands ~92 mm inside the open battery cavity) |
 | cover_L | −Y, flank down | 15.2 / 1.6 | G-code warn (8.1 mm air run); counterbore roofs flagged |
 | cover_R | +Y, flank down | 17.8 / 1.9 (rev R) | rev Y: flank moved out 1.6 (whole length) and front +7.6; not re-sliced |
 | belly_cover | +Z, floor down | 21.5 / 2.3 | G-code pass; 0.3 mm skin under the blind buck #1 pilots is intended |
@@ -69,10 +69,10 @@ Pi bores are one feature each in carrier_L (`PiM2Insert_*`).
 
 | Qty | Item | Where |
 |---|---|---|
-| 27 | M3 heat-set insert | nose_clamp_L 2 (cross screws, Y = 0 face); nose clamps 4 (MI-1, rear face X 431.85, 2 per half) + 2 (front carrier screw, 1 per half, in the flank at X 495.5, Z 3.2); nose_clamp_R 2 (IMU); carrier_L 3 (1 belly + 2 cover_L flank posts); carrier_R 8 (2 belly + 3 cover_R: bulkhead top + bottom, bay bottom-rear + 3 battery hold-down A/B/C along +Y from the Y −46.2 boss faces); servo_bracket_L 8 (U18, U28, L40, rear pad, ears RI/RO/FI/FO) |
+| 27 | M3 heat-set insert | nose_clamp_L 2 (cross screws, Y = 0 face); nose clamps 4 (MI-1, rear face X 426.3, 2 per half) + 2 (front carrier screw, 1 per half, in the flank at X 495.5, Z 3.2); nose_clamp_R 2 (IMU); carrier_L 3 (1 belly + 2 cover_L flank posts); carrier_R 8 (2 belly + 3 cover_R: bulkhead top + bottom, bay bottom-rear + 3 battery hold-down A/B/C along +Y from the Y −46.2 boss faces); servo_bracket_L 8 (U18, U28, L40, rear pad, ears RI/RO/FI/FO) |
 | 4 | M2 heat-set insert | carrier_L Pi standoff blocks |
 | 2 | M3 × 20 ISO 10642 countersunk | nose-clamp cross screws along Y at (X 456, Z 4.5) and (X 505, Z 2.6), from gun-right |
-| 4 | M3 × 10 ISO 10642 countersunk | carriers → clamp MI-1, driven +X from the X 428 face (rev Z: was M3 × 18; the clamp rear face is now X 431.85 and the insert bore ends at X 438.4) |
+| 4 | M3 × 10 ISO 10642 countersunk | carriers → clamp MI-1, driven +X from the carrier blocks' X 422.45 face (rev Z: was M3 × 18; the clamp rear face is now X 426.3 and the insert bore ends at X 432.8) |
 | 13 | M3 × 8 ISO 10642 countersunk | carrier_L / carrier_R → nose_clamp_L / R front screw, 1 per side, along ∓Y at (X 495.5, Z 3.2), head flush in the carrier inner wall (Pi / battery side; remove Pi or pack to reach it), tip 5.0 into the clamp insert; batt_retainer → carrier_R along +Y at A (447.4, Z 35.0), B (447.4, Z −13.0), C (525.55, Z 11.6), heads flush in the plate; belly → carriers from below at (433, ±21.5), (518.9, −21.5); cover_R → carrier_R vertical at (433.4, −43.5) top + bottom and (401.4, −43.75) bottom (bay); cover_L → carrier_L through the flank along −Y at (X 433.4, Z 30.0 / −11.0) |
 | 2 | M3 × 6 SHCS | GY-521 → nose_clamp_R (M3 × 10 does not fit) |
 | 3 | M3 × 25 ISO 10642 countersunk | trig_clamp_R → servo_bracket_L: U18, U28, L40; heads flush at Y −11.5 |
@@ -83,7 +83,7 @@ Pi bores are one feature each in carrier_L (`PiM2Insert_*`).
 | 4 | M2 × 5 pan head self-tapping | electronics into plastic pilots: buck #1 2, buck #2 2 (top bay-wall posts at X 400.4 / 423.1, Z 38.25) |
 | 4 | M2 × 8 pan head self-tapping | camera_cover + camera PCB → nose_clamp corner pilots (1.6 cover + 1.6 PCB, ≈ 4.8 thread engagement in the D1.7 × 6.0 pilots) |
 | 1 | M5 flat washer ISO 7089 (Ø5.3 / Ø10 × 1.0) | sling-swivel stud, between the clamp front wall and the stud eye |
-| 2 | SAE #44 worm-drive hose clamp, 1/2" (12.7) band, nominal ~59–83 mm (check the brand's range) | wrap the nose clamp directly in its grooves: B1 X 433.95–446.65 (rev Z, moved 0.25" back to clear the real rib post; path 210.8 mm = 67.1 mm eq. ID), B2 X 502.15–514.85 (226.0 mm = 71.9 mm) — trim the tail after tightening, deburr. The #56 clamps no longer fit (too large) |
+| 2 | SAE #44 worm-drive hose clamp, 1/2" (12.7) band, nominal ~59–83 mm (check the brand's range) | wrap the nose clamp directly in its grooves: B1 X 428.4–441.1 (rev Z, moved 11.9 mm back so it sits in the measured rib window, 4.0 mm behind the post; path 210.8 mm = 67.1 mm eq. ID), B2 X 502.15–514.85 (226.0 mm = 71.9 mm) — trim the tail after tightening, deburr. The #56 clamps no longer fit (too large) |
 
 ### Soft goods and wire
 

@@ -401,8 +401,8 @@ All HTTP responses are no-store; this is a trusted bench LAN, not an authenticat
 ## Calibration files (paths.calib_dir, default `software/calib/`)
 - intrinsics.json: {"model","width","height","K":[[..]],"D":[..],"rms_px","n_views","created","notes"}
 - boresight.json: {"rpy_deg":[r,p,y],"range_m","bore_pixel":[u,v],"width","height","poi_offset_rad":[yaw,pitch],"created"}
-- imu.json: {"gyro_bias_rad_s":[3],"accel_bias_m_s2":[3],"accel_scale":[3],"R_gun_imu":[[..]],"time_offset_ns",
-  "temp_c","created"} (biases in the IMU CHIP frame; time_offset_ns added to IMU timestamps)
+- imu.json: {"gyro_bias_rad_s":[3],"accel_bias_m_s2":[3],"accel_scale":[3],"gyro_scale":[3] (optional, default [1,1,1]),"R_gun_imu":[[..]],"time_offset_ns",
+  "temp_c","created"} (biases and scales in the IMU CHIP frame, gyro = (raw - bias) * gyro_scale before R_gun_imu; time_offset_ns added to IMU timestamps)
 - latency.json: {"camera":{"timestamp_offset_ns","exposure_to_user_ms":{stats}},
   "actuator":{"servo":{"cmd_to_break_ms":{stats},"cmd_to_rest_ms":{stats}},"pq12":{...},"sim":{...}},"created"}
   where {stats} = {"mean","std","p50","p95","min","max","n"}.

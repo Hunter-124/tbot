@@ -116,6 +116,7 @@ tbot calib-detector --session sessions/20261026-141230-rec --gui    # tune on re
 | `tbot hitl analyze` | Re-analyse a saved HITL run and regenerate text, JSON and HTML reports. |
 | `tbot hitl mics` | List ALSA capture devices and optionally check microphone level and capture-clock statistics. |
 | `tbot hwcheck` | Check every fitted device on the Pi (boot overlays, camera fps, IMU WHO_AM_I/rate, arming pin, PWM/H-bridge, under-voltage/throttle, temperature, calibration status); `--interactive` tests the arming button, `--json`. Never moves the trigger. |
+| `tbot calrig` | CalRig B motorised yaw table (UNLOADED gun): `info`, `home`, `jog`, `run hold\|turns\|sine\|rate\|home_check --pose ...`, `estop`, `analyze [--apply]`; `--sim` runs the whole stack with no hardware. See [docs/CALRIG.md](docs/CALRIG.md). |
 | `tbot jog` | Bench setup of the trigger actuator with the gun unloaded: find and save MG996R `rest_us`/`fire_us`, check PQ12 rod direction (`swap`); moves only while the arming button is held; saves to `config/local.toml`. |
 
 ## Repo layout
@@ -130,6 +131,7 @@ software/
     fire/      ballistics.py (pellet drag, ToF, drop, pattern), solver.py (lead, P(hit), fire/no-fire)
     imu/       mpu6050.py (I2C FIFO reader), attitude.py (complementary filter → R_wg, omega)
     hw/        gpio.py (lgpio|sim), arming.py (debounced interlock), actuator.py (servo|pq12|sim|none)
+    calrig/    CalRig B yaw table: serial driver, FakeRig simulator, recorder, procedures, analysis (docs/CALRIG.md)
     hitl/      monitor target page, timing, rig procedures, analysis, reports and simulated bench
     app/       run.py (pipeline + CLI), record.py (sessions), stream.py (MJPEG debug server), overlay.py
     tools/     calibration, latency, bench, doctor, sensitivity, tune, explain and sim-eval commands
@@ -139,6 +141,8 @@ software/
   scripts/pi_setup.sh   Raspberry Pi provisioning
   scripts/deploy.sh     laptop <-> Pi over Ethernet: push code, pull sessions/calib (docs/PROTOTYPING.md §1)
   pi-pulls/             data pulled off the Pi by deploy.sh pull (git-ignored)
+  firmware/calrig_uno/  CalRig B Arduino Uno firmware (+ wiring README)
+  runs/                 CalRig run directories (git-ignored, created on demand)
   docs/                 PREFLIGHT.md, ARCHITECTURE.md (contract), OPTICS.md, CALIBRATION.md, PROTOTYPING.md, HITL.md
 ```
 
@@ -159,6 +163,7 @@ regression on top of it — run both after changing anything in the detect → t
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — module/API contract, frames, clock, calibration file formats, safety model.
 - [docs/OPTICS.md](docs/OPTICS.md) — the mono camera and lens, what "orange" means without colour, range vs clay size in pixels, filters, exposure and focus, camera pose.
 - [docs/CALIBRATION.md](docs/CALIBRATION.md) — the ordered calibration procedure, command by command, with pass criteria.
+- [docs/CALRIG.md](docs/CALRIG.md) — CalRig B yaw table operator guide (bench safety, calibration session, applying results); contract in [docs/CALRIG_PROTOCOL.md](docs/CALRIG_PROTOCOL.md).
 - [docs/HITL.md](docs/HITL.md) — monitor-and-camera bench setup, end-to-end measurements, interpretation and IMU verification proposals.
 - [docs/PROTOTYPING.md](docs/PROTOTYPING.md) — Pi ↔ laptop (Ethernet / serial / HDMI), GPIO wiring table, hardware the software needs that is not yet on the BOM.
 - [docs/VISION_HANDOFF.md](docs/VISION_HANDOFF.md) — boundary for the vision developer: what the hardware side guarantees, plug-in points, measured open problems.
