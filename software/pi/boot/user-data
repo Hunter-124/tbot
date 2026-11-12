@@ -1,0 +1,27 @@
+#cloud-config
+# TBOT Pi 3B first boot (Raspberry Pi OS Lite trixie arm64 2026-10-06).
+# Copied onto the boot partition by software/pi/flash.ps1. Credentials: software/pi/README.md.
+hostname: tbot
+manage_etc_hosts: true
+timezone: America/New_York
+
+users:
+  - name: pi
+    groups: users,adm,dialout,audio,netdev,video,plugdev,input,gpio,spi,i2c,render,sudo
+    shell: /bin/bash
+    lock_passwd: false
+    passwd: "$6$POSqvSOORpCzHoX3$rraYsd3/PKPt2yIyvZNSiepOrmQnRnM4PHIBwwX0v7sbbTlV6p.6RCh0fS.38pxEurknfHQZ88.MR8zLcUrFD/"
+    ssh_authorized_keys:
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFNQQbEZ0NFn9knbaku0NohspZyw70/XxP3/82n6V4OI tbot-pi-access
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIENEAolBfoY6lYS/JdW/4xYvh3VwtUtwhKWDzh+2rwaB laptop-to-hunter-pc
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIH1c02raVGeHXER5XJdqTKV+Nz3p2iATyJwPd1F7NwAR hunter@hunter-pc
+    sudo: ALL=(ALL) NOPASSWD:ALL
+
+enable_ssh: true
+ssh_pwauth: true
+
+# Unpack the TBOT software staged on the boot partition into ~/TBOT/software.
+runcmd:
+  - [mkdir, -p, /home/pi/TBOT]
+  - [tar, -xzf, /boot/firmware/tbot-software.tar.gz, -C, /home/pi/TBOT]
+  - [chown, -R, "pi:pi", /home/pi/TBOT]
