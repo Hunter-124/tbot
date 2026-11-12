@@ -27,13 +27,19 @@ try {
     Say "writing $($img.Name) ($([math]::Round($img.Length/1MB)) MB)"
     $src = [IO.File]::OpenRead($img.FullName)
     $dst = New-Object IO.FileStream("\\.\PhysicalDrive$DiskNumber", [IO.FileMode]::Open, [IO.FileAccess]::ReadWrite, [IO.FileShare]::ReadWrite)
-    $buf = New-Object byte[] (4MB); $done = 0; $next = 0
+    # Hold back the first 4 MB (the partition table) and write it last: as soon as Windows sees a partition
+    # table it mounts bootfs and blocks raw writes into that partition.
+    $head = New-Object byte[] (4MB); [void]$src.Read($head, 0, $head.Length)
+    [void]$dst.Seek($head.Length, [IO.SeekOrigin]::Begin)
+    $buf = New-Object byte[] (4MB); $done = $head.Length; $next = 0
     while (($n = $src.Read($buf, 0, $buf.Length)) -gt 0) {
-        if ($n % 512) { $n += 512 - ($n % 512) }  # pad the tail to a whole sector
+        if ($n % 512) { [Array]::Clear($buf, $n, $buf.Length - $n); $n += 512 - ($n % 512) }  # pad the tail to a whole sector
         $dst.Write($buf, 0, $n); $done += $n
         if ($done -ge $next) { Say ("  {0:N0} / {1:N0} MB" -f ($done/1MB), ($img.Length/1MB)); $next += 256MB }
     }
-    $dst.Flush(); $dst.Close(); $src.Close()
+    $dst.Flush()
+    [void]$dst.Seek(0, [IO.SeekOrigin]::Begin); $dst.Write($head, 0, $head.Length); $dst.Flush()
+    $dst.Close(); $src.Close()
     Say "write complete"
 
     # Read back the first 64 MB and compare.
