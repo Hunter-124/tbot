@@ -1,7 +1,7 @@
 # Integration status (handoff)
 
 Living notes on bench integration of the real rig: what is calibrated, what is still open, and where the
-per-rig values live. Last updated 2026-11-15. The Pi keeps its own `config/local.toml` and `calib/`
+per-rig values live. Last updated 2026-11-15 (IMU calibrated). The Pi keeps its own `config/local.toml` and `calib/`
 (git-ignored; `scripts/deploy.sh push` never overwrites them), so the values below are a record, not
 something a checkout restores.
 
@@ -32,6 +32,8 @@ something a checkout restores.
 | exposure end -> user space | ~9.2 ms at 500 us | `latency-camera` |
 | servo command -> break | **80 ms** (estimate; written as `method: manual estimate`) | mic upper bound 160 ms; operator measurement ~80-90 ms |
 | IMU gyro bias | +0.82 / +6.45 / +0.48 deg/s | `calib-imu bias`, quiet runs only |
+| IMU axis map | `R_gun_imu` = [[0,-1,0],[-1,0,0],[0,0,-1]] (chip face-down, X/Y swapped) | `calib-imu axes --auto`, 3 hand-held poses, fit within 0.8 deg; also the default now |
+| camera-IMU time offset | -6.31 ms (added to IMU stamps) | `calib-imu sync` on a 15 s hand-held swing, correlation 0.971 |
 | boresight | pitch -1.71, yaw -4.03 deg | barrel silhouette, nominal lens; `calib-boresight --barrel` gives pitch -2.68, yaw -3.91 |
 | processing (bench) | ~24 ms p95 | `tbot bench` on the Pi |
 
@@ -52,8 +54,11 @@ measured, write it with the same structure (`actuator.servo.cmd_to_break_ms.mean
 
 ## Open items
 
-1. IMU: axis map (`calib-imu axes`, three poses) and camera-IMU time offset (`calib-imu sync`, needs a
-   recorded swing). `R_gun_imu` is the layout's identity until then.
+1. **Camera connector (blocker for the range):** during the hand-held sync swing the camera stopped
+   ~15 s in (libcamera "check that your camera sensor connector is attached securely") and the Pi
+   rebooted shortly after. Reseat/secure the CSI ribbon at both ends and strain-relieve it, then prove it
+   with a long recording while swinging hard. IMU calibration itself is done (axes + sync); redo
+   `calib-imu bias` at the range temperature (z drifted 0.48 -> 0.84 deg/s between 24 C and 22 C).
 2. Lens intrinsics (`tbot board`, `calib-intrinsics`), then re-run `calib-boresight --barrel` on a full
    1280x800 still: the pitch disagreement above is the nominal lens model.
 3. Detector thresholds and the static mask on real sky footage (`tbot record`, `calib-detector`): sky
