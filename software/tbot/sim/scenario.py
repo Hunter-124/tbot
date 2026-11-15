@@ -26,7 +26,7 @@ import numpy as np
 
 from tbot.config import Config
 
-__all__ = ["Scenario", "SCENARIOS", "make_scenario"]
+__all__ = ["Clay", "Debris", "Scenario", "SCENARIOS", "make_scenario"]
 
 G_MPS2 = 9.80665
 AIR_DENSITY_KG_M3 = 1.225
@@ -58,6 +58,17 @@ _RAMP_S = 0.12  # smooth build-up of the pursuit gain (keeps omega continuous at
 _LEAD_RATE = 0.50
 _MAX_LEAD_S = 0.45
 _MAX_EL_RAD = math.radians(85.0)  # the simulated shooter never points straight up
+# Multi-clay engagements (doubles): the shooter pursues one clay at a time, in launch order. He leaves a
+# clay when it breaks or when he gives up on it _ENGAGE_TIMEOUT_S after starting on it, then, after
+# _REACTION_S, blends his aim point onto the next unbroken clay over _SWITCH_S (keeps omega continuous).
+_ENGAGE_TIMEOUT_S = 0.9  # [INFERENCE] a skeet/trap shooter takes the first of a pair within ~0.4-0.8 s
+_SWITCH_S = 0.30  # [INFERENCE] aim-point transfer time between the two targets of a pair
+
+# Debris of a broken clay: a handful of fragments that leave the break point with the clay's velocity
+# plus a random spread, slow down quickly (linear drag, time constant _DEBRIS_TAU_S) and fall.
+_DEBRIS_TAU_S = 0.5  # [INFERENCE] small, flat, light pieces lose their speed within ~0.5 s
+_DEBRIS_SIZE_FRAC = (0.15, 0.40)  # fragment size as a fraction of the clay diameter [INFERENCE]
+_DEBRIS_LIFE_FRAC = (0.7, 1.3)  # per-fragment spread of the visible lifetime around debris_life_s
 
 
 # ------------------------------------------------------------------------------------- interpolation
@@ -285,6 +296,11 @@ def _swing_curves(duration_s, launch_t_s, hold_az, hold_el, clay: _Curve | None,
         s = np.clip((t - launch_t_s - _REACTION_S) / _RAMP_S, 0.0, 1.0)
         gain = (s * s * (3.0 - 2.0 * s)) / max(lag_s, 1e-3)
 
+    return _pursue(n, hold_az, hold_el, az_t, el_t, gain, w_az, dw_az, w_el, dw_el)
+
+
+def _pursue(n, hold_az, hold_el, az_t, el_t, gain, w_az, dw_az, w_el, dw_el) -> tuple[_Curve, _Curve]:
+    """First-order pursuit of the aim angles (Heun steps) plus the wobble, as C1 curves."""
     y_az = np.empty(n, dtype=np.float64)
     d_az = np.empty(n, dtype=np.float64)
     y_el = np.empty(n, dtype=np.float64)
@@ -308,10 +324,131 @@ def _swing_curves(duration_s, launch_t_s, hold_az, hold_el, clay: _Curve | None,
     return _Curve(0.0, _DT_S, y_az, d_az), _Curve(0.0, _DT_S, y_el, d_el)
 
 
+def _aim_dirs(t: np.ndarray, clay: _Curve, t_engage_s: float, lag_s: float) -> np.ndarray:
+    """Unit aim directions of the swing-through on one clay engaged at t_engage_s (see _swing_curves)."""
+    tau = np.clip(-lag_s + (t - t_engage_s - _REACTION_S) * _LEAD_RATE, -lag_s, _MAX_LEAD_S)
+    p = clay.value(t + tau + lag_s)
+    r = np.linalg.norm(p, axis=1)
+    r = np.where(r < 1e-6, 1e-6, r)
+    return p / r[:, None]
+
+
+def _engagements(clays: list["Clay"], broken: dict[int, float], duration_s: float) -> list[tuple[float, int]]:
+    """Which clay the simulated shooter pursues from when: [(t_engage_s, clay index), ...].
+
+    He starts on clay 0 at its launch and leaves the clay he is on when it breaks or _ENGAGE_TIMEOUT_S
+    after he started on it, whichever comes first, for the next clay (in index order) that is neither
+    broken by then nor already gone. With no such clay he stays on (follows through) the last one.
+    """
+    if not clays:
+        return []
+    cur = 0
+    t_eng = float(clays[0].launch_t_s)
+    out = [(t_eng, 0)]
+    while True:
+        t_leave = min(broken.get(cur, math.inf), max(t_eng, clays[cur].launch_t_s) + _ENGAGE_TIMEOUT_S)
+        if t_leave >= duration_s:
+            return out
+        nxt = None
+        for j in range(cur + 1, len(clays)):
+            if broken.get(j, math.inf) <= t_leave or t_leave >= clays[j].visible_until_s:
+                continue
+            nxt = j
+            break
+        if nxt is None:
+            return out
+        cur, t_eng = nxt, t_leave
+        out.append((t_eng, cur))
+
+
+def _swing_curves_multi(duration_s, hold_az, hold_el, clays: list["Clay"], engagements, lag_s: float,
+                        wobble: tuple[_Curve, _Curve] | None, static: bool) -> tuple[_Curve, _Curve]:
+    """Bore azimuth/elevation pursuing several clays in turn (the multi-clay form of _swing_curves)."""
+    n = int(round(duration_s / _DT_S)) + 1
+    t = np.arange(n, dtype=np.float64) * _DT_S
+    if static or wobble is None:
+        zeros = np.zeros(n, dtype=np.float64)
+        return (_Curve(0.0, _DT_S, np.full(n, hold_az), zeros),
+                _Curve(0.0, _DT_S, np.full(n, hold_el), zeros))
+    wob_az, wob_el = wobble
+    w_az, dw_az = wob_az.value(t), wob_az.deriv(t)
+    w_el, dw_el = wob_el.value(t), wob_el.deriv(t)
+
+    t0, i0 = engagements[0]
+    d = _aim_dirs(t, clays[i0].curve, t0, lag_s)
+    for t_sw, j in engagements[1:]:
+        s = np.clip((t - t_sw - _REACTION_S) / _SWITCH_S, 0.0, 1.0)
+        w = (s * s * (3.0 - 2.0 * s))[:, None]
+        mix = (1.0 - w) * d + w * _aim_dirs(t, clays[j].curve, t_sw, lag_s)
+        mix /= np.maximum(np.linalg.norm(mix, axis=1), 1e-9)[:, None]
+        d = np.where(w > 0.0, mix, d)  # bit-identical aim before the switch: the past never changes
+    a = np.unwrap(np.arctan2(d[:, 1], d[:, 0]))
+    k0 = int(round(t0 / _DT_S))
+    a = a + 2.0 * math.pi * round((hold_az - a[min(k0, n - 1)]) / (2.0 * math.pi))
+    el_t = np.arcsin(np.clip(d[:, 2], -1.0, 1.0))
+    s = np.clip((t - t0 - _REACTION_S) / _RAMP_S, 0.0, 1.0)
+    gain = (s * s * (3.0 - 2.0 * s)) / max(lag_s, 1e-3)
+    return _pursue(n, hold_az, hold_el, a, el_t, gain, w_az, dw_az, w_el, dw_el)
+
+
 # ------------------------------------------------------------------------------------- scenario
 @dataclass
+class Clay:
+    """One thrown target: its launch and its (unbroken) flight, world frame."""
+
+    index: int
+    label: str
+    launch_t_s: float
+    launch_pos_w: np.ndarray
+    launch_vel_w: np.ndarray
+    axis_w: np.ndarray
+    visible_until_s: float
+    curve: _Curve = field(repr=False)
+
+
+@dataclass
+class Debris:
+    """Fragments of one broken clay. Linear-drag ballistics, so positions are closed form in time."""
+
+    clay_index: int
+    t_break_s: float
+    pos0_w: np.ndarray  # (n, 3) all start at the break point
+    vel0_w: np.ndarray  # (n, 3) clay velocity at the break + random spread
+    size_m: np.ndarray  # (n,) fragment extent
+    life_s: np.ndarray  # (n,) visible lifetime; brightness fades linearly to zero over it
+
+    def positions(self, t_s: float) -> np.ndarray:
+        """(n, 3) positions of every fragment at t_s >= t_break_s, visible or not."""
+        age = max(float(t_s) - self.t_break_s, 0.0)
+        tau = _DEBRIS_TAU_S
+        v_inf = np.array([0.0, 0.0, -G_MPS2 * tau])
+        e = 1.0 - math.exp(-age / tau)
+        return self.pos0_w + v_inf * age + (self.vel0_w - v_inf) * (tau * e)
+
+    def alive(self, t_s: float) -> np.ndarray:
+        """(n,) True for the fragments visible at t_s."""
+        age = float(t_s) - self.t_break_s
+        return (age >= 0.0) & (age < self.life_s)
+
+    def state(self, t_s: float) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """(positions (m, 3), sizes (m,), alpha (m,)) of the fragments still visible at t_s."""
+        live = self.alive(t_s)
+        if not live.any():
+            return np.zeros((0, 3)), np.zeros(0), np.zeros(0)
+        alpha = 1.0 - (float(t_s) - self.t_break_s) / self.life_s
+        return self.positions(t_s)[live], self.size_m[live], alpha[live]
+
+
+@dataclass
 class Scenario:
-    """Ground truth of one synthetic engagement: clay flight and gun attitude over [0, duration_s]."""
+    """Ground truth of one synthetic engagement: clay flight and gun attitude over [0, duration_s].
+
+    A scenario carries one or more clays (`clays`). The single-clay attributes (launch_t_s,
+    clay_axis_w, launch_pos_w, launch_vel_w, visible_until_s, clay_curve) describe clay 0. The clay
+    methods take an optional clay index; without one they refer to the PRIMARY clay: the first clay
+    (in index order) visible at that time, else clay 0. Clays break only when told to (break_clay(),
+    called by the shot judge in closed loop); a broken clay is no longer visible and leaves Debris.
+    """
 
     name: str
     description: str
@@ -331,42 +468,151 @@ class Scenario:
     swing_az: _Curve = field(repr=False)
     swing_el: _Curve = field(repr=False)
     clay_curve: _Curve | None = field(default=None, repr=False)
+    clays: list[Clay] = field(default_factory=list)
+    debris_fragments: int = 6
+    debris_spread_mps: float = 3.0
+    debris_life_s: float = 0.7
+    broken: dict[int, float] = field(default_factory=dict)  # clay index -> break time, s
+    debris: dict[int, Debris] = field(default_factory=dict, repr=False)
+    swing_ctx: dict | None = field(default=None, repr=False)  # what a multi-clay swing is rebuilt from
 
     @property
     def n_frames(self) -> int:
         return int(math.floor(self.duration_s * self.fps)) + 1
 
+    @property
+    def n_clays(self) -> int:
+        return len(self.clays)
+
     # ---------------------------------------------------------------- clay
-    def clay_pos_w(self, t_s: float) -> np.ndarray | None:
-        """Clay position in W (metres, relative to the camera), or None when the scenario has no clay."""
-        if self.clay_curve is None:
+    def primary_clay(self, t_s: float) -> int | None:
+        """Index the un-indexed clay methods refer to at t_s (None when the scenario has no clay)."""
+        if not self.clays:
             return None
-        return self.clay_curve.value(float(t_s))
+        if len(self.clays) == 1:
+            return 0
+        for c in self.clays:
+            if self.clay_visible(t_s, c.index):
+                return c.index
+        return 0
 
-    def clay_vel_w(self, t_s: float) -> np.ndarray | None:
-        if self.clay_curve is None:
+    def _clay(self, t_s: float, i: int | None) -> Clay | None:
+        if i is None:
+            i = self.primary_clay(t_s)
+            if i is None:
+                return None
+        return self.clays[int(i)]
+
+    def clay_pos_w(self, t_s: float, i: int | None = None) -> np.ndarray | None:
+        """Clay position in W (metres, relative to the camera), or None when the scenario has no clay.
+
+        This is the flight of the WHOLE clay: it continues past a break (use clay_intact/clay_visible).
+        """
+        c = self._clay(t_s, i)
+        if c is None:
             return None
-        return self.clay_curve.deriv(float(t_s))
+        return c.curve.value(float(t_s))
 
-    def clay_visible(self, t_s: float) -> bool:
-        """True while the clay is airborne, above the horizon and younger than MAX_FLIGHT_S."""
-        if self.clay_curve is None:
-            return False
+    def clay_vel_w(self, t_s: float, i: int | None = None) -> np.ndarray | None:
+        c = self._clay(t_s, i)
+        if c is None:
+            return None
+        return c.curve.deriv(float(t_s))
+
+    def clay_intact(self, t_s: float, i: int) -> bool:
+        """False from the moment clay i was broken."""
+        return float(t_s) < self.broken.get(int(i), math.inf)
+
+    def clay_in_flight(self, t_s: float, i: int) -> bool:
+        """Launched, not yet past the end of its simulated flight, and intact."""
+        c = self.clays[int(i)]
         t = float(t_s)
-        if t < self.launch_t_s or t > self.launch_t_s + MAX_FLIGHT_S or t > self.clay_curve.t_end:
-            return False
-        return bool(self.clay_curve.value(t)[2] >= 0.0)
+        return c.launch_t_s <= t <= c.curve.t_end and self.clay_intact(t, i)
 
-    def clay_range_m(self, t_s: float) -> float:
-        p = self.clay_pos_w(t_s)
+    def clay_visible(self, t_s: float, i: int | None = None) -> bool:
+        """True while the clay is intact, airborne, above the horizon and younger than MAX_FLIGHT_S."""
+        if i is None:
+            if not self.clays:
+                return False
+            if len(self.clays) > 1:
+                return any(self.clay_visible(t_s, c.index) for c in self.clays)
+            i = 0
+        c = self.clays[int(i)]
+        t = float(t_s)
+        if t < c.launch_t_s or t > c.launch_t_s + MAX_FLIGHT_S or t > c.curve.t_end:
+            return False
+        if not self.clay_intact(t, c.index):
+            return False
+        return bool(c.curve.value(t)[2] >= 0.0)
+
+    def clay_range_m(self, t_s: float, i: int | None = None) -> float:
+        p = self.clay_pos_w(t_s, i)
         return float("nan") if p is None else float(np.linalg.norm(p))
 
-    def clay_dir_w(self, t_s: float) -> np.ndarray | None:
-        p = self.clay_pos_w(t_s)
+    def clay_dir_w(self, t_s: float, i: int | None = None) -> np.ndarray | None:
+        p = self.clay_pos_w(t_s, i)
         if p is None:
             return None
         r = float(np.linalg.norm(p))
         return p / r if r > 1e-9 else np.array([1.0, 0.0, 0.0])
+
+    # ---------------------------------------------------------------- breaks
+    def break_clay(self, i: int, t_s: float) -> bool:
+        """Break clay i at scenario time t_s: it stops being a whole clay and turns into debris.
+
+        Returns False (and changes nothing) when the clay does not exist, is not in flight at t_s or is
+        already broken. Fragments are deterministic per (seed, clay index). In a multi-clay scenario the
+        simulated shooter then moves on to the next clay; the swing is rebuilt only after
+        t_s + _REACTION_S, so attitude already delivered (frames, IMU) never changes.
+        """
+        i = int(i)
+        t = float(t_s)
+        if not (0 <= i < len(self.clays)) or not self.clay_in_flight(t, i):
+            return False
+        self.broken[i] = t
+        self.debris[i] = self._make_debris(i, t)
+        ctx = self.swing_ctx
+        if ctx is not None and not self.static_gun:
+            eng = _engagements(self.clays, self.broken, self.duration_s)
+            if eng != ctx["engagements"]:
+                ctx["engagements"] = eng
+                self.swing_az, self.swing_el = _swing_curves_multi(
+                    self.duration_s, ctx["hold_az"], self.hold_el_rad, self.clays, eng, ctx["lag_s"],
+                    ctx["wobble"], self.static_gun)
+        return True
+
+    def reset_breaks(self) -> None:
+        """Every clay whole again (and the swing it implies): the state make_scenario returned."""
+        if not self.broken:
+            return
+        self.broken.clear()
+        self.debris.clear()
+        ctx = self.swing_ctx
+        if ctx is not None and not self.static_gun:
+            ctx["engagements"] = _engagements(self.clays, {}, self.duration_s)
+            self.swing_az, self.swing_el = _swing_curves_multi(
+                self.duration_s, ctx["hold_az"], self.hold_el_rad, self.clays, ctx["engagements"],
+                ctx["lag_s"], ctx["wobble"], self.static_gun)
+
+    def _make_debris(self, i: int, t_s: float) -> Debris:
+        c = self.clays[i]
+        n = max(0, int(self.debris_fragments))
+        rng = np.random.default_rng([int(self.seed), 29, int(i)])  # own stream: never shifts the others
+        spread = rng.standard_normal((n, 3)) * float(self.debris_spread_mps)
+        size = rng.uniform(*_DEBRIS_SIZE_FRAC, n) * float(self.clay_diameter_m)
+        life = rng.uniform(*_DEBRIS_LIFE_FRAC, n) * float(self.debris_life_s)
+        p0 = np.repeat(c.curve.value(t_s)[None, :], n, axis=0)
+        v0 = c.curve.deriv(t_s)[None, :] + spread
+        return Debris(clay_index=i, t_break_s=t_s, pos0_w=p0, vel0_w=v0, size_m=size, life_s=life)
+
+    def fragments_w(self, t_s: float) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """All debris fragments visible at t_s: (positions (m, 3), sizes (m,), alpha (m,))."""
+        parts = [d.state(t_s) for d in self.debris.values()]
+        parts = [p for p in parts if p[0].shape[0]]
+        if not parts:
+            return np.zeros((0, 3)), np.zeros(0), np.zeros(0)
+        return (np.concatenate([p[0] for p in parts]), np.concatenate([p[1] for p in parts]),
+                np.concatenate([p[2] for p in parts]))
 
     # ---------------------------------------------------------------- gun
     def R_wg(self, t_s: float) -> np.ndarray:
@@ -387,13 +633,32 @@ class Scenario:
 
     # ---------------------------------------------------------------- truth
     def truth(self, t_s: float) -> dict:
-        """Ground truth at scenario time t_s (clay_px is added by the synthetic camera)."""
+        """Ground truth at scenario time t_s (clay_px is added by the synthetic camera).
+
+        The clay_* keys and "visible" describe the primary clay (see the class docstring); "clays" lists
+        every clay and "fragments_w" the debris visible at t_s.
+        """
+        frag, _, _ = self.fragments_w(t_s)
         return {
             "clay_pos_w": self.clay_pos_w(t_s),
             "clay_dir_w": self.clay_dir_w(t_s),
             "clay_range_m": self.clay_range_m(t_s),
             "R_wg": self.R_wg(t_s),
-            "visible": self.clay_visible(t_s),
+            "visible": self.clay_visible(t_s, self.primary_clay(t_s)) if self.clays else False,
+            "clay_index": self.primary_clay(t_s),
+            "clays": [
+                {
+                    "index": c.index,
+                    "label": c.label,
+                    "pos_w": self.clay_pos_w(t_s, c.index),
+                    "dir_w": self.clay_dir_w(t_s, c.index),
+                    "range_m": self.clay_range_m(t_s, c.index),
+                    "visible": self.clay_visible(t_s, c.index),
+                    "intact": self.clay_intact(t_s, c.index),
+                }
+                for c in self.clays
+            ],
+            "fragments_w": frag,
         }
 
 
@@ -439,6 +704,32 @@ _SPECS: dict[str, dict] = {
         "hold_point": (20.0, 0.0, 1.8),
         "clay": None,
     },
+    # Multi-clay specs: "clays" lists the targets in the order the shooter takes them; "launch_dt" delays
+    # one after the scenario's launch time.
+    "skeet_doubles": {
+        "description": "station 4 doubles: high and low house thrown together, crossing over the centre",
+        "hold_point": (19.0, 24.5, 1.9),
+        "duration_s": 3.0,
+        "clays": [
+            {"label": "high", "pos": (19.0, 20.1, 1.55), "heading_deg": -90.0, "speed": 21.0,
+             "gate_dist": 20.1, "gate_z": 3.0},
+            # low house window 1.07 m above ground; the pair is set to pass ~0.6 m apart over the centre
+            # so they do not collide [INFERENCE]
+            {"label": "low", "pos": (19.0, -20.1, 1.07 - SHOULDER_HEIGHT_M), "heading_deg": 90.0,
+             "speed": 21.0, "gate_dist": 20.1, "gate_z": 2.4},
+        ],
+    },
+    "trap_doubles": {
+        "description": "16 yd trap doubles: two targets from the house together, ~10 deg apart, rising",
+        "hold_point": (16.0, -0.2, 0.2),
+        "duration_s": 3.0,
+        "clays": [
+            {"label": "left", "pos": (15.0, 0.0, -0.6), "heading_deg": 6.0, "speed": 26.0,
+             "gate_dist": 9.14, "gate_z": 1.4},
+            {"label": "right", "pos": (15.0, 0.0, -0.6), "heading_deg": -4.0, "speed": 26.0,
+             "gate_dist": 9.14, "gate_z": 1.1},  # [INFERENCE] the second machine throws a little flatter
+        ],
+    },
 }
 
 SCENARIOS: dict[str, str] = {k: v["description"] for k, v in _SPECS.items()}
@@ -464,7 +755,7 @@ def make_scenario(name: str, cfg: Config, seed: int) -> Scenario:
     if spec is None:
         raise ValueError(f"unknown scenario {name!r} (known: {sorted(_SPECS)})")
     rng = np.random.default_rng([int(seed), 17])
-    duration = DURATION_S
+    duration = float(spec.get("duration_s", DURATION_S))
     launch = T_LAUNCH_S
 
     hold_f = np.array(spec["hold_point"], dtype=np.float64)
@@ -473,13 +764,8 @@ def make_scenario(name: str, cfg: Config, seed: int) -> Scenario:
     hold_w = R_fw @ hold_f
     hold_el = math.atan2(hold_w[2], math.hypot(hold_w[0], hold_w[1]))
 
-    clay_spec = spec.get("clay")
-    clay_curve = None
-    axis = np.array([0.0, 0.0, 1.0])
-    pos_w = np.zeros(3)
-    vel_w = np.zeros(3)
-    visible_until = launch
-    if clay_spec is not None:
+    def build_clay(index: int, clay_spec: dict) -> Clay:
+        t_launch = launch + float(clay_spec.get("launch_dt", 0.0))
         pos_f = np.array(clay_spec["pos"], dtype=np.float64)
         head = math.radians(clay_spec["heading_deg"])
         hdir = np.array([math.cos(head), math.sin(head), 0.0])
@@ -487,18 +773,39 @@ def make_scenario(name: str, cfg: Config, seed: int) -> Scenario:
                                  float(clay_spec["gate_dist"]), float(clay_spec["gate_z"]))
         pos_w = R_fw @ pos_f
         vel_w = R_fw @ vel_f
-        flight = min(MAX_FLIGHT_S, duration - launch)
+        flight = min(MAX_FLIGHT_S, duration - t_launch)
         n_steps = int(round(flight / _DT_S))
         P, V = _integrate(pos_w, vel_w, n_steps, _DT_S)
-        clay_curve = _Curve(launch, _DT_S, P, V)
-        axis = _disc_axis(vel_w)
-        visible_until = _visible_until(P, launch, _DT_S)
+        return Clay(index=index, label=str(clay_spec.get("label", f"clay{index}")), launch_t_s=t_launch,
+                    launch_pos_w=pos_w, launch_vel_w=vel_w, axis_w=_disc_axis(vel_w),
+                    visible_until_s=_visible_until(P, t_launch, _DT_S), curve=_Curve(t_launch, _DT_S, P, V))
+
+    if "clays" in spec:
+        clays = [build_clay(i, c) for i, c in enumerate(spec["clays"])]
+    elif spec.get("clay") is not None:
+        clays = [build_clay(0, spec["clay"])]
+    else:
+        clays = []
+
+    clay_curve = clays[0].curve if clays else None
+    axis = clays[0].axis_w if clays else np.array([0.0, 0.0, 1.0])
+    pos_w = clays[0].launch_pos_w if clays else np.zeros(3)
+    vel_w = clays[0].launch_vel_w if clays else np.zeros(3)
+    visible_until = clays[0].visible_until_s if clays else launch
 
     static = bool(spec.get("static", False))
-    swing_az, swing_el = _swing_curves(
-        duration, launch, 0.0, hold_el, clay_curve,
-        float(cfg.sim.swing_lag_s), math.radians(float(cfg.sim.swing_noise_deg)), static, rng,
-    )
+    lag_s = float(cfg.sim.swing_lag_s)
+    noise_rad = math.radians(float(cfg.sim.swing_noise_deg))
+    swing_ctx = None
+    if len(clays) <= 1:  # the original single-clay swing, RNG stream and all
+        swing_az, swing_el = _swing_curves(duration, launch, 0.0, hold_el, clay_curve, lag_s, noise_rad,
+                                           static, rng)
+    else:
+        wobble = None if static else (_ou_curve(duration, noise_rad, rng), _ou_curve(duration, noise_rad, rng))
+        eng = _engagements(clays, {}, duration)
+        swing_az, swing_el = _swing_curves_multi(duration, 0.0, hold_el, clays, eng, lag_s, wobble, static)
+        swing_ctx = {"hold_az": 0.0, "lag_s": lag_s, "wobble": wobble, "engagements": eng}
+    sim = cfg.sim
     return Scenario(
         name=name,
         description=spec["description"],
@@ -518,4 +825,9 @@ def make_scenario(name: str, cfg: Config, seed: int) -> Scenario:
         swing_az=swing_az,
         swing_el=swing_el,
         clay_curve=clay_curve,
+        clays=clays,
+        debris_fragments=int(getattr(sim, "debris_fragments", 6)),
+        debris_spread_mps=float(getattr(sim, "debris_spread_mps", 3.0)),
+        debris_life_s=float(getattr(sim, "debris_life_s", 0.7)),
+        swing_ctx=swing_ctx,
     )

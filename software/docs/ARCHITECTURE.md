@@ -176,8 +176,16 @@ def make_scenario(name: str, cfg: Config, seed: int) -> Scenario     # names in 
 SCENARIOS: dict[str, str]   # name -> description; at least: "skeet_crossing", "skeet_incoming", "skeet_outgoing", "trap_straightaway", "static_gun", "no_clay"
 class SyntheticSource(FrameSource):
     def __init__(self, cfg: Config, calib: Calibration, scenario: str | None = None, seed: int | None = None)
-    def truth(self, t_ns: int) -> dict   # {"clay_dir_w","clay_range_m","clay_pos_w","R_wg","visible","clay_px": (u,v)|None}
+    def truth(self, t_ns: int) -> dict   # {"clay_dir_w","clay_range_m","clay_pos_w","R_wg","visible","clay_px": (u,v)|None,
+                                         #  "clay_index", "clays": [per-clay dicts], "fragments_w": (m,3)}
+    def break_clay(self, index: int, t_ns: int) -> bool   # closed-loop hook: that clay was hit at t_ns
 ```
+Multi-clay scenarios (`skeet_doubles`, `trap_doubles`) carry `Scenario.clays`; the clay accessors take an
+optional clay index and default to the primary clay (first visible, else clay 0), so single-clay
+scenarios behave exactly as before. `tbot sim` judges each shot as it is fired against every whole clay
+and calls `break_clay` on a hit: from the shot's arrival the clay is drawn as cfg.sim.debris_fragments
+fading fragments (cfg.sim.debris_spread_mps, cfg.sim.debris_life_s) and the simulated shooter moves on
+to the next clay. A shot that breaks nothing near a fragment is a `debris_shot`.
 Rendering uses `CameraModel.from_calibration(calib.intrinsics, ...)` + `MountModel` + `barrel_mask`
 (barrel drawn dark), physically sized clay (cfg.mount.clay_diameter_m, tilted disc), exposure motion
 blur, sky gradient + clouds + sensor noise, mono (contrast cfg.sim.clay_contrast) or colour (orange on blue).

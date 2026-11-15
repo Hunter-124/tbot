@@ -25,7 +25,8 @@ details are in [ARCHITECTURE.md](ARCHITECTURE.md); keep those signatures and `tb
   each arming press). Copy `sessions/<name>/` to a laptop and replay with `--source replay:<dir>`.
 - Synthetic closed loop: `tbot sim [--scenarios ...] [--seeds N] [--out result.json]` reports detection rate, time to
   confirmed track, lead error at +100 ms, fire count and the TRUE shot outcome (miss vs pattern) per scenario
-  (`skeet_crossing`, `skeet_incoming`, `skeet_outgoing`, `trap_straightaway`, `static_gun`, `no_clay`).
+  (`skeet_crossing`, `skeet_incoming`, `skeet_outgoing`, `trap_straightaway`, `static_gun`, `no_clay`), and for
+  the pairs (`skeet_doubles`, `trap_doubles`) clays broken / thrown, debris shots, shots per run and launch-to-break time.
 - Pi 3B time budget: `tbot bench` (per stage p50/p95 vs the frame period; writes `calib/bench.json`).
 - Detector tuning: `tbot calib-detector` (`--gui`, `--report`, `--auto-mask`, `--psf --range-m`).
 

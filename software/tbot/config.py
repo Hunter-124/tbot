@@ -282,6 +282,9 @@ class SimConfig:
     gyro_noise_dps: float
     swing_lag_s: float
     swing_noise_deg: float
+    debris_fragments: int
+    debris_spread_mps: float
+    debris_life_s: float
 
 
 @dataclass
