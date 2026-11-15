@@ -123,9 +123,11 @@ class FireSolver:
         attitude,
         armed: bool,
         frame_period_s: float,
+        accept=None,
     ) -> FireDecision:
+        """accept(track) -> bool may veto targets (the engagement lockout of a multi-shot press)."""
         now_ns = int(now_ns)
-        track = tracker.best()
+        track = tracker.best(accept) if accept is not None else tracker.best()
         if track is None:
             reason = "no confirmed track" if armed else "no confirmed track (not armed)"
             return FireDecision(fire=False, t_ns=now_ns, reason=reason)
@@ -142,8 +144,11 @@ class FireSolver:
         fire = False
         fc = self.cfg.fire
         future: list[float] = []
+        speed = _norm3(track.s[3:6]) if track.s is not None else float("inf")
         if track.hits < fc.min_track_hits:
             reason = "track young"
+        elif speed < float(fc.min_clay_speed_mps):
+            reason = f"too slow for a clay ({speed:.1f} m/s)"
         elif not (fc.min_range_m <= g["range_m"] <= fc.max_range_m):
             reason = "range out of window"
         elif g["clay_el"] < math.radians(fc.min_elevation_deg):

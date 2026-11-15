@@ -150,6 +150,14 @@ class FireConfig:
     min_elevation_deg: float
     watchdog_ms: float
     gun_accel_sigma_frac: float = 0.3
+    min_shot_interval_ms: float = 250.0
+    min_clay_speed_mps: float = 6.0
+    duplicate_deg: float = 1.0
+    debris_cone_deg: float = 2.0
+    debris_spread_deg_s: float = 15.0
+    debris_window_ms: float = 1500.0
+    debris_birth_margin_ms: float = 50.0
+    recoil_settle_ms: float = 100.0
 
 
 @dataclass

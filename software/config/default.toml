@@ -112,7 +112,15 @@ live = false                  # false = dry run: log would-fire decisions, never
 min_hit_probability = 0.5    # fire at the best moment only if P(hit) >= this (miss, 1-sigma uncertainty, pattern radius)
 min_track_hits = 5
 horizon_frames = 3
-max_shots_per_arm = 1
+max_shots_per_arm = 3         # doubles/triples on one press; each needs its own target (see engagement.py)
+min_shot_interval_ms = 250.0  # no fire command within this long of the previous one (debris, recoil, trigger reset)
+min_clay_speed_mps = 6.0      # cartesian tracker: never fire at something slower (clays fly 15-30 m/s) [INFERENCE]
+duplicate_deg = 1.0           # a track this close to the target at the shot is the same clay: engaged with it
+debris_cone_deg = 2.0         # debris lockout: tracks born after a shot inside this cone around the broken clay's
+debris_spread_deg_s = 15.0    # predicted path, widening at this rate (fragments ~5 m/s at ~20 m) [INFERENCE],
+debris_window_ms = 1500.0     # for this long after the predicted break,
+debris_birth_margin_ms = 50.0 # counting tracks born from this long before the break, are fragments
+recoil_settle_ms = 100.0      # after a shot's exit, a new target needs min_track_hits detections later than this
 min_range_m = 8.0
 max_range_m = 40.0
 min_elevation_deg = -5.0

@@ -234,11 +234,12 @@ class ClayTracker:
         ce = math.cos(el)
         return np.array([ce * math.cos(az), ce * math.sin(az), math.sin(el)], dtype=np.float64)
 
-    def best(self) -> Track | None:
-        """Confirmed track with the most hits (ties: the most recently created one)."""
+    def best(self, accept=None) -> Track | None:
+        """Confirmed track with the most hits (ties: the most recently created one); `accept(track)` may veto
+        tracks (the engagement's debris/engaged lockout)."""
         best: Track | None = None
         for tr in self.tracks:
-            if not tr.confirmed:
+            if not tr.confirmed or (accept is not None and not accept(tr)):
                 continue
             if best is None or (tr.hits, tr.first_t_ns, tr.track_id) > (best.hits, best.first_t_ns, best.track_id):
                 best = tr

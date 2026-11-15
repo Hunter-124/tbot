@@ -104,9 +104,10 @@ def test_fire_path_commands_the_actuator_once_per_press(tmp_path):
     """End-to-end fire path, independent of tracking ACCURACY (vision quality is benchmarked by `tbot sim`).
 
     The probability gate is lowered to 0.05 so the solver reaches a fire decision whatever the current
-    tracker/detector accuracy is; what is asserted here is the integration: one press -> exactly
-    max_shots_per_arm commands accepted by the actuator layer, only while armed, after the track is
-    confirmed, and with a complete shot record.
+    tracker/detector accuracy is; what is asserted here is the integration: one press at ONE clay -> exactly
+    one command accepted by the actuator layer even though the press allows max_shots_per_arm (a clay that
+    was shot at is never engaged again), only while armed, after the track is confirmed, and with a
+    complete shot record.
     """
     from tbot.tools.sim_eval import evaluate_run
 
@@ -118,9 +119,8 @@ def test_fire_path_commands_the_actuator_once_per_press(tmp_path):
     assert res["visible_frames"] > 0, "the clay is never visible: scenario/renderer problem"
     assert res["fires"] >= 1, f"never fired; decision reasons: {res['reasons']}"
     assert res["actuator_kind"] == "sim"
-    assert len(res["actuator_fire_times"]) == cfg.fire.max_shots_per_arm, (
-        "one press must command exactly max_shots_per_arm shots"
-    )
+    assert cfg.fire.max_shots_per_arm > 1
+    assert len(res["actuator_fire_times"]) == 1, "one clay must get exactly one shot per press"
     assert res["actuator_fire_times"] == [s["t_fire_ns"] for s in res["shots"]]
     assert res["t_first_confirmed_ns"] is not None
     for shot in res["shots"]:

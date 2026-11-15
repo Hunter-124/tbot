@@ -23,13 +23,20 @@ def test_invalid_servo_pulse_and_hold_are_failures(capsys, tmp_path):
 
 
 def test_conflicts_and_fire_safety_gates(capsys, tmp_path):
-    rc, text = _run(capsys, tmp_path, "arming.pin=18", "fire.max_shots_per_arm=2",
+    rc, text = _run(capsys, tmp_path, "arming.pin=18", "fire.max_shots_per_arm=2", "fire.min_shot_interval_ms=100",
                     "tracker.range_prior_m=50", "actuator.servo.pwm_channel=1")
     assert rc == 1
     assert "FAIL pin map: GPIO18: arming, servo PWM" in text
     assert "FAIL PWM overlay channel:" in text
     assert "FAIL shots per arm:" in text
     assert "FAIL range prior:" in text
+
+
+def test_shots_per_arm_allows_spaced_doubles_and_triples(capsys, tmp_path):
+    _, text = _run(capsys, tmp_path, "fire.max_shots_per_arm=3", "fire.min_shot_interval_ms=250")
+    assert "PASS shots per arm:" in text
+    _, text = _run(capsys, tmp_path, "fire.max_shots_per_arm=4")
+    assert "FAIL shots per arm:" in text
 
 
 def test_camera_and_calibration_errors(capsys, tmp_path):

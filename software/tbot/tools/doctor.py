@@ -222,7 +222,10 @@ def run_checks(cfg):
 
     r.check("Fire gates", "range prior", cfg.fire.min_range_m < cfg.tracker.range_prior_m < cfg.fire.max_range_m,
             f"{cfg.fire.min_range_m:g} < {cfg.tracker.range_prior_m:g} < {cfg.fire.max_range_m:g} m", "place tracker.range_prior_m strictly inside the fire range")
-    r.check("Fire gates", "shots per arm", cfg.fire.max_shots_per_arm == 1, f"max_shots_per_arm={cfg.fire.max_shots_per_arm}", "set fire.max_shots_per_arm=1")
+    r.check("Fire gates", "shots per arm",
+            1 <= cfg.fire.max_shots_per_arm <= 3 and (cfg.fire.max_shots_per_arm == 1 or cfg.fire.min_shot_interval_ms >= 250.0),
+            f"max_shots_per_arm={cfg.fire.max_shots_per_arm}, min_shot_interval_ms={cfg.fire.min_shot_interval_ms:g}",
+            "use 1-3 shots per press, with fire.min_shot_interval_ms >= 250 for more than one")
     r.check("Fire gates", "live mode", not cfg.fire.live, f"fire.live={str(cfg.fire.live).lower()}", "set fire.live=false for dry run; enable live only deliberately on a safe rig", "WARN")
     try:
         with DEFAULT_CONFIG.open("rb") as fh:

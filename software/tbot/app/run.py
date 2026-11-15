@@ -29,6 +29,7 @@ from tbot.config import (
     resolve_path,
 )
 from tbot.fire.ballistics import ShotModel
+from tbot.fire.engagement import Engagement
 from tbot.fire.solver import FireSolver
 from tbot.hw.actuator import make_actuator
 from tbot.hw.arming import ArmingSwitch
@@ -78,6 +79,7 @@ class Pipeline:
         self.shot = ShotModel(cfg)
         self.budget: LatencyBudget = calib.budget or LatencyBudget.from_config(cfg, calib.latency)
         self.solver = FireSolver(cfg, self.shot, self.mount, self.budget)
+        self.engagement = Engagement(cfg, self.tracker)
 
         self._own_imu = imu is None
         self.imu = imu if imu is not None else open_imu(cfg, calib, source)
@@ -367,7 +369,16 @@ class Pipeline:
         decide_ahead_ns = int(self._expected_solve_ns)
         now = solve_start_ns + decide_ahead_ns
         armed = bool(self.arming.armed)
-        decision = self.solver.evaluate(now, self.tracker, self.attitude, armed, self.frame_period_s)
+        self.engagement.new_press(int(getattr(self.arming, "press_count", 0)))
+        self.engagement.observe(self.tracks, int(frame.t_exposure_ns))
+        decision = self.solver.evaluate(now, self.tracker, self.attitude, armed, self.frame_period_s,
+                                        accept=self.engagement.accept(now))
+        if decision.fire and not self.engagement.spacing_ok(now):
+            decision.fire = False
+            decision.reason = "shot spacing"
+        if decision.fire and self.actuator is not None and cfg.fire.live and bool(getattr(self.actuator, "busy", False)):
+            decision.fire = False  # the trigger has not reset yet: do not spend a shot of this press on a refusal
+            decision.reason = "actuator busy"
         self.decision = decision
         t_sol = time.perf_counter_ns()
         solve_end_ns = int(self.source.clock.now_ns())
@@ -408,6 +419,8 @@ class Pipeline:
                 )
             if fired:
                 self.shots += 1
+                target = next((t for t in self.tracker.tracks if t.track_id == decision.track_id), None)
+                self.engagement.record(decision, int(cmd_t_ns) if cmd_t_ns is not None else int(now), target)
 
         self.frames += 1
         dt_ns = None if self._prev_exposure_ns is None else int(frame.t_exposure_ns) - self._prev_exposure_ns
