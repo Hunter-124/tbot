@@ -75,6 +75,10 @@ ADAPTIVE_MAX_HALF = 40
 # A Gaussian weight narrower than this samples almost nothing and the deconvolution is unstable.
 MIN_WEIGHT_VAR = 0.5
 
+# Candidates per frame from which the rejection tests run vectorised (_prescreen, ~4.5 ms on a Pi 3B mostly
+# fixed cost) instead of one by one in _measure's loop (~0.6 ms per candidate).
+PRESCREEN_MIN_CANDIDATES = 8
+
 _OFF3_Y = np.array([-1, -1, -1, 0, 0, 0, 1, 1, 1])
 _OFF3_X = np.array([-1, 0, 1, -1, 0, 1, -1, 0, 1])
 
@@ -141,6 +145,8 @@ class ClayDetector:
             u8 = src if src.dtype == np.uint8 else (src != 0).astype(np.uint8) * 255
             src = cv2.resize(u8, (w, h), interpolation=cv2.INTER_NEAREST)
         self._mask = np.ascontiguousarray(src != 0)
+        # 0xFF where usable: AND-ing it into a 0/1 (or 0/255) byte mask keeps the value, and is one cv2 pass
+        self._mask_u8 = np.where(self._mask, np.uint8(255), np.uint8(0))
         self._mask_key = (h, w)
         return self._mask
 
@@ -155,8 +161,8 @@ class ClayDetector:
         self._smooth = np.empty((dh, dw), np.uint8)
         self._bg = np.empty((h, w), np.uint8)
         self._contrast = np.empty((h, w), np.int16)
-        self._matched = np.empty((h, w), np.int16)
         self._gsm = np.empty((h, w), np.uint8)
+        self._absd = np.empty((h, w), np.uint8)
         # inRange writes byte masks; bool views also work with NumPy's logical operations.
         self._bin = np.empty((h, w), np.uint8).view(np.bool_)
         self._bin2 = np.empty((h, w), np.uint8).view(np.bool_)
@@ -214,14 +220,16 @@ class ClayDetector:
             # contrast, at 1 DN resolution.
             ks = 2 * int(math.ceil(3.0 * ms)) + 1
             cv2.GaussianBlur(gray, (ks, ks), ms, dst=self._gsm, borderType=cv2.BORDER_REFLECT)
-            cv2.subtract(self._gsm, self._bg, dst=self._matched, dtype=cv2.CV_16S)
-            stat = self._matched
+            # gsm - bg in int16 is only read in small windows (and a noise subsample): the full-frame threshold
+            # is taken on uint8 below, exactly (a full int16 subtract + two inRange cost ~3.5 ms on a Pi 3B)
+            stat = _LazyContrast(self._gsm, self._bg)
             unit = 1.0
         else:
             stat = contrast
             unit = 1.0
         mask = self._mask_for(h, w)
         if self._since_noise <= 0 or not np.isfinite(self.noise_sigma):
+            # (both estimates on one frame: ~3.4 ms on a Pi 3B every noise_every frames)
             self.noise_sigma = self._estimate_sigma(contrast, mask)
             self.match_sigma = self._estimate_sigma(stat, mask) / unit if ms > 0.0 else self.noise_sigma
             self._since_noise = max(1, int(det.noise_every))
@@ -235,7 +243,18 @@ class ClayDetector:
         thr = thr_dn * unit
 
         binary = self._bin
-        if math.isfinite(thr):
+        if isinstance(stat, _LazyContrast) and math.isfinite(thr):
+            # stat = gsm - bg is an integer in [-255, 255], so stat > thr <=> stat > floor(thr), and
+            # |stat| = absdiff(gsm, bg); the saturating uint8 subtract gives max(stat, 0) / max(-stat, 0).
+            t_int = int(min(255, max(-1, math.floor(thr))))
+            if det.polarity == "both":
+                cv2.absdiff(self._gsm, self._bg, dst=self._absd)
+            elif det.polarity == "bright":
+                cv2.subtract(self._gsm, self._bg, dst=self._absd)
+            else:
+                cv2.subtract(self._bg, self._gsm, dst=self._absd)
+            cv2.threshold(self._absd, t_int, 1, cv2.THRESH_BINARY, dst=binary.view(np.uint8))
+        elif math.isfinite(thr):
             # Contrast is integral in [-255, 255], so strict float comparisons reduce to
             # inclusive integer ranges. OpenCV writes the byte mask without converting the
             # entire frame to floating point, and accepts reusable destination buffers.
@@ -270,7 +289,7 @@ class ClayDetector:
             else:
                 np.logical_or(binary, orange, out=binary)
         if mask is not None:
-            np.logical_and(binary, mask, out=binary)
+            cv2.bitwise_and(binary.view(np.uint8), self._mask_u8, dst=binary.view(np.uint8))
         gk = float(getattr(det, "grow_k_sigma", 0.0) or 0.0)
         grow_low = gk * (thr / float(det.k_sigma)) if 0.0 < gk < float(det.k_sigma) and math.isfinite(thr) else None
         t_thr = time.perf_counter()
@@ -291,7 +310,7 @@ class ClayDetector:
             full = contrast.full() if isinstance(contrast, _LazyContrast) else contrast.copy()
             debug = {"contrast": full, "binary": np.where(binary, 255, 0).astype(np.uint8)}
             if ms > 0.0:
-                debug["matched"] = self._matched.copy()
+                debug["matched"] = stat.full() if isinstance(stat, _LazyContrast) else stat.copy()
             if use_hsv:
                 debug["orange"] = np.where(orange, 255, 0).astype(np.uint8)
             self.debug = debug
@@ -409,9 +428,18 @@ class ClayDetector:
                         min(ADAPTIVE_MAX_HALF, int(0.5 * max(1, int(det.bg_kernel)) * max(1, int(det.bg_downscale))) - 1))
         out: list[Detection] = []
         grow_k = np.ones((2 * GROW_RADIUS_PX + 1, 2 * GROW_RADIUS_PX + 1), np.uint8)
+        grown_done = False
+        if (idx.size >= PRESCREEN_MIN_CANDIDATES and matched is not None and isinstance(contrast, _LazyContrast)
+                and isinstance(matched, _LazyContrast) and int(det.min_area_px) <= 2):
+            # all of the loop's rejection tests at once (a real sky gives tens of candidates per frame and the
+            # per-candidate loop costs ~0.6 ms each on a Pi 3B); the loop then only measures the survivors
+            idx = _prescreen(idx, labels, stats, binary, contrast, matched, sigma, det, mask, grow_low,
+                             moat_half, alpha_half)
+            grown_done = True
         for i in idx:
             lid = int(i) + 1
-            if grow_low is not None and int(stats[lid, cv2.CC_STAT_AREA]) < int(det.min_area_px):
+            if (not grown_done and grow_low is not None
+                    and int(stats[lid, cv2.CC_STAT_AREA]) < int(det.min_area_px)):
                 if not self._grown_enough(labels, stats, lid, matched, grow_low, det, mask, grow_k):
                     continue
             x0 = int(stats[lid, cv2.CC_STAT_LEFT])
@@ -432,7 +460,7 @@ class ClayDetector:
             py1 = min(h_img, int(round(cyi)) + half + 1)
             lab_r = labels[py0:py1, px0:px1]
             own = lab_r == lid
-            c_r = contrast[py0:py1, px0:px1].astype(np.float32)
+            c_r = _window_f32(contrast, py0, py1, px0, px1)
             core = c_r[own]
             if core.size == 0:  # a huge, oddly shaped component whose pixels miss the window: not a clay
                 continue
@@ -460,7 +488,7 @@ class ClayDetector:
                 ya, yb, xa, xb = ry - rr, ry + rr, rx - rr, rx + rr
                 if ya >= 0 and xa >= 0 and yb < pol.shape[0] and xb < pol.shape[1]:
                     ring = np.concatenate((pol[ya, xa:xb + 1], pol[yb, xa:xb + 1], pol[ya + 1:yb, xa], pol[ya + 1:yb, xb]))
-                    if float(pol[ry, rx]) - float(np.median(ring)) < LOCAL_K_SIGMA * sigma:
+                    if float(pol[ry, rx]) - _median(ring) < LOCAL_K_SIGMA * sigma:
                         continue
                 # Measure on the RAW footprint exactly as without the matched filter (pixels above the raw
                 # threshold), so every blob the plain detector could see is measured identically; a faint blob
@@ -488,11 +516,10 @@ class ClayDetector:
                 px1 = min(w_img, int(round(cxi)) + half + 1)
                 py1 = min(h_img, int(round(cyi)) + half + 1)
                 lab_r = labels[py0:py1, px0:px1]
-                c_r = contrast[py0:py1, px0:px1].astype(np.float32)
+                c_r = _window_f32(contrast, py0, py1, px0, px1)
                 own = (lab_r == lid) & (sp * c_r > seed_thr)
                 if py0 <= gy < py1 and px0 <= gx < px1:
                     own[gy - py0, gx - px0] = True
-                core = c_r[own]
             sign = np.float32(1.0 if peak >= 0.0 else -1.0)
             # UNTHRESHOLDED flux of this blob's polarity. Noise is zero-mean here, so it adds variance
             # to the moments but no bias; pixels owned by another blob (or masked out) are dropped.
@@ -504,24 +531,20 @@ class ClayDetector:
             # around it; a Gaussian weight integrates that moat at large radius and shrinks the moment.
             # The median of the window's border ring measures the moat (and any residual sky tilt).
             ring = np.concatenate((img_w[0, :], img_w[-1, :], img_w[1:-1, 0], img_w[1:-1, -1]))
-            img_w = np.where(keep_px, img_w - np.float32(np.median(ring)), np.float32(0.0))
+            img_w = np.where(keep_px, img_w - np.float32(_median(ring)), np.float32(0.0))
 
-            # Seed: contrast-weighted centroid/second moments of the thresholded pixels.
-            ys, xs = np.nonzero(own)
-            wv = np.maximum(core * sign - floor, np.float32(0.0))
-            wsum = float(wv.sum())
-            if wsum <= 0.0:  # hue-only blob (colour OR mode): weight its pixels equally
-                wv = np.ones(core.shape, np.float32)
-                wsum = float(wv.size)
-            fx = xs.astype(np.float32)
-            fy = ys.astype(np.float32)
-            cx = float((fx * wv).sum() / wsum)
-            cy = float((fy * wv).sum() / wsum)
-            dx0 = fx - cx
-            dy0 = fy - cy
-            sxx = float((wv * dx0 * dx0).sum() / wsum) + PIXEL_BOX_VAR
-            syy = float((wv * dy0 * dy0).sum() / wsum) + PIXEL_BOX_VAR
-            sxy = float((wv * dx0 * dy0).sum() / wsum)
+            # Seed: contrast-weighted centroid/second moments of the thresholded pixels (one cv2.moments call:
+            # double accumulation, and ~25 fewer small NumPy calls than the explicit sums).
+            wimg = np.where(own, np.maximum(sign * c_r - floor, np.float32(0.0)), np.float32(0.0))
+            mo = cv2.moments(wimg)
+            if not mo["m00"] > 0.0:  # hue-only blob (colour OR mode): weight its pixels equally
+                mo = cv2.moments(own.astype(np.float32))
+            wsum = mo["m00"]
+            cx = mo["m10"] / wsum
+            cy = mo["m01"] / wsum
+            sxx = mo["mu20"] / wsum + PIXEL_BOX_VAR
+            syy = mo["mu02"] / wsum + PIXEL_BOX_VAR
+            sxy = mo["mu11"] / wsum
 
             cx, cy, oxx, oxy, oyy = _adaptive_moments(img_w, cx, cy, sxx, sxy, syy)
             # Major axis of the OBSERVED (object * blur) profile; the tracker removes
@@ -580,18 +603,23 @@ def _adaptive_moments(img: np.ndarray, cx: float, cy: float,
         if det_k <= 0.0:
             break
         ixx, ixy, iyy = kyy / det_k, -kxy / det_k, kxx / det_k
-        dx = xs - np.float32(cx)
-        dy = ys - np.float32(cy)
-        r2 = ixx * dx * dx + (2.0 * ixy) * dx * dy + iyy * dy * dy
-        flux = np.exp(-0.5 * r2) * img
-        s = float(flux.sum())
+        dx = xs - np.float32(cx)                     # (w,)
+        dy = ys - np.float32(cy)                     # (h, 1)
+        # -0.5 r2 built from 1-D pieces (each NumPy call on a small window costs ~20 us on a Pi 3B)
+        e = (np.float32(-ixy) * dy) * dx
+        e += np.float32(-0.5 * ixx) * dx * dx
+        e += np.float32(-0.5 * iyy) * dy * dy
+        flux = np.exp(e, out=e)
+        flux *= img
+        mo = cv2.moments(flux)                       # raw + central moments in one call (double sums)
+        s = mo["m00"]
         if not s > 0.0:
             break
-        mx = float((flux * dx).sum()) / s
-        my = float((flux * dy).sum()) / s
-        mxx = float((flux * dx * dx).sum()) / s - mx * mx
-        myy = float((flux * dy * dy).sum()) / s - my * my
-        mxy = float((flux * dx * dy).sum()) / s - mx * my
+        mx = mo["m10"] / s - cx
+        my = mo["m01"] / s - cy
+        mxx = mo["mu20"] / s
+        myy = mo["mu02"] / s
+        mxy = mo["mu11"] / s
         cx += mx
         cy += my
         det_m = mxx * myy - mxy * mxy
@@ -618,6 +646,146 @@ def _adaptive_moments(img: np.ndarray, cx: float, cy: float,
         if done:
             break
     return cx, cy, oxx, oxy, oyy
+
+
+_OFF5_Y, _OFF5_X = (a.reshape(-1) for a in np.mgrid[-GROW_RADIUS_PX:GROW_RADIUS_PX + 1,
+                                                     -GROW_RADIUS_PX:GROW_RADIUS_PX + 1])
+_OFF5_NOT_C = ~((_OFF5_Y == 0) & (_OFF5_X == 0))
+
+
+@lru_cache(maxsize=32)
+def _ring_offsets(rr: int) -> tuple[np.ndarray, np.ndarray]:
+    """(dy, dx) of the square ring at Chebyshev distance rr, in _measure's ring order."""
+    a = np.arange(-rr, rr + 1)
+    m = np.arange(-rr + 1, rr)
+    dy = np.concatenate((np.full(a.size, -rr), np.full(a.size, rr), m, m))
+    dx = np.concatenate((a, a, np.full(m.size, -rr), np.full(m.size, rr)))
+    return dy, dx
+
+
+def _prescreen(idx, labels, stats, binary, contrast, matched, sigma, det, mask, grow_low, moat_half, alpha_half):
+    """Vectorised form of _measure's per-candidate rejection tests in matched mode: hysteresis growth of a
+    1-pixel seed (_grown_enough with min_area_px <= 2), the raw DN floor, the matched polarity, the speck
+    filter and the local-contrast ring test. Returns the surviving candidate indices, in input order; the
+    loop in _measure repeats the tests on them (and gets the same answers)."""
+    if idx.size == 0:
+        return idx
+    h_img, w_img = labels.shape
+    gray, bg, gsm = contrast.gray, contrast.bg, matched.gray
+    lids = idx + 1
+    area = stats[lids, cv2.CC_STAT_AREA]
+    alive = np.ones(idx.size, dtype=bool)
+
+    # ---- growth of 1-pixel seeds: a same-polarity matched pixel above grow_low within GROW_RADIUS_PX
+    if grow_low is not None:
+        seed = np.flatnonzero(area < int(det.min_area_px))
+        if seed.size:
+            sy = stats[lids[seed], cv2.CC_STAT_TOP].astype(np.int64)
+            sx = stats[lids[seed], cv2.CC_STAT_LEFT].astype(np.int64)
+            s0 = gsm[sy, sx].astype(np.int32) - bg[sy, sx].astype(np.int32)
+            sgn = np.where(s0 >= 0, 1, -1)
+            yy = sy[:, None] + _OFF5_Y[None, :]
+            xx = sx[:, None] + _OFF5_X[None, :]
+            inside = (yy >= 0) & (yy < h_img) & (xx >= 0) & (xx < w_img) & _OFF5_NOT_C[None, :]
+            yc, xc = np.clip(yy, 0, h_img - 1), np.clip(xx, 0, w_img - 1)
+            st = gsm[yc, xc].astype(np.int32) - bg[yc, xc].astype(np.int32)
+            weak = inside & ((st * sgn[:, None]) > grow_low)
+            if mask is not None:
+                weak &= mask[yc, xc]
+            alive[seed[~weak.any(axis=1)]] = False
+
+    # ---- the candidate's measurement window (as in _measure)
+    x0 = stats[lids, cv2.CC_STAT_LEFT].astype(np.int64)
+    y0 = stats[lids, cv2.CC_STAT_TOP].astype(np.int64)
+    bw = stats[lids, cv2.CC_STAT_WIDTH].astype(np.int64)
+    bh = stats[lids, cv2.CC_STAT_HEIGHT].astype(np.int64)
+    half = np.minimum(moat_half, np.maximum(ADAPTIVE_MIN_HALF, np.floor(
+        WINDOW_SIGMAS * alpha_half * np.maximum(bw, bh) / 4.0 + 0.5).astype(np.int64)))
+    rcx = np.round(x0 + 0.5 * (bw - 1)).astype(np.int64)  # np.round = Python round (half to even)
+    rcy = np.round(y0 + 0.5 * (bh - 1)).astype(np.int64)
+    px0, py0 = np.maximum(0, rcx - half), np.maximum(0, rcy - half)
+    px1, py1 = np.minimum(w_img, rcx + half + 1), np.minimum(h_img, rcy + half + 1)
+
+    # ---- per window size, all candidates' windows as one (K, n, n) stack; padding outside the image is
+    # marked invalid, which is exactly the clipping of _measure's window. Flattened argmax over a stack row
+    # visits the valid pixels in the window's row-major order, so ties resolve as in the loop.
+    keep = np.zeros(idx.size, dtype=bool)
+    big = np.int32(1 << 20)
+    for hw in np.unique(half[alive]):
+        g = np.flatnonzero(alive & (half == hw))
+        n = 2 * int(hw) + 1
+        ar = np.arange(n)
+        Y = (rcy[g] - hw)[:, None, None] + ar[None, :, None]
+        X = (rcx[g] - hw)[:, None, None] + ar[None, None, :]
+        valid = (Y >= 0) & (Y < h_img) & (X >= 0) & (X < w_img)
+        Yc, Xc = np.clip(Y, 0, h_img - 1), np.clip(X, 0, w_img - 1)
+        bgw = bg[Yc, Xc].astype(np.int32)
+        c = gray[Yc, Xc].astype(np.int32) - bgw
+        own = valid & (labels[Yc, Xc] == lids[g][:, None, None])
+        K = g.size
+        cf = c.reshape(K, -1)
+        of = own.reshape(K, -1)
+        rows = np.arange(K)
+
+        def first_max(key):
+            return np.argmax(np.where(of, key, -big), axis=1)
+
+        present = of.any(axis=1)                                   # core.size == 0 -> rejected
+        peak = cf[rows, first_max(np.abs(cf))]
+        floor_ok = np.abs(peak) >= float(det.min_contrast)
+        mf = (gsm[Yc, Xc].astype(np.int32) - bgw).reshape(K, -1)
+        m_peak = mf[rows, first_max(np.abs(mf))]
+        peak_sign = np.where(m_peak >= 0, 1, -1)
+        alt = cf[rows, first_max(cf * peak_sign[:, None])]
+        peak = np.where(peak * peak_sign < 0, alt, peak)
+        sp = np.where(peak >= 0, 1, -1)
+        pol = cf * sp[:, None]
+        j = first_max(pol)
+        ppk = pol[rows, j].astype(np.float64)
+        jy, jx = j // n, j % n                                     # peak in stack coordinates
+
+        # speck filter: 3x3 around the peak, clipped to the window
+        yy = jy[:, None] + _OFF3_Y[None, :]
+        xx = jx[:, None] + _OFF3_X[None, :]
+        inb = (yy >= 0) & (yy < n) & (xx >= 0) & (xx < n)
+        fl = np.clip(yy, 0, n - 1) * n + np.clip(xx, 0, n - 1)
+        vf = valid.reshape(K, -1)
+        nb_ok = inb & vf[rows[:, None], fl]
+        nb_sum = np.where(nb_ok, np.maximum(pol[rows[:, None], fl], 0), 0).sum(axis=1).astype(np.float64)
+        speck_ok = ~(ppk > float(det.max_peak_fraction) * nb_sum)
+
+        # local-contrast ring test, where the ring fits in the (clipped) window
+        ry, rx = rcy[g] - hw + jy, rcx[g] - hw + jx               # image coordinates
+        rr = LOCAL_RING_PX + np.maximum(bw[g], bh[g]) // 2
+        fits = (ry - rr >= py0[g]) & (rx - rr >= px0[g]) & (ry + rr < py1[g]) & (rx + rr < px1[g])
+        ring_ok = np.ones(K, dtype=bool)
+        for r in np.unique(rr[fits]):
+            k = np.flatnonzero(fits & (rr == r))
+            dy, dx = _ring_offsets(int(r))
+            ya, xa = ry[k, None] + dy[None, :], rx[k, None] + dx[None, :]
+            ring = np.sort(sp[k, None] * (gray[ya, xa].astype(np.int32) - bg[ya, xa].astype(np.int32)), axis=1)
+            lo, hi = (ring.shape[1] - 1) // 2, ring.shape[1] // 2
+            med = (ring[:, lo] + ring[:, hi]).astype(np.float32) / np.float32(2)   # np.median of the float32 ring
+            ring_ok[k] = ~(ppk[k] - med.astype(np.float64) < LOCAL_K_SIGMA * sigma)
+
+        keep[g] = present & floor_ok & speck_ok & ring_ok
+    return idx[keep & alive]
+
+def _window_f32(contrast, py0: int, py1: int, px0: int, px1: int) -> np.ndarray:
+    """contrast[py0:py1, px0:px1] as float32; a _LazyContrast window costs one cv2.subtract instead of three
+    NumPy calls."""
+    if isinstance(contrast, _LazyContrast):
+        return cv2.subtract(contrast.gray[py0:py1, px0:px1], contrast.bg[py0:py1, px0:px1], dtype=cv2.CV_32F)
+    return contrast[py0:py1, px0:px1].astype(np.float32)
+
+
+def _median(a: np.ndarray) -> float:
+    """np.median of a small 1-D array (same value: mean of the two middle elements), without np.median's
+    Python-level overhead (~80 us per call on a Pi 3B)."""
+    n = int(a.size)
+    lo, hi = (n - 1) // 2, n // 2
+    p = np.partition(a, (lo, hi))
+    return float(p[lo]) if lo == hi else float((p[lo] + p[hi]) / a.dtype.type(2))
 
 
 def _erfinv(y: float) -> float:

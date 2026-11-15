@@ -55,10 +55,22 @@ measured, write it with the same structure (`actuator.servo.cmd_to_break_ms.mean
 ## Frame rate
 
 The camera and driver are not the limit: capture-only on the Pi 3B delivers 50/100/150/200 fps with zero
-drops (250 fps requested times out: above the selected 10-bit mode's 247 fps). The live 50 fps is the
-processing budget: detect ~13 ms, track ~4 ms, solve ~1.2 ms, attitude ~0.7 ms per frame. Frames the pipeline
-is too slow for are skipped (newest frame wins); the trackers use real timestamps, so a skip is only a longer
-step. A higher rate needs a cheaper detector (ROI around tracks) or a faster Pi.
+drops (250 fps requested times out: above the selected 10-bit mode's 247 fps). The limit is processing.
+Frames the pipeline is too slow for are skipped (newest frame wins); the trackers use real timestamps, so a
+skip is only a longer step.
+
+Detector speed-up (same detections frame for frame as before; centroids within 1e-7 px median): 8-bit
+threshold, cv2.moments, and the candidate rejection tests vectorised when a frame has >= 8 candidates.
+Pi 3B detect p50 / p95: room footage 10.1 / 12.7 -> 6.4 / 9.7 ms; synthetic crossing 18.2 / 22.1 ->
+12.7 / 15.5 ms; synthetic incoming p95 48 -> 37 ms.
+
+Whole pipeline on the Pi (`tbot bench`): live camera, no clay in view: 7.0 ms p50 at 50 fps, 7.7 at 75,
+10.5 at 100 (the capture thread costs more at higher rates). Synthetic crossing with a clay tracked:
+detect 13.3 + track 4.7 + solve 1.9 = 20.3 ms p50 (25 ms p95) -> still ~50 fps with a clay in view.
+The synthetic sky is textured (~30 candidates per frame); real-sky cost is unknown until range footage.
+Keep 50 fps for the first trip; next targets are the tracker (4.7 ms) and solver (1.9 ms).
+`tbot sim` is not repeatable run to run (SimClock adds real processing time): the same code differs in
+~1/3 of shots between runs, so +/-2 hits out of 21 is noise.
 
 ## Open items
 

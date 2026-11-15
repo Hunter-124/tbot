@@ -453,3 +453,38 @@ def test_a_huge_irregular_component_is_skipped_not_crashed():
     img[40:340, 40:44] -= 60.0    # ... and a long vertical one: an L whose bbox centre is empty sky
     dets = ClayDetector(cfg_default()).detect(frame(img))
     assert nearest(dets, 200.0, 190.0, tol=20.0) is None
+
+
+def test_vectorised_prescreen_matches_the_candidate_loop(monkeypatch):
+    """_prescreen (many candidates) and _measure's per-candidate loop (few) give the same detections."""
+    import tbot.vision.detector as dm
+    from tbot.camera.synthetic import SyntheticSource
+    from tbot.config import load_calibration
+
+    cfg = load_config()
+    src = SyntheticSource(cfg, load_calibration(cfg), scenario="skeet_incoming")
+    src.start()
+    frames = [src.read(1.0) for _ in range(60)][::3]
+    src.stop()
+
+    def run(min_candidates):
+        monkeypatch.setattr(dm, "PRESCREEN_MIN_CANDIDATES", min_candidates)
+        det = ClayDetector(cfg)
+        return [[(d.u, d.v, d.area_px, d.contrast) for d in det.detect(f)] for f in frames]
+
+    vec, loop = run(0), run(10**9)
+    assert sum(len(x) for x in loop) > 0
+    assert len(vec) == len(loop)
+    for a, b in zip(vec, loop):
+        assert len(a) == len(b)
+        for x, y in zip(a, b):
+            assert x == pytest.approx(y, abs=1e-9)
+
+
+def test_small_median_matches_numpy():
+    from tbot.vision.detector import _median
+
+    rng = np.random.default_rng(3)
+    for n in (1, 2, 5, 24, 33):
+        a = rng.integers(-40, 40, n).astype(np.float32)
+        assert _median(a) == float(np.median(a))
