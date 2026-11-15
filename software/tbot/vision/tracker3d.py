@@ -21,6 +21,7 @@ view (for overlays, telemetry and older code); the filter state lives in `Track.
 from __future__ import annotations
 
 import math
+from functools import lru_cache
 
 import numpy as np
 
@@ -34,6 +35,17 @@ _NEW_SPEED_SIGMA_MPS = 25.0  # skeet/trap clays fly at 18-30 m/s, any direction
 _NEW_ACC_SIGMA_MPS2 = 12.0  # gravity, drag (~5 m/s^2) and lift (~g at launch speed) roughly cancel vertically
 _RANGE_MIN_M = 1.0
 _RANGE_MAX_M = 200.0
+
+
+@lru_cache(maxsize=64)
+def _matrices(dt_us: int, q: float) -> tuple[np.ndarray, np.ndarray]:
+    """(F, Q) for a step of dt_us microseconds; frames repeat the same step, so these are cached.
+    The arrays are shared: callers must not modify them in place."""
+    dt = dt_us * 1e-6
+    f, qn = _transition9(dt), _noise9(dt, q)
+    f.setflags(write=False)
+    qn.setflags(write=False)
+    return f, qn
 
 
 def _transition9(dt: float) -> np.ndarray:
@@ -74,24 +86,20 @@ def _azel_jacobian(p: np.ndarray) -> np.ndarray:
 
 
 def _angular_view(s: np.ndarray, S: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """[az, az_rate, az_acc, el, el_rate, el_acc] and a matching covariance (position block only exact)."""
-    p, v, a = s[0:3], s[3:6], s[6:9]
-    h = 1e-3
+    """[az, az_rate, 0, el, el_rate, 0] and the matching position covariance, in closed form.
 
-    def ang(t):
-        return np.array(_azel(p + v * t + 0.5 * a * t * t))
-
-    a0, ap, am = ang(0.0), ang(h), ang(-h)
-    d_ap = np.array([_wrap_pi(ap[0] - a0[0]), ap[1] - a0[1]])
-    d_am = np.array([_wrap_pi(am[0] - a0[0]), am[1] - a0[1]])
-    rate = (d_ap - d_am) / (2 * h)
-    acc = (d_ap + d_am) / (h * h)
-    x = np.array([a0[0], rate[0], acc[0], a0[1], rate[1], acc[1]], dtype=np.float64)
-    j = _azel_jacobian(p)
+    For overlays and telemetry only (the solver uses predict/predict_dir/angular_rate); the angular
+    accelerations are not filled in."""
+    p, v = s[0:3], s[3:6]
+    az, el = _azel(p)
+    j = _azel_jacobian(p)  # rows: d az/dp, d el/dp; the angular rates are the same rows applied to v
+    rate = j @ v
     c = j @ S[0:3, 0:3] @ j.T
-    jv = j @ S[3:6, 3:6] @ j.T  # rate variance from velocity alone (first order)
-    P = np.diag([c[0, 0], jv[0, 0], 0.0, c[1, 1], jv[1, 1], 0.0]).astype(np.float64)
-    P[0, 3] = P[3, 0] = c[0, 1]
+    jv = j @ S[3:6, 3:6] @ j.T
+    x = np.array([az, rate[0], 0.0, el, rate[1], 0.0], dtype=np.float64)
+    P = np.zeros((6, 6), dtype=np.float64)
+    P[0, 0], P[3, 3], P[0, 3], P[3, 0] = c[0, 0], c[1, 1], c[0, 1], c[0, 1]
+    P[1, 1], P[4, 4] = jv[0, 0], jv[1, 1]
     return x, P
 
 
@@ -108,9 +116,8 @@ class CartesianClayTracker(ClayTracker):
         rot = np.asarray(R_wg, dtype=np.float64).reshape(3, 3)
         preds = []
         for tr in self.tracks:
-            dt = max(0.0, (t_ns - tr.t_ns) * 1e-9)
-            f = _transition9(dt)
-            preds.append((f @ tr.s, f @ tr.S @ f.T + _noise9(dt, self._q3)))
+            f, qn = _matrices(max(0, int(round((t_ns - tr.t_ns) * 1e-3))), self._q3)
+            preds.append((f @ tr.s, f @ tr.S @ f.T + qn))
 
         n_det = len(detections)
         if n_det:
@@ -184,24 +191,40 @@ class CartesianClayTracker(ClayTracker):
         return self.tracks
 
     def _propagate(self, track: Track, t_ns: int) -> tuple[np.ndarray, np.ndarray]:
-        dt = max(0.0, (int(t_ns) - track.t_ns) * 1e-9)
-        if dt <= 0.0:
+        dt_us = max(0, int(round((int(t_ns) - track.t_ns) * 1e-3)))
+        if dt_us <= 0:
             return track.s, track.S
-        f = _transition9(dt)
-        return f @ track.s, f @ track.S @ f.T + _noise9(dt, self._q3)
+        f, qn = _matrices(dt_us, self._q3)
+        return f @ track.s, f @ track.S @ f.T + qn
+
+    def _position(self, track: Track, t_ns: int) -> np.ndarray:
+        dt = max(0.0, (int(t_ns) - track.t_ns) * 1e-9)
+        s = track.s
+        return s[0:3] + dt * s[3:6] + (0.5 * dt * dt) * s[6:9]
 
     def predict(self, track: Track, t_ns: int) -> tuple[float, float, float]:
-        """(az, el, sigma_rad) at t_ns; sigma is the on-sphere 1-sigma of the predicted direction."""
-        s, S = self._propagate(track, t_ns)
-        az, el = _azel(s[0:3])
-        H = _azel_jacobian(s[0:3])
-        C = H @ S[0:3, 0:3] @ H.T
+        """(az, el, sigma_rad) at t_ns; sigma is the on-sphere 1-sigma of the predicted direction.
+
+        Only the 3x3 position block of the propagated covariance is needed, so it is formed from the 3x3
+        sub-blocks directly (the solver calls this every frame for each candidate fire time)."""
+        dt = max(0.0, (int(t_ns) - track.t_ns) * 1e-9)
+        h = 0.5 * dt * dt
+        S = track.S
+        pp, pv, pa = S[0:3, 0:3], S[0:3, 3:6], S[0:3, 6:9]
+        vv, va, aa = S[3:6, 3:6], S[3:6, 6:9], S[6:9, 6:9]
+        cross = dt * pv + h * pa + dt * h * va
+        cov = pp + cross + cross.T + dt * dt * vv + h * h * aa
+        cov = cov + np.eye(3) * (self._q3 * dt ** 5 / 20.0)
+        p = self._position(track, t_ns)
+        az, el = _azel(p)
+        H = _azel_jacobian(p)
+        C = H @ cov @ H.T
         var = math.cos(el) ** 2 * C[0, 0] + C[1, 1]
         return az, el, math.sqrt(max(float(var), 0.0))
 
     def predict_dir(self, track: Track, t_ns: int) -> np.ndarray:
-        s, _ = self._propagate(track, t_ns)
-        p = s[0:3]
+        """Unit world direction at t_ns: the mean position only (no covariance work)."""
+        p = self._position(track, t_ns)
         return p / max(float(np.linalg.norm(p)), 1e-12)
 
     def angular_rate(self, track: Track) -> float:
