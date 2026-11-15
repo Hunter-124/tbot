@@ -32,13 +32,26 @@ FAILs and review WARNs. See [PREFLIGHT.md](PREFLIGHT.md) for the complete pre-as
 ```bash
 tbot hwcheck                       # boot overlays, camera fps, IMU, GPIO, PWM/H-bridge, power, temperature, calib status
 tbot hwcheck --interactive         # also asks you to press and release the arming button
-tbot jog servo                     # MG996R: <us>, +/-, rest, fire, test, save, q  (moves only while the button is held)
+tbot jog servo                     # MG996R: <us>, +/-, lo, hi, rest, fire, test, save, q  (moves only while the button is held)
 tbot jog pq12                      # fallback only: e <ms>, r <ms>, home, test, swap, save, q
 ```
 
 **Pass.** `hwcheck` shows no FAIL (camera at >= 90 % of `camera.fps`, IMU at >= 90 % of `imu.sample_rate_hz`,
 no under-voltage now). In `jog`, the lever/rod reaches the trigger break at `fire` and clears it at `rest`, the
 button release returns it to rest instantly, and `save` wrote `config/local.toml`. Gun unloaded throughout.
+
+**Servo jog, step by step.** The servo is **limp whenever idle**: `jog` starts with the PWM off and every move is a
+short burst (`actuator.servo.jog_burst_ms`, 400 ms) followed by limp. A held pulse the lever cannot reach - pressed
+into the trigger - stalls an MG996R at full current, and a guessed `rest_us` once did exactly that for 30 s.
+1. Hold the button. The first move must be within `max_jump_us` (50 µs) of centre (1500 µs); after that each move may
+   change the pulse by at most 50 µs until the travel limits are marked. Creep with `+` / `-` (10 µs steps).
+2. Find the two ends of the lever's **valid** travel - one end just past the trigger break (do not push harder than
+   the break needs), the other the mechanical clearance on the far side - and mark them with `lo` and `hi`.
+   Moves outside `lo`..`hi` are refused from then on.
+3. Mark `rest` (lever just off the trigger) and `fire` (sear breaks), both inside the travel. `test` runs one cycle:
+   fire for `hold_ms`, back to rest for `return_ms`, then limp.
+4. `save` writes `rest_us`, `fire_us`, `min_us`, `max_us`; it refuses until both limits are marked and rest/fire lie
+   inside them. On the real servo the actuator refuses to fire at all while `min_us`/`max_us` are unset.
 
 ---
 

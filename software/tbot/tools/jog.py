@@ -38,6 +38,8 @@ __all__ = ["MIN_PULSE_US", "MAX_PULSE_US", "DEFAULT_STEP_US", "JogRepl", "ServoJ
 MIN_PULSE_US, MAX_PULSE_US = 500.0, 2500.0
 #: `+` / `-` step.
 DEFAULT_STEP_US = 10.0
+#: Servo centre: before travel limits are calibrated, the first move must land within max_jump_us of it.
+NEUTRAL_US = 1500.0
 #: REPL poll period while a timed pulse runs (also how fast a release is noticed).
 POLL_S = 0.002
 #: Printed whenever the interlock drops while something was moving.
@@ -185,9 +187,17 @@ class ServoJog(JogRepl):
         self.rest_us = _clamp_pulse(s.rest_us)
         self.fire_us = _clamp_pulse(s.fire_us)
         self.step_us = abs(float(step_us)) or DEFAULT_STEP_US
-        self.current_us = self.rest_us
+        # Calibrated travel limits (0 = not yet). Until both are set, moves creep: at most max_jump_us per move,
+        # starting near NEUTRAL_US - the lever's valid travel is small and the trigger is somewhere inside it.
+        self.min_us = float(getattr(s, "min_us", 0.0) or 0.0)
+        self.max_us = float(getattr(s, "max_us", 0.0) or 0.0)
+        self.max_jump_us = abs(float(getattr(s, "max_jump_us", 50.0))) or 50.0
+        self.current_us: float | None = None  # last commanded pulse this session (None = never driven)
+        self.burst_s = max(0.05, float(getattr(s, "jog_burst_ms", 400.0)) / 1000.0)
         self._actuator: ServoActuator | None = None
-        self.pwm.set_pulse_us(self.rest_us)  # rest is always allowed: it is where the lever belongs
+        # Start LIMP. Never drive a pulse on start-up: rest_us may be an unverified guess, and a pulse the lever
+        # cannot reach (pressed into the trigger) stalls the servo at full current for as long as it is held.
+        self.pwm.disable()
         self._subscribe()
 
     # -- pulses -------------------------------------------------------------------------------
@@ -195,14 +205,44 @@ class ServoJog(JogRepl):
         target = _clamp_pulse(us)
         if target != float(us):
             self.log(f"clamped {float(us):.0f} -> {target:.0f} us ({MIN_PULSE_US:.0f}-{MAX_PULSE_US:.0f})")
-        if target != self.rest_us and not self.armed:
+        why = self._out_of_range(target)
+        if why:
+            self.log(f"refused: {target:.0f} us - {why}")
+            return False
+        if not self.armed:
             self._refuse(f"{target:.0f} us")
             return False
+        # A short burst: drive for burst_s, then cut the PWM so the servo never holds against anything.
         self.pwm.set_pulse_us(target)
         self.current_us = target
+        if not getattr(self.pwm, "is_sim", False):
+            deadline = time.monotonic() + self.burst_s
+            while time.monotonic() < deadline and self.armed:
+                time.sleep(POLL_S)
+        self.pwm.disable()
         tag = "  (rest)" if target == self.rest_us else ("  (fire)" if target == self.fire_us else "")
-        self.log(f"pulse {target:.0f} us{tag}")
+        self.log(f"pulse {target:.0f} us for {self.burst_s * 1e3:.0f} ms, now limp{tag}")
         return True
+
+    def _base_us(self) -> float:
+        """Reference for relative moves: the last pulse, or servo centre before anything was driven."""
+        return NEUTRAL_US if self.current_us is None else self.current_us
+
+    @property
+    def limits_set(self) -> bool:
+        return 0.0 < self.min_us < self.max_us
+
+    def _out_of_range(self, target: float) -> str | None:
+        if self.limits_set:
+            if not self.min_us <= target <= self.max_us:
+                return f"outside the calibrated travel {self.min_us:.0f}-{self.max_us:.0f} us"
+            return None
+        ref = NEUTRAL_US if self.current_us is None else self.current_us
+        if abs(target - ref) > self.max_jump_us + 1e-6:
+            where = f"servo centre {NEUTRAL_US:.0f}" if self.current_us is None else f"the last pulse {ref:.0f}"
+            return (f"more than {self.max_jump_us:.0f} us from {where} (travel limits not calibrated yet: creep "
+                    "toward each end with + / -, then mark it with lo / hi)")
+        return None
 
     def _sync_actuator(self) -> None:
         act = self._actuator
@@ -221,8 +261,7 @@ class ServoJog(JogRepl):
         act = self._actuator
         if act is not None:
             act.abort()
-        self.pwm.set_pulse_us(self.rest_us)
-        self.current_us = self.rest_us
+        self.pwm.disable()  # limp: no pulse is held with the button released
         self.log(SAFE_MESSAGE)
 
     # -- commands -----------------------------------------------------------------------------
@@ -230,10 +269,10 @@ class ServoJog(JogRepl):
         if cmd[0] in "+-" and len(cmd) > 1:  # "+25" / "-25": relative, never an absolute pulse
             delta = _as_float(cmd, self.log)
             if delta is not None:
-                self._set_pulse(self.current_us + delta)
+                self._set_pulse(self._base_us() + delta)
             return True
         if cmd in ("+", "-"):
-            self._set_pulse(self.current_us + (self.step_us if cmd == "+" else -self.step_us))
+            self._set_pulse(self._base_us() + (self.step_us if cmd == "+" else -self.step_us))
             return True
         if cmd == "step":
             value = _as_float(args[0], self.log) if args else None
@@ -242,6 +281,22 @@ class ServoJog(JogRepl):
             else:
                 self.step_us = float(value)
                 self.log(f"step {self.step_us:.0f} us")
+            return True
+        if cmd in ("lo", "hi"):
+            if self.current_us is None:
+                self.log(f"move the lever to the end of its travel first, then `{cmd}`")
+                return True
+            if cmd == "lo":
+                self.min_us = self.current_us
+            else:
+                self.max_us = self.current_us
+            if self.min_us and self.max_us and self.min_us >= self.max_us:
+                self.log(f"lo {self.min_us:.0f} >= hi {self.max_us:.0f}: re-mark them")
+            self.log(f"travel {self.min_us:.0f}-{self.max_us:.0f} us"
+                     + ("" if self.limits_set else "  (mark the other end too)"))
+            return True
+        if cmd in ("rest", "fire") and self.current_us is None:
+            self.log(f"move the lever to the {cmd} position first, then `{cmd}`")
             return True
         if cmd == "rest":
             self.rest_us = self.current_us
@@ -268,44 +323,65 @@ class ServoJog(JogRepl):
         if self.rest_us == self.fire_us:
             self.log("rest_us == fire_us: mark them first (move the lever, then `rest` / `fire`)")
             return
+        if not self.limits_set:
+            self.log("refused: test needs the travel limits (lo / hi) marked first")
+            return
+        for name, us in (("rest", self.rest_us), ("fire", self.fire_us)):
+            if not self.min_us <= us <= self.max_us:
+                self.log(f"refused: {name} {us:.0f} us is outside the travel {self.min_us:.0f}-{self.max_us:.0f} us")
+                return
         if not self.armed:
             self._refuse("test")
             return
         act = self._ensure_actuator()
-        act.rest()
-        self.current_us = self.rest_us
         hold_s = max(0.0, float(self.cfg.actuator.servo.hold_ms) / 1000.0)
-        self.log(f"test: {self.rest_us:.0f} -> {self.fire_us:.0f} us, hold {hold_s * 1e3:.0f} ms, "
-                 "back to rest")
+        self.log(f"test: {self.fire_us:.0f} us for {hold_s * 1e3:.0f} ms, back to {self.rest_us:.0f} us, then limp")
         if not act.fire(time.monotonic_ns()):
             self.log("fire refused (not armed / busy)")
             return
         deadline = time.monotonic() + hold_s + 1.0
         while act.busy and time.monotonic() < deadline:
             time.sleep(POLL_S)
-        act.abort()  # guarantees rest even if the hold timer was late
+        if act.busy:
+            act.abort()  # the hold timer was late: pull back to rest now
+        act._join_timers(act.return_s + 1.0)  # the rest burst finishes and the servo goes limp
         self.current_us = self.rest_us
         self.log(f"test done, back at rest {self.rest_us:.0f} us"
                  + ("" if self.armed else f"  ({SAFE_MESSAGE})"))
 
     def _cmd_save(self) -> None:
-        self._save({"actuator": {"servo": {"rest_us": float(self.rest_us), "fire_us": float(self.fire_us)}}},
-                   f"rest_us={self.rest_us:.0f} fire_us={self.fire_us:.0f}")
+        if not self.limits_set:
+            self.log("refused: mark the travel limits (lo / hi) before saving")
+            return
+        for name, us in (("rest", self.rest_us), ("fire", self.fire_us)):
+            if not self.min_us <= us <= self.max_us:
+                self.log(f"refused: {name} {us:.0f} us is outside the travel {self.min_us:.0f}-{self.max_us:.0f} us")
+                return
+        self._save({"actuator": {"servo": {"rest_us": float(self.rest_us), "fire_us": float(self.fire_us),
+                                           "min_us": float(self.min_us), "max_us": float(self.max_us)}}},
+                   f"rest_us={self.rest_us:.0f} fire_us={self.fire_us:.0f} "
+                   f"travel {self.min_us:.0f}-{self.max_us:.0f} us")
 
     # -- text ---------------------------------------------------------------------------------
     def help_text(self) -> str:
         return (
             "commands:  <us> go to that pulse | + / - step (also +25 / -25) | step <us> set the step\n"
+            "           every move is a short burst (actuator.servo.jog_burst_ms), then the servo goes limp\n"
+            "           lo / hi  mark the current pulse as an end of the lever's valid travel (moves outside are\n"
+            "                 refused; until both are set each move is limited to max_jump_us)\n"
             "           rest  mark the current pulse as rest_us (lever just off the trigger)\n"
             "           fire  mark the current pulse as fire_us (sear breaks)\n"
             "           test  one full fire/rest cycle through the real actuator\n"
-            "           save  write rest_us/fire_us to config/local.toml | show | q"
+            "           save  write rest_us/fire_us/min_us/max_us to config/local.toml | show | q"
         )
 
     def status_text(self) -> str:
         s = self.cfg.actuator.servo
         return (f"servo pwmchip{int(s.pwm_chip)}/pwm{int(s.pwm_channel)} @ {float(s.frame_hz):g} Hz  "
-                f"pulse {self.current_us:.0f} us  rest {self.rest_us:.0f}  fire {self.fire_us:.0f}  "
+                f"last pulse {'-' if self.current_us is None else f'{self.current_us:.0f} us'} "
+                f"({'driving' if getattr(self.pwm, 'pulse_us', None) else 'limp'})  "
+                f"travel {f'{self.min_us:.0f}-{self.max_us:.0f}' if self.limits_set else 'NOT SET'}  "
+                f"rest {self.rest_us:.0f}  fire {self.fire_us:.0f}  "
                 f"step {self.step_us:.0f}  armed {'YES' if self.armed else 'no'}")
 
     def close(self) -> None:
@@ -315,12 +391,12 @@ class ServoJog(JogRepl):
         act = self._actuator
         if act is not None:
             act.abort()
+            act._join_timers(act.return_s + 1.0)
         try:
-            self.pwm.set_pulse_us(self.rest_us)  # left driven AT rest: the lever holds its position
+            self.pwm.disable()
         except OSError as exc:
-            self.log(f"could not park the servo at rest: {exc}")
-        self.current_us = self.rest_us
-        self.log(f"parked: PWM left at rest {self.rest_us:.0f} us")
+            self.log(f"could not stop the PWM: {exc}")
+        self.log("PWM off: servo limp")
 
 
 # --------------------------------------------------------------------------------------------- pq12

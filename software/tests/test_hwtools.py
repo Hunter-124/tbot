@@ -601,38 +601,88 @@ def assert_never_both_high(gpio: SimGpio, pin_a: int, pin_b: int) -> None:
         assert not (level[pin_a] and level[pin_b]), f"H-bridge shoot-through after writing {pin}={value}"
 
 
-def test_servo_jog_never_moves_while_the_button_is_released():
+def _jog_driven(pwm) -> list[int]:
+    return [round(us) for _t, us in pwm.pulses if us]
+
+
+def _with_travel(cfg, lo=1300.0, hi=1700.0):
+    cfg.actuator.servo.min_us, cfg.actuator.servo.max_us = lo, hi
+    return cfg
+
+
+def test_servo_jog_starts_limp_and_never_moves_while_the_button_is_released():
+    """Start-up must not drive rest_us: an unverified rest pulse can sit stalled against the trigger."""
     cfg, gpio, arming, pwm, repl, log = build_servo_jog()
-    rest = cfg.actuator.servo.rest_us
+    assert pwm.pulse_us is None and _jog_driven(pwm) == []
     try:
-        repl.run_commands(["1600", "+", "-", "test"])
+        repl.run_commands(["1520", "+", "-", "test", str(round(cfg.actuator.servo.rest_us))])
     finally:
         repl.close()
-    assert pwm.pulse_us == pytest.approx(rest)
-    assert {round(us) for _t, us in pwm.pulses} == {round(rest)}
+    assert _jog_driven(pwm) == []  # not even the rest pulse
+    assert pwm.pulse_us is None
     assert any("refused" in line for line in log)
     arming.close()
     gpio.close()
 
 
-def test_servo_jog_moves_while_armed_and_rests_the_instant_it_is_released():
+def test_servo_jog_creeps_until_the_travel_limits_are_marked():
+    """The lever's valid travel is small: before lo / hi exist, no move may jump more than max_jump_us."""
     cfg, gpio, arming, pwm, repl, log = build_servo_jog()
-    rest = cfg.actuator.servo.rest_us
+    jump = cfg.actuator.servo.max_jump_us
     try:
         arm(gpio, cfg, arming)
-        repl.execute("1600")
-        assert pwm.pulse_us == pytest.approx(1600.0)
+        repl.execute("1670")  # the old default rest guess: far from centre, refused
+        assert _jog_driven(pwm) == []
+        repl.execute(str(round(jog.NEUTRAL_US + jump)))  # within one jump of centre: allowed
         repl.execute("+")
-        assert pwm.pulse_us == pytest.approx(1600.0 + jog.DEFAULT_STEP_US)
+        repl.execute("+25")
+        repl.execute(str(round(jog.NEUTRAL_US + jump + 10 + 25 + jump + 5)))  # one jump + 5 from last: refused
+        assert _jog_driven(pwm) == [round(jog.NEUTRAL_US + jump), round(jog.NEUTRAL_US + jump + 10),
+                                    round(jog.NEUTRAL_US + jump + 35)]
+        assert pwm.pulse_us is None  # every move was a burst
+        repl.execute("hi")
+        repl.execute("save")  # only one end marked: refused
+        assert any("before saving" in line for line in log)
+    finally:
+        repl.close()
+        arming.close()
+        gpio.close()
+
+
+def test_servo_jog_moves_in_short_bursts_while_armed():
+    cfg, gpio, arming, pwm, repl, log = build_servo_jog()
+    try:
+        arm(gpio, cfg, arming)
+        repl.execute("1520")
+        assert _jog_driven(pwm) == [1520] and pwm.pulse_us is None  # drove, then let go
+        repl.execute("+")
+        assert _jog_driven(pwm)[-1] == round(1520.0 + jog.DEFAULT_STEP_US) and pwm.pulse_us is None
         repl.execute("fire")
-        assert repl.fire_us == pytest.approx(1600.0 + jog.DEFAULT_STEP_US)
+        assert repl.fire_us == pytest.approx(1520.0 + jog.DEFAULT_STEP_US)
 
         gpio.inject(cfg.arming.pin, 1)  # operator lets go
-        assert pwm.pulse_us == pytest.approx(rest)
+        assert pwm.pulse_us is None
         assert any(jog.SAFE_MESSAGE in line for line in log)
-        # ... and nothing can move again until it is held once more
+        n = len(_jog_driven(pwm))
+        repl.execute("1520")  # nothing can move again until it is held once more
+        assert len(_jog_driven(pwm)) == n
+    finally:
+        repl.close()
+        arming.close()
+        gpio.close()
+
+
+def test_servo_jog_refuses_moves_outside_the_calibrated_travel():
+    cfg, gpio, arming, pwm, repl, log = build_servo_jog(_with_travel(make_cfg(), 1400.0, 1600.0))
+    try:
+        arm(gpio, cfg, arming)
+        repl.execute("1400")
         repl.execute("1600")
-        assert pwm.pulse_us == pytest.approx(rest)
+        repl.execute("1610")
+        repl.execute("1390")
+        repl.execute("-")  # from 1600
+        assert _jog_driven(pwm) == [1400, 1600, 1590]
+        assert sum("outside the calibrated travel" in line for line in log) == 2
     finally:
         repl.close()
         arming.close()
@@ -640,29 +690,45 @@ def test_servo_jog_moves_while_armed_and_rests_the_instant_it_is_released():
 
 
 def test_servo_jog_clamps_pulses_to_the_servo_range():
-    cfg, gpio, arming, pwm, repl, log = build_servo_jog()
+    cfg, gpio, arming, pwm, repl, log = build_servo_jog(_with_travel(make_cfg(), 500.0, 2500.0))
     try:
         arm(gpio, cfg, arming)
         repl.execute("400")
-        assert pwm.pulse_us == pytest.approx(jog.MIN_PULSE_US)
         repl.execute("3000")
-        assert pwm.pulse_us == pytest.approx(jog.MAX_PULSE_US)
         repl.execute("-100")
-        assert pwm.pulse_us == pytest.approx(jog.MAX_PULSE_US - 100.0)
+        assert _jog_driven(pwm) == [round(jog.MIN_PULSE_US), round(jog.MAX_PULSE_US),
+                                    round(jog.MAX_PULSE_US - 100.0)]
     finally:
         repl.close()
         arming.close()
         gpio.close()
 
 
-def test_servo_jog_test_cycle_runs_through_the_actuator_and_returns_to_rest():
-    cfg, gpio, arming, pwm, repl, log = build_servo_jog()
+def test_servo_jog_test_cycle_fires_returns_and_goes_limp():
+    cfg, gpio, arming, pwm, repl, log = build_servo_jog(_with_travel(make_cfg()))
+    cfg.actuator.servo.hold_ms = 30.0
+    cfg.actuator.servo.return_ms = 30.0
     try:
         arm(gpio, cfg, arming)
         repl.run_commands(["1500", "rest", "1400", "fire", "test"])
-        assert pwm.pulse_us == pytest.approx(1500.0)
-        assert any(round(us) == 1400 for _t, us in pwm.pulses), "the fire pulse was never emitted"
+        driven = _jog_driven(pwm)
+        assert driven[-2:] == [1400, 1500], driven  # fire burst, then rest burst
+        assert pwm.pulse_us is None
         assert any("test done" in line for line in log)
+    finally:
+        repl.close()
+        arming.close()
+        gpio.close()
+
+
+def test_servo_jog_test_and_save_refuse_without_travel_limits():
+    cfg, gpio, arming, pwm, repl, log = build_servo_jog()
+    try:
+        arm(gpio, cfg, arming)
+        repl.run_commands(["1500", "rest", "1460", "fire", "test", "save"])
+        assert _jog_driven(pwm) == [1500, 1460]  # the two marking moves only: no fire cycle
+        assert any("test needs the travel limits" in line for line in log)
+        assert any("before saving" in line for line in log)
     finally:
         repl.close()
         arming.close()
@@ -674,7 +740,8 @@ def test_servo_jog_save_round_trips_through_local_toml(monkeypatch, tmp_path):
     cfg, gpio, arming, pwm, repl, log = build_servo_jog()
     try:
         arm(gpio, cfg, arming)
-        repl.run_commands(["1500", "rest", "1400", "fire", "save"])
+        # creep out to each end of the travel, mark it, then mark rest / fire inside it
+        repl.run_commands(["1540", "hi", "1500", "rest", "1460", "fire", "1450", "lo", "save"])
     finally:
         repl.close()
         arming.close()
@@ -683,7 +750,9 @@ def test_servo_jog_save_round_trips_through_local_toml(monkeypatch, tmp_path):
     assert any("saved" in line for line in log)
     reloaded = load_config()
     assert reloaded.actuator.servo.rest_us == pytest.approx(1500.0)
-    assert reloaded.actuator.servo.fire_us == pytest.approx(1400.0)
+    assert reloaded.actuator.servo.fire_us == pytest.approx(1460.0)
+    assert reloaded.actuator.servo.min_us == pytest.approx(1450.0)
+    assert reloaded.actuator.servo.max_us == pytest.approx(1540.0)
 
 
 def test_pq12_jog_refuses_to_extend_while_the_button_is_released():
@@ -742,13 +811,13 @@ def test_pq12_jog_test_cycle_and_swap_persist(monkeypatch, tmp_path):
 
 
 def test_jog_main_runs_a_command_list_on_the_sim_backend(capsys):
-    code = jog.main(["servo", "--sim", "--sim-armed", "--commands", "show;1600;+;show;q",
+    code = jog.main(["servo", "--sim", "--sim-armed", "--commands", "show;1540;+;show;q",
                      "--set", "arming.debounce_ms=5"])
     out = capsys.readouterr().out
     assert code == 0
     assert "UNLOADED" in out
-    assert "pulse 1600 us" in out
-    assert "parked: PWM left at rest" in out
+    assert "pulse 1540 us" in out
+    assert "PWM off: servo limp" in out
 
 
 def test_jog_main_refuses_an_actuator_it_cannot_jog(capsys):

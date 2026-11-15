@@ -94,7 +94,13 @@ class _BaseActuator:
 
 
 class ServoActuator(_BaseActuator):
-    """MG996R on hardware PWM: rest pulse -> fire pulse -> back to rest after cfg.actuator.servo.hold_ms."""
+    """MG996R on hardware PWM, driven only in short bursts.
+
+    Idle = PWM off (servo limp): a hobby servo commanded to a position it cannot reach - the lever against the
+    trigger - stalls at full current for as long as the pulse is held, so nothing here ever holds a pulse.
+    fire(): fire pulse for hold_ms -> rest pulse for return_ms -> PWM off. Releasing the button mid-cycle drives
+    rest for return_ms and then goes limp; releasing it while idle sends nothing at all.
+    """
 
     kind = "servo"
 
@@ -105,26 +111,63 @@ class ServoActuator(_BaseActuator):
         self.rest_us = float(s.rest_us)
         self.fire_us = float(s.fire_us)
         self.hold_s = max(0.0, float(s.hold_ms) / 1000.0)
+        self.return_s = max(0.0, float(getattr(s, "return_ms", 250.0)) / 1000.0)
         self._settle_s = 0.0 if getattr(pwm, "is_sim", False) else min(0.06, 2.0 / float(s.frame_hz))
-        self.rest()
+        self._driving = False
+        lo, hi = float(getattr(s, "min_us", 0.0) or 0.0), float(getattr(s, "max_us", 0.0) or 0.0)
+        self.travel_error: str | None = None
+        if 0.0 < lo < hi:
+            for name, us in (("rest_us", self.rest_us), ("fire_us", self.fire_us)):
+                if not lo <= us <= hi:
+                    self.travel_error = f"actuator.servo.{name}={us:.0f} us is outside the travel {lo:.0f}-{hi:.0f} us"
+        elif not getattr(pwm, "is_sim", False):
+            self.travel_error = ("servo travel limits are not calibrated (actuator.servo.min_us/max_us): "
+                                 "run `tbot jog servo` and save lo / hi / rest / fire")
+        self._limp()
+
+    def _limp(self) -> None:
+        """Stop the pulse train: the servo stops driving (no stall current)."""
+        with self._lock:
+            self.pwm.disable()
+            self._driving = False
+
+    def _drive_rest_then_limp(self) -> None:
+        with self._lock:  # schedule under the lock: whoever sees the state change also sees the limp timer
+            self.pwm.set_pulse_us(self.rest_us)
+            self._driving = True
+            self._schedule(self.return_s, self._limp_if_idle)
+
+    def _limp_if_idle(self) -> None:
+        with self._lock:
+            if not self._busy:
+                self.pwm.disable()
+                self._driving = False
 
     def rest(self) -> None:
+        """Park the lever: a rest burst, then limp - only while armed. Unarmed it just goes limp: rest_us is a bench
+        setting, and driving an unverified pulse with nobody holding the button could press the trigger."""
         self._cancel_timers()
         with self._lock:
-            self.pwm.set_pulse_us(self.rest_us)
             self._busy = False
+        self._forget_finished()
+        if self._armed():
+            self._drive_rest_then_limp()
+        else:
+            self._limp()
 
     def fire(self, t_ns: int) -> bool:
-        if not self._armed():
+        if not self._armed() or self.travel_error:
             return False
         with self._lock:
             if self._closed or self._busy:
                 return False
             if not self._armed():  # re-check under the lock: the button may have been released meanwhile
                 return False
+            self._cancel_timers()  # a pending limp from the previous cycle must not cut this one short
             self.last_fire_ns = int(t_ns)
             self.last_rest_ns = None
             self._busy = True
+            self._driving = True
             self.pwm.set_pulse_us(self.fire_us)
         self._forget_finished()
         self._schedule(self.hold_s, self._return_to_rest)
@@ -136,23 +179,32 @@ class ServoActuator(_BaseActuator):
                 return
             self.pwm.set_pulse_us(self.rest_us)
             self.last_rest_ns = time.monotonic_ns()
+            self._schedule(self.return_s, self._limp_if_idle)
             self._busy = False
 
     def abort(self) -> None:
         self._cancel_timers()
         with self._lock:
             was_busy = self._busy
-            self.pwm.set_pulse_us(self.rest_us)
+            was_driving = self._driving
+            self._busy = False
             if was_busy:
                 self.last_rest_ns = time.monotonic_ns()
-            self._busy = False
+        if was_busy or was_driving:
+            self._drive_rest_then_limp()  # pull the lever off the trigger, then let go
 
     def close(self) -> None:
-        self.abort()
-        if self._settle_s:
-            time.sleep(self._settle_s)  # let the rest pulse actually go out before the signal stops
+        self._cancel_timers()
+        with self._lock:
+            was_moving = self._busy or self._driving
+            self._busy = False
+            if was_moving:
+                self.pwm.set_pulse_us(self.rest_us)
+        if was_moving and self._settle_s:
+            time.sleep(max(self._settle_s, self.return_s))  # let the lever get back off the trigger first
         with self._lock:
             self._closed = True
+            self._driving = False
         close = getattr(self.pwm, "close", None)
         if callable(close):
             close()

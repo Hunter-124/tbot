@@ -110,18 +110,37 @@ def test_max_shots_per_arm_enforced_and_reset_by_a_new_press():
 
 
 # --------------------------------------------------------------------------------------------- servo
-def test_servo_refuses_fire_unless_armed():
+def _driven(pwm) -> list[float]:
+    """Every non-zero pulse width the servo was commanded to (0.0 entries are 'PWM off')."""
+    return [us for _t, us in pwm.pulses if us]
+
+
+def test_servo_starts_limp_and_refuses_fire_unless_armed():
     cfg = make_cfg()
     gpio, arming = build(cfg)
     pwm = SimPwm(0, 0, cfg.actuator.servo.frame_hz)
     act = ServoActuator(cfg, pwm, arming)
+    assert pwm.pulse_us is None and pwm.enabled is False  # limp from construction: nothing is driven
     assert act.fire(time.monotonic_ns()) is False
-    assert pwm.pulse_us == pytest.approx(cfg.actuator.servo.rest_us)
     assert act.busy is False and act.last_fire_ns is None
+    assert _driven(pwm) == []
 
 
-def test_servo_fires_then_returns_to_rest_after_the_hold():
+def test_servo_rest_is_a_noop_unless_armed():
+    """rest_us is a bench guess until jogged: driving it with nobody holding the button could press the trigger."""
     cfg = make_cfg()
+    gpio, arming = build(cfg)
+    pwm = SimPwm(0, 0, cfg.actuator.servo.frame_hz)
+    act = ServoActuator(cfg, pwm, arming)
+    act.rest()
+    act.abort()
+    assert _driven(pwm) == [] and pwm.pulse_us is None
+
+
+def test_servo_fires_returns_to_rest_then_goes_limp():
+    cfg = make_cfg()
+    cfg.actuator.servo.hold_ms = 50.0
+    cfg.actuator.servo.return_ms = 50.0
     gpio, arming = build(cfg)
     pwm = SimPwm(0, 0, cfg.actuator.servo.frame_hz)
     act = ServoActuator(cfg, pwm, arming)
@@ -134,11 +153,31 @@ def test_servo_fires_then_returns_to_rest_after_the_hold():
     assert wait_for(lambda: not act.busy, 0.5)
     assert pwm.pulse_us == pytest.approx(cfg.actuator.servo.rest_us)
     assert act.last_rest_ns is not None and act.last_rest_ns > t
+    # ... and then it lets go, even with the button still held: no pulse is ever held indefinitely
+    assert wait_for(lambda: pwm.pulse_us is None, 0.5)
+    assert [round(us) for us in _driven(pwm)] == [round(cfg.actuator.servo.fire_us), round(cfg.actuator.servo.rest_us)]
 
 
-def test_servo_disarm_during_hold_returns_to_rest_immediately():
+def test_servo_never_holds_a_pulse_longer_than_hold_plus_return():
+    cfg = make_cfg()
+    cfg.actuator.servo.hold_ms = 40.0
+    cfg.actuator.servo.return_ms = 40.0
+    gpio, arming = build(cfg)
+    pwm = SimPwm(0, 0, cfg.actuator.servo.frame_hz)
+    act = ServoActuator(cfg, pwm, arming)
+    arm(gpio, cfg, arming)
+    for _ in range(3):
+        t0 = time.monotonic_ns()
+        assert act.fire(t0) is True
+        assert wait_for(lambda: pwm.pulse_us is None, 0.5)
+        driven_s = (pwm.pulses[-1][0] - t0) / 1e9
+        assert driven_s < 0.040 + 0.040 + 0.1
+
+
+def test_servo_disarm_during_hold_pulls_back_to_rest_then_goes_limp():
     cfg = make_cfg()
     cfg.actuator.servo.hold_ms = 1000.0
+    cfg.actuator.servo.return_ms = 50.0
     gpio, arming = build(cfg)
     pwm = SimPwm(0, 0, cfg.actuator.servo.frame_hz)
     act = ServoActuator(cfg, pwm, arming)
@@ -147,9 +186,33 @@ def test_servo_disarm_during_hold_returns_to_rest_immediately():
     gpio.inject(cfg.arming.pin, 1)
     assert pwm.pulse_us == pytest.approx(cfg.actuator.servo.rest_us)
     assert act.busy is False
-    n_pulses = len(pwm.pulses)
+    assert wait_for(lambda: pwm.pulse_us is None, 0.5)
+    time.sleep(1.1)  # past the cancelled hold timer: it must not have re-driven anything
+    assert [round(us) for us in _driven(pwm)] == [round(cfg.actuator.servo.fire_us), round(cfg.actuator.servo.rest_us)]
+
+
+def test_servo_refuses_to_fire_outside_the_calibrated_travel():
+    cfg = make_cfg()
+    cfg.actuator.servo.min_us, cfg.actuator.servo.max_us = 1400.0, 1600.0
+    cfg.actuator.servo.rest_us, cfg.actuator.servo.fire_us = 1500.0, 1670.0
+    gpio, arming = build(cfg)
+    pwm = SimPwm(0, 0, cfg.actuator.servo.frame_hz)
+    act = ServoActuator(cfg, pwm, arming)
+    arm(gpio, cfg, arming)
+    assert act.travel_error and "fire_us" in act.travel_error
+    assert act.fire(time.monotonic_ns()) is False
+    assert _driven(pwm) == []
+
+
+def test_servo_release_while_idle_sends_nothing():
+    cfg = make_cfg()
+    gpio, arming = build(cfg)
+    pwm = SimPwm(0, 0, cfg.actuator.servo.frame_hz)
+    ServoActuator(cfg, pwm, arming)
+    arm(gpio, cfg, arming)
+    gpio.inject(cfg.arming.pin, 1)
     time.sleep(0.05)
-    assert len(pwm.pulses) == n_pulses  # the hold timer was cancelled, not merely overridden
+    assert _driven(pwm) == [] and pwm.pulse_us is None
 
 
 # --------------------------------------------------------------------------------------------- pq12

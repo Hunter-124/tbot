@@ -160,6 +160,11 @@ class ServoConfig:
     rest_us: float
     fire_us: float
     hold_ms: float
+    return_ms: float = 250.0
+    jog_burst_ms: float = 400.0
+    min_us: float = 0.0
+    max_us: float = 0.0
+    max_jump_us: float = 50.0
 
 
 @dataclass

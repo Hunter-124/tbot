@@ -121,6 +121,12 @@ frame_hz = 50.0
 rest_us = 1670.0              # lever +17 deg [INFERENCE ~10 us/deg; confirm direction on the bench]
 fire_us = 1330.0              # lever -17 deg
 hold_ms = 150.0               # hold at fire before returning to rest
+return_ms = 250.0             # drive back to rest this long, then cut the PWM: the servo is LIMP whenever idle,
+                              # so it can never sit stalled against the trigger (a held pulse = continuous stall current)
+min_us = 0.0                  # calibrated travel limits of THIS lever (tbot jog servo: lo / hi / save). 0 = not
+max_us = 0.0                  # calibrated: the jog then creeps (max_jump_us per move) and the actuator will not fire
+max_jump_us = 50.0            # jog, before limits are set: the biggest change allowed in one move
+jog_burst_ms = 400.0          # `tbot jog servo`: each move drives for this long, then goes limp
 
 [actuator.pq12]
 pin_extend = 23
