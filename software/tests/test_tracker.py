@@ -15,7 +15,8 @@ import pytest
 from tbot.config import load_config
 from tbot.optics import CameraModel, MountModel, azel_to_dir
 from tbot.types import Detection
-from tbot.vision.tracker import ClayTracker
+from tbot.vision.tracker import ClayTracker  # noqa: F401
+from tbot.vision.tracker3d import make_tracker
 
 W, H = 640, 400
 FPS = 120.0
@@ -83,15 +84,16 @@ def _angle(a: np.ndarray, b: np.ndarray) -> float:
     return math.atan2(float(np.linalg.norm(np.cross(a, b))), float(np.dot(a, b)))
 
 
-@pytest.fixture()
-def cfg():
-    return load_config()
+@pytest.fixture(params=["angular", "cartesian"])
+def cfg(request):
+    """Every behaviour test runs against both tracker models."""
+    return load_config(sets=[f"tracker.model={request.param}"])
 
 
 def test_crossing_clay_is_tracked_confirmed_and_predicted(cfg):
     scene = Scene(cfg)
     att = FixedAttitude(0.0, math.radians(8.0))
-    tracker = ClayTracker(cfg, scene.cam, scene.mount)
+    tracker = make_tracker(cfg, scene.cam, scene.mount)
     rng = np.random.default_rng(7)
 
     ids, pred_err, range_err, sigma_ratio = set(), [], [], []
@@ -138,7 +140,7 @@ def test_crossing_clay_is_tracked_confirmed_and_predicted(cfg):
 def test_random_clutter_never_confirms_a_track(cfg):
     scene = Scene(cfg)
     att = FixedAttitude()
-    tracker = ClayTracker(cfg, scene.cam, scene.mount)
+    tracker = make_tracker(cfg, scene.cam, scene.mount)
     rng = np.random.default_rng(11)
     for n in range(200):
         t = T0 + n * DT_NS
@@ -154,7 +156,7 @@ def test_random_clutter_never_confirms_a_track(cfg):
 def test_detection_gap_keeps_the_same_track(cfg):
     scene = Scene(cfg)
     att = FixedAttitude(0.0, math.radians(8.0))
-    tracker = ClayTracker(cfg, scene.cam, scene.mount)
+    tracker = make_tracker(cfg, scene.cam, scene.mount)
     rng = np.random.default_rng(3)
     gap = (70, 71, 72)
     seen = set()
@@ -175,7 +177,7 @@ def test_detection_gap_keeps_the_same_track(cfg):
 def test_track_is_deleted_after_too_many_misses(cfg):
     scene = Scene(cfg)
     att = FixedAttitude(0.0, math.radians(8.0))
-    tracker = ClayTracker(cfg, scene.cam, scene.mount)
+    tracker = make_tracker(cfg, scene.cam, scene.mount)
     for n in range(10):
         t = T0 + n * DT_NS
         det = scene.detect(_crossing(n / FPS), att.R_wg(t), t)
@@ -192,7 +194,7 @@ def test_azimuth_wrap_keeps_one_track(cfg):
     """A clay crossing world azimuth +/-pi must not spawn a second track."""
     scene = Scene(cfg)
     att = FixedAttitude(math.pi, math.radians(8.0))
-    tracker = ClayTracker(cfg, scene.cam, scene.mount)
+    tracker = make_tracker(cfg, scene.cam, scene.mount)
     rng = np.random.default_rng(5)
     ids, crossed, dir_err = set(), False, []
     prev_az = None
@@ -219,7 +221,7 @@ def test_azimuth_wrap_keeps_one_track(cfg):
 def test_two_clays_get_two_tracks(cfg):
     scene = Scene(cfg)
     att = FixedAttitude(0.0, math.radians(8.0))
-    tracker = ClayTracker(cfg, scene.cam, scene.mount)
+    tracker = make_tracker(cfg, scene.cam, scene.mount)
     rng = np.random.default_rng(13)
     for n in range(40):
         t = T0 + n * DT_NS
@@ -238,7 +240,7 @@ def test_two_clays_get_two_tracks(cfg):
 def test_max_tracks_and_reset(cfg):
     scene = Scene(cfg)
     att = FixedAttitude()
-    tracker = ClayTracker(cfg, scene.cam, scene.mount)
+    tracker = make_tracker(cfg, scene.cam, scene.mount)
     rng = np.random.default_rng(17)
     for n in range(5):
         t = T0 + n * DT_NS
@@ -260,7 +262,7 @@ def test_max_tracks_and_reset(cfg):
 def test_update_without_detections_predicts_forward(cfg):
     scene = Scene(cfg)
     att = FixedAttitude(0.0, math.radians(8.0))
-    tracker = ClayTracker(cfg, scene.cam, scene.mount)
+    tracker = make_tracker(cfg, scene.cam, scene.mount)
     for n in range(12):
         t = T0 + n * DT_NS
         tracker.update(t, [scene.detect(_crossing(n / FPS), att.R_wg(t), t)], att.R_wg(t))
@@ -275,3 +277,66 @@ def test_update_without_detections_predicts_forward(cfg):
     assert track.az == pytest.approx(before + az_rate / FPS, rel=0.05)
     assert tracker.predict(track, t)[2] > sigma_before, "uncertainty must grow without measurements"
     assert track.range_sigma_m > cfg.tracker.range_prior_sigma_m * 0.0  # range filter also coasts
+
+
+def _outgoing(t_s: float) -> np.ndarray:
+    """Receding clay: starts 8 m out, 22 m/s away and across, decelerating (drag) and nearly level (lift ~ g)."""
+    v0 = np.array([18.0, 9.0, 4.0])
+    a = np.array([-4.0, -2.0, -1.5])  # drag along -v, a little net sink
+    return np.array([8.0, -4.0, 1.0]) + v0 * t_s + 0.5 * a * t_s * t_s
+
+
+def test_cartesian_tracker_predicts_a_receding_clay_far_better_than_the_angular_one():
+    """The case the angular filter gets wrong: a clay whose range grows fast. 50 fps, predict 140 ms ahead."""
+    fps, horizon_s = 50.0, 0.14
+    errs, sig = {}, {}
+    for model in ("angular", "cartesian"):
+        cfg = load_config(sets=[f"tracker.model={model}"])
+        scene = Scene(cfg)
+        att = FixedAttitude(math.radians(20.0), math.radians(5.0))
+        tracker = make_tracker(cfg, scene.cam, scene.mount)
+        rng = np.random.default_rng(11)
+        e, s = [], []
+        for n in range(30):  # 0.6 s of flight
+            t = T0 + int(round(n * 1e9 / fps))
+            det = scene.detect(_outgoing(n / fps), att.R_wg(t), t, rng, 0.3)
+            tracks = tracker.update(t, [det] if det is not None else [], att.R_wg(t))
+            if n >= 15 and tracks and tracks[0].confirmed:
+                tr = tracks[0]
+                t_ahead = t + int(horizon_s * 1e9)
+                truth = _outgoing(n / fps + horizon_s)
+                e.append(math.degrees(_angle(tracker.predict_dir(tr, t_ahead), truth)))
+                s.append(math.degrees(tracker.predict(tr, t_ahead)[2]))
+        errs[model], sig[model] = float(np.mean(e)), float(np.mean(s))
+    assert errs["cartesian"] < 0.25
+    assert errs["cartesian"] < 0.5 * errs["angular"], errs
+    assert errs["cartesian"] < 3.0 * sig["cartesian"], (errs, sig)  # the reported uncertainty is honest
+
+
+def test_cartesian_angular_rate_and_range_follow_the_3d_state():
+    cfg = load_config(sets=["tracker.model=cartesian"])
+    scene = Scene(cfg)
+    att = FixedAttitude(0.0, math.radians(8.0))
+    tracker = make_tracker(cfg, scene.cam, scene.mount)
+    rng = np.random.default_rng(5)
+    tr = None
+    for n in range(60):
+        t = T0 + n * DT_NS
+        det = scene.detect(_crossing(n / FPS), att.R_wg(t), t, rng, 0.3)
+        tr = tracker.update(t, [det] if det is not None else [], att.R_wg(t))[0]
+    t_s = 59 / FPS
+    p = _crossing(t_s)
+    v = np.array([0.0, 20.0, 0.0])
+    u = p / np.linalg.norm(p)
+    true_rate = float(np.linalg.norm(v - (v @ u) * u)) / float(np.linalg.norm(p))
+    assert tracker.angular_rate(tr) == pytest.approx(true_rate, rel=0.1)
+    assert tr.range_m == pytest.approx(float(np.linalg.norm(p)), rel=0.3)
+    assert tr.range_sigma_m >= cfg.tracker.size_range_bias_frac * tr.range_m - 1e-9
+    assert tr.x.shape == (6,) and tr.P.shape == (6, 6)  # angular view for overlays/telemetry
+
+
+def test_make_tracker_rejects_an_unknown_model():
+    cfg = load_config(sets=["tracker.model=bogus"])
+    scene = Scene(cfg)
+    with pytest.raises(ValueError):
+        make_tracker(cfg, scene.cam, scene.mount)

@@ -246,8 +246,12 @@ class FireSolver:
 
         _, _, track_sigma = tracker.predict(track, t_arr_ns)
         # Clay angular speed on the sphere, from the filtered rates.
-        el = float(track.x[3])
-        omega_clay = math.hypot(float(track.x[1]) * math.cos(el), float(track.x[4]))
+        rate_fn = getattr(tracker, "angular_rate", None)
+        if callable(rate_fn):
+            omega_clay = float(rate_fn(track))
+        else:
+            el = float(track.x[3])
+            omega_clay = math.hypot(float(track.x[1]) * math.cos(el), float(track.x[4]))
         h = _DTOF_STEP_M
         lo = max(dist - h, 1e-3)
         dtof_dr = (_tof(shot, dist + h) - _tof(shot, lo)) / (

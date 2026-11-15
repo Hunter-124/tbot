@@ -62,6 +62,9 @@ range_prior_sigma_m = 8.0
 size_range_sigma_frac = 0.35  # 1-sigma relative error of one size-based range sample (frame-to-frame noise)
 size_range_bias_frac = 0.10   # systematic (frame-correlated) size-range error: floor on the fused range sigma
 max_tracks = 4
+model = "cartesian"           # cartesian: 3-D CA EKF in metres (tracker3d.py) | angular: CA Kalman in (az, el).
+                              # Sim 50 fps / 80 ms, 6 seeds x 4 scenarios: angular 0/4 hits, cartesian 10/15 (14/15 on the clay)
+jerk_psd_mps3 = 50.0          # cartesian: white-jerk PSD, m^2/s^5 (drag/lift change slowly) [INFERENCE]
 
 [imu]
 enabled = true

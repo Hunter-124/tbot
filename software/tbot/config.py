@@ -89,6 +89,8 @@ class TrackerConfig:
     size_range_sigma_frac: float
     size_range_bias_frac: float
     max_tracks: int
+    model: str = "angular"
+    jerk_psd_mps3: float = 50.0
 
 
 @dataclass

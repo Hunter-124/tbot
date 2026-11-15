@@ -86,7 +86,7 @@ def run_bench(
     from tbot.imu.attitude import FixedAttitude
     from tbot.optics import CameraModel, MountModel, combined_mask
     from tbot.vision.detector import ClayDetector
-    from tbot.vision.tracker import ClayTracker
+    from tbot.vision.tracker3d import make_tracker
 
     if threads is not None:
         cv2.setNumThreads(int(threads))
@@ -113,7 +113,7 @@ def run_bench(
         mount = MountModel.from_config(cfg, calib.boresight)
         mask = combined_mask(cam, mount, cfg, calib)
         detector = ClayDetector(cfg, mask)
-        tracker = ClayTracker(cfg, cam, mount)
+        tracker = make_tracker(cfg, cam, mount)
         solver = FireSolver(cfg, ShotModel(cfg), mount, budget)
         bore_px = mount.bore_pixel(cam, float(cfg.tracker.range_prior_m))
 

@@ -81,6 +81,8 @@ class Track:
     confirmed: bool = False
     last_detection: Detection | None = None
     first_t_ns: int = 0
+    s: np.ndarray | None = None  # cartesian tracker: (9,) world [p, v, a] in m, m/s, m/s^2 (camera origin)
+    S: np.ndarray | None = None  # cartesian tracker: (9, 9) covariance
 
     @property
     def az(self) -> float:

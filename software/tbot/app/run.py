@@ -39,7 +39,8 @@ from tbot.imu.mpu6050 import NullImu, open_imu
 from tbot.optics import CameraModel, MountModel, combined_mask
 from tbot.types import Frame
 from tbot.vision.detector import ClayDetector
-from tbot.vision.tracker import ClayTracker
+from tbot.vision.tracker import ClayTracker  # noqa: F401 - re-exported for callers
+from tbot.vision.tracker3d import make_tracker
 
 log = logging.getLogger("tbot.run")
 
@@ -73,7 +74,7 @@ class Pipeline:
         self.mount = MountModel.from_config(cfg, calib.boresight)
         self.mask = combined_mask(self.cam, self.mount, cfg, calib)
         self.detector = ClayDetector(cfg, self.mask)
-        self.tracker = ClayTracker(cfg, self.cam, self.mount)
+        self.tracker = make_tracker(cfg, self.cam, self.mount)
         self.shot = ShotModel(cfg)
         self.budget: LatencyBudget = calib.budget or LatencyBudget.from_config(cfg, calib.latency)
         self.solver = FireSolver(cfg, self.shot, self.mount, self.budget)
