@@ -62,6 +62,44 @@ def log_so3(R: np.ndarray) -> np.ndarray:
     return axis * theta
 
 
+# --- pure-float 3x3 helpers for the per-sample loop ------------------------------------------------------
+# At 500 Hz the filter runs ~12 samples per frame; with numpy each 3x3 op costs microseconds of call overhead
+# (7-11 ms per frame on a Pi 3B). Plain floats in row-major 9-tuples do the same maths several times faster.
+def _exp9(x: float, y: float, z: float) -> tuple:
+    theta2 = x * x + y * y + z * z
+    if theta2 < 1e-16:
+        a, b = 1.0 - theta2 / 6.0, 0.5 - theta2 / 24.0
+    else:
+        theta = math.sqrt(theta2)
+        a, b = math.sin(theta) / theta, (1.0 - math.cos(theta)) / theta2
+    return (1.0 - b * (y * y + z * z), b * x * y - a * z, b * x * z + a * y,
+            b * y * x + a * z, 1.0 - b * (x * x + z * z), b * y * z - a * x,
+            b * z * x - a * y, b * z * y + a * x, 1.0 - b * (x * x + y * y))
+
+
+def _mul9(A: tuple, B: tuple) -> tuple:
+    a0, a1, a2, a3, a4, a5, a6, a7, a8 = A
+    b0, b1, b2, b3, b4, b5, b6, b7, b8 = B
+    return (a0 * b0 + a1 * b3 + a2 * b6, a0 * b1 + a1 * b4 + a2 * b7, a0 * b2 + a1 * b5 + a2 * b8,
+            a3 * b0 + a4 * b3 + a5 * b6, a3 * b1 + a4 * b4 + a5 * b7, a3 * b2 + a4 * b5 + a5 * b8,
+            a6 * b0 + a7 * b3 + a8 * b6, a6 * b1 + a7 * b4 + a8 * b7, a6 * b2 + a7 * b5 + a8 * b8)
+
+
+def _ortho9(R: tuple) -> tuple:
+    x0, x1, x2, y0, y1, y2 = R[0], R[1], R[2], R[3], R[4], R[5]
+    n = math.sqrt(x0 * x0 + x1 * x1 + x2 * x2)
+    x0, x1, x2 = x0 / n, x1 / n, x2 / n
+    d = x0 * y0 + x1 * y1 + x2 * y2
+    y0, y1, y2 = y0 - d * x0, y1 - d * x1, y2 - d * x2
+    n = math.sqrt(y0 * y0 + y1 * y1 + y2 * y2)
+    y0, y1, y2 = y0 / n, y1 / n, y2 / n
+    return (x0, x1, x2, y0, y1, y2, x1 * y2 - x2 * y1, x2 * y0 - x0 * y2, x0 * y1 - x1 * y0)
+
+
+def _np9(R: tuple) -> np.ndarray:
+    return np.array(R, dtype=np.float64).reshape(3, 3)
+
+
 def orthonormalize(R: np.ndarray) -> np.ndarray:
     """Nearest rotation matrix (Gram-Schmidt on the rows), undoing float drift."""
     M = np.asarray(R, dtype=np.float64).reshape(3, 3).copy()
@@ -107,23 +145,34 @@ class AttitudeEstimator:
         self.samples_used = 0
         self.accel_updates = 0
         self.gaps = 0
-        self._R = np.eye(3)
+        self._R9: tuple = (1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0)
         self._last_t_ns: int | None = None
         self._init_t: list[int] = []
         self._init_accel: list[np.ndarray] = []
         self._ts: list[int] = []
-        self._Rs: list[np.ndarray] = []
-        self._ws: list[np.ndarray] = []
+        self._Rs: list[tuple] = []  # row-major 9-tuples
+        self._ws: list[tuple] = []  # (wx, wy, wz) rad/s
+
+    @property
+    def _R(self) -> np.ndarray:
+        return _np9(self._R9)
+
+    @_R.setter
+    def _R(self, value: np.ndarray) -> None:
+        self._R9 = tuple(float(v) for v in np.asarray(value, dtype=np.float64).reshape(9))
 
     # ------------------------------------------------------------------ input
     def update(self, samples: Iterable[ImuSample]) -> None:
         """Fold new (time ordered) gun-frame samples into the estimate."""
+        R = self._R9
+        gain = self.accel_gain
+        gate = self.accel_gate_m_s2
         for s in samples:
             t = int(s.t_ns)
-            accel = np.asarray(s.accel, dtype=np.float64).reshape(3)
-            gyro = np.asarray(s.gyro, dtype=np.float64).reshape(3)
             if not self.ready:
-                self._init_step(t, accel, gyro)
+                self._init_step(t, np.asarray(s.accel, dtype=np.float64).reshape(3),
+                                np.asarray(s.gyro, dtype=np.float64).reshape(3))
+                R = self._R9
                 continue
             if self._last_t_ns is not None and t <= self._last_t_ns:
                 continue  # out-of-order sample: ignore
@@ -132,15 +181,29 @@ class AttitudeEstimator:
                 # Dropout: integrating minutes of a single stale rate would be fiction, so bound it.
                 self.gaps += 1
                 dt = MAX_GAP_S
-            self._R = self._R @ exp_so3(gyro * dt)
-            self._accel_correct(accel)
+            g = s.gyro
+            gx, gy, gz = float(g[0]), float(g[1]), float(g[2])
+            R = _mul9(R, _exp9(gx * dt, gy * dt, gz * dt))
+            a = s.accel
+            ax, ay, az = float(a[0]), float(a[1]), float(a[2])
+            norm = math.sqrt(ax * ax + ay * ay + az * az)
+            if norm >= MIN_ACCEL_NORM and abs(norm - G_MPS2) <= gate:
+                # Rotating the body by gain * (up_meas x up_pred) tilts the estimate toward the measurement;
+                # the axis is perpendicular to the up-vector, so heading is untouched.
+                mx, my, mz = ax / norm, ay / norm, az / norm
+                px, py, pz = R[6], R[7], R[8]  # world +Z expressed in the gun frame
+                R = _mul9(R, _exp9(gain * (my * pz - mz * py), gain * (mz * px - mx * pz),
+                                   gain * (mx * py - my * px)))
+                self.accel_updates += 1
             self._last_t_ns = t
             self.samples_used += 1
-            self._push(t, gyro)
+            self._R9 = R
+            self._push(t, (gx, gy, gz))
         if self.ready:
-            self._R = orthonormalize(self._R)
+            R = _ortho9(self._R9)
+            self._R9 = R
             if self._Rs:
-                self._Rs[-1] = self._R.copy()
+                self._Rs[-1] = R
 
     def _init_step(self, t_ns: int, accel: np.ndarray, gyro: np.ndarray) -> None:
         self._init_t.append(t_ns)
@@ -158,23 +221,12 @@ class AttitudeEstimator:
         self.samples_used += 1
         self._init_t.clear()
         self._init_accel.clear()
-        self._push(t_ns, gyro)
+        self._push(t_ns, (float(gyro[0]), float(gyro[1]), float(gyro[2])))
 
-    def _accel_correct(self, accel: np.ndarray) -> None:
-        norm = float(np.linalg.norm(accel))
-        if norm < MIN_ACCEL_NORM or abs(norm - G_MPS2) > self.accel_gate_m_s2:
-            return
-        up_meas = accel / norm
-        up_pred = self._R[2]  # world +Z expressed in the gun frame
-        # Rotating the body by gain * (up_meas x up_pred) tilts the estimate toward the measurement;
-        # the axis is perpendicular to the up-vector, so heading is untouched.
-        self._R = self._R @ exp_so3(self.accel_gain * np.cross(up_meas, up_pred))
-        self.accel_updates += 1
-
-    def _push(self, t_ns: int, gyro: np.ndarray) -> None:
+    def _push(self, t_ns: int, gyro: tuple) -> None:
         self._ts.append(t_ns)
-        self._Rs.append(self._R.copy())
-        self._ws.append(gyro.copy())
+        self._Rs.append(self._R9)
+        self._ws.append(gyro)
         cutoff = t_ns - self.history_ns
         drop = 0
         while drop + 2 < len(self._ts) and self._ts[drop] < cutoff:
@@ -196,15 +248,16 @@ class AttitudeEstimator:
         if t >= self._ts[-1]:
             dt = (t - self._ts[-1]) * 1e-9
             if dt <= 0.0:
-                return self._Rs[-1].copy()
-            return self._Rs[-1] @ exp_so3(self._ws[-1] * dt)
+                return _np9(self._Rs[-1])
+            w = self._ws[-1]
+            return _np9(_mul9(self._Rs[-1], _exp9(w[0] * dt, w[1] * dt, w[2] * dt)))
         if t <= self._ts[0]:
-            return self._Rs[0].copy()
+            return _np9(self._Rs[0])
         i = bisect.bisect_right(self._ts, t)
         t0, t1 = self._ts[i - 1], self._ts[i]
         if t == t0:
-            return self._Rs[i - 1].copy()
-        R0, R1 = self._Rs[i - 1], self._Rs[i]
+            return _np9(self._Rs[i - 1])
+        R0, R1 = _np9(self._Rs[i - 1]), _np9(self._Rs[i])
         f = (t - t0) / float(t1 - t0)
         return R0 @ exp_so3(f * log_so3(R0.T @ R1))
 
@@ -214,13 +267,13 @@ class AttitudeEstimator:
             return np.zeros(3)
         t = int(t_ns)
         if t >= self._ts[-1]:
-            return self._ws[-1].copy()
+            return np.array(self._ws[-1], dtype=np.float64)
         if t <= self._ts[0]:
-            return self._ws[0].copy()
+            return np.array(self._ws[0], dtype=np.float64)
         i = bisect.bisect_left(self._ts, t)
         # t is strictly between the endpoints.
         before, after = self._ts[i - 1], self._ts[i]
-        return self._ws[i - 1].copy() if (t - before) <= (after - t) else self._ws[i].copy()
+        return np.array(self._ws[i - 1] if (t - before) <= (after - t) else self._ws[i], dtype=np.float64)
 
     @property
     def history_len(self) -> int:
