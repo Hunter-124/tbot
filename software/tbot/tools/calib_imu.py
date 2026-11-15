@@ -23,7 +23,7 @@ from tbot.imu.mpu6050 import G_MPS2, Mpu6050
 from tbot.stats import summarize
 from tbot.types import ImuSample
 
-__all__ = ["main", "estimate_time_offset_s", "kabsch", "camera_rotation_rate"]
+__all__ = ["main", "estimate_time_offset_s", "kabsch", "camera_rotation_rate", "is_still_pose"]
 
 # Optical-flow settings for the sync measurement (textured scene, swinging gun).
 MAX_CORNERS = 200
@@ -37,6 +37,13 @@ FORWARD_BACKWARD_TOL_PX = 1.0
 MIN_TRACKED_POINTS = 8
 OUTLIER_FACTOR = 3.0
 MIN_SYNC_SAMPLES = 8
+
+# --auto pose capture: a pose counts once it is held this still and differs from the earlier ones.
+STILL_GYRO_DPS = 3.0
+STILL_ACCEL_STD = 0.25        # m/s^2, per axis
+STILL_G_TOL = 0.08
+NEW_POSE_DEG = 45.0
+MOVED_DPS = 15.0              # a pose is only taken after the gun has moved this fast since the prompt
 
 AXES_POSES = (
     ("LEVEL: gun upright and level (rib up)", np.array([0.0, 0.0, 1.0])),
@@ -193,6 +200,64 @@ def _capture(imu: Mpu6050, seconds: float, settle_s: float = 0.25) -> dict[str, 
     }
 
 
+def is_still_pose(gyro: np.ndarray, accel: np.ndarray, bias: np.ndarray,
+                  prior_dirs: list[np.ndarray]) -> bool:
+    """True when a window of chip-frame samples is a held pose that differs from every earlier one.
+
+    Held: bias-removed gyro below STILL_GYRO_DPS on average, accel steady (per-axis std below
+    STILL_ACCEL_STD) and |a| within STILL_G_TOL of g. New: gravity more than NEW_POSE_DEG away from every
+    direction in prior_dirs (unit vectors).
+    """
+    if gyro.shape[0] < 10:
+        return False
+    rate_dps = float(np.degrees(np.linalg.norm(gyro - bias, axis=1)).mean())
+    if rate_dps > STILL_GYRO_DPS or float(accel.std(axis=0).max()) > STILL_ACCEL_STD:
+        return False
+    m = accel.mean(axis=0)
+    n = float(np.linalg.norm(m))
+    if abs(n / G_MPS2 - 1.0) > STILL_G_TOL:
+        return False
+    return all(_angle_deg(m, d) > NEW_POSE_DEG for d in prior_dirs)
+
+
+def _capture_still_pose(imu: Mpu6050, seconds: float, bias: np.ndarray, prior_dirs: list[np.ndarray],
+                        timeout_s: float) -> dict[str, np.ndarray] | None:
+    """Stream until the last `seconds` of samples are a held, new pose (is_still_pose); return that window."""
+    rows: list[ImuSample] = []
+    t_end = time.monotonic() + timeout_s
+    t_status = time.monotonic()
+    moved = False
+    imu.read()
+    while time.monotonic() < t_end:
+        time.sleep(0.05)
+        rows.extend(imu.read())
+        if not rows:
+            continue
+        horizon = int(rows[-1].t_ns) - int(seconds * 1e9)
+        while rows and int(rows[0].t_ns) < horizon:
+            rows.pop(0)
+        span_s = (int(rows[-1].t_ns) - int(rows[0].t_ns)) * 1e-9
+        gyro = np.array([np.asarray(s.gyro, dtype=np.float64) for s in rows])
+        accel = np.array([np.asarray(s.accel, dtype=np.float64) for s in rows])
+        if time.monotonic() - t_status > 2.0:
+            t_status = time.monotonic()
+            m = accel.mean(axis=0)
+            print(f"  ... gravity (chip) {_fmt_vec(m / max(np.linalg.norm(m), 1e-9), '%+6.2f')}  "
+                  f"rate {float(np.degrees(np.linalg.norm(gyro - bias, axis=1)).mean()):5.1f} deg/s",
+                  flush=True)
+        if not moved:
+            # only take a pose the gun was moved into after the prompt (not the one it is resting in)
+            if float(np.degrees(np.linalg.norm(gyro[-10:] - bias, axis=1)).max()) > MOVED_DPS:
+                moved = True
+                print("  moving...", flush=True)
+            continue
+        if span_s >= 0.95 * seconds and is_still_pose(gyro, accel, bias, prior_dirs):
+            print("  captured", flush=True)
+            return {"t_ns": np.array([s.t_ns for s in rows], dtype=np.int64), "gyro": gyro, "accel": accel,
+                    "temp_c": np.array([s.temp_c for s in rows], dtype=np.float64)}
+    return None
+
+
 def _fmt_vec(v: Iterable[float], fmt: str = "%+9.4f") -> str:
     return "[" + ", ".join(fmt % float(x) for x in v) + "]"
 
@@ -266,10 +331,19 @@ def _cmd_axes(args: argparse.Namespace) -> int:
         return 1
     measured: list[np.ndarray] = []
     expected: list[np.ndarray] = []
+    bias = np.asarray((calib.imu or {}).get("gyro_bias_rad_s", [0.0, 0.0, 0.0]), dtype=np.float64)
     try:
         for prompt, want in AXES_POSES:
-            input(f"\n{prompt} — hold it, then press Enter to capture {args.seconds:.0f} s: ")
-            data = _capture(imu, args.seconds)
+            if args.auto:
+                print(f"\n{prompt} — hold it still; captures automatically after {args.seconds:.0f} s still",
+                      flush=True)
+                data = _capture_still_pose(imu, args.seconds, bias, measured, args.timeout)
+                if data is None:
+                    print(f"  error: no still, new pose within {args.timeout:.0f} s")
+                    return 1
+            else:
+                input(f"\n{prompt} — hold it, then press Enter to capture {args.seconds:.0f} s: ")
+                data = _capture(imu, args.seconds)
             m = data["accel"].mean(axis=0)
             n = float(np.linalg.norm(m))
             if n < 1.0:
@@ -386,9 +460,12 @@ def _cmd_sync(args: argparse.Namespace) -> int:
     if args.no_write:
         print("--no-write: calib/imu.json not touched")
         return 0
+    # The recording's IMU timestamps already carry the stored offset, so the measurement is a residual.
+    prior_ns = int((calib.imu or {}).get("time_offset_ns", 0) or 0)
+    total_ns = prior_ns + int(round(offset_s * 1e9))
     path = calib.path("imu.json")
-    update_json(path, {"time_offset_ns": int(round(offset_s * 1e9)), "created": now_iso()})
-    print(f"wrote time_offset_ns {int(round(offset_s * 1e9))} -> {path}")
+    update_json(path, {"time_offset_ns": total_ns, "created": now_iso()})
+    print(f"wrote time_offset_ns {total_ns} (was {prior_ns}) -> {path}")
     return 0
 
 
@@ -470,6 +547,9 @@ def main(argv: list[str] | None = None) -> int:
     p_axes = sub.add_parser("axes", help="guided 3-pose check/solve of R_gun_imu")
     p_axes.add_argument("--seconds", type=float, default=2.0, help="capture per pose (default 2)")
     p_axes.add_argument("--write", action="store_true", help="store the fitted R_gun_imu")
+    p_axes.add_argument("--auto", action="store_true",
+                        help="no Enter presses: capture each pose once it is held still (and new)")
+    p_axes.add_argument("--timeout", type=float, default=180.0, help="--auto: seconds to wait per pose")
     add_common_args(p_axes)
 
     p_sync = sub.add_parser("sync", help="camera-IMU time offset from a recorded swing")

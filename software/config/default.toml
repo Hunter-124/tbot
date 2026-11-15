@@ -82,7 +82,7 @@ gyro_range_dps = 1000
 accel_range_g = 8
 dlpf_hz = 98
 poll_hz = 100
-R_gun_imu = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]   # layout.md "As-built IMU": board axes = gun axes [INFERENCE until tbot calib-imu axes]
+R_gun_imu = [[0.0, -1.0, 0.0], [-1.0, 0.0, 0.0], [0.0, 0.0, -1.0]]   # measured 2026-11-15 (calib-imu axes, 3 hand-held poses, fit within 0.8 deg): gun +X = chip -Y, +Y = chip -X, +Z = chip -Z
 
 [attitude]
 accel_gain = 0.02             # complementary-filter gain per sample when the accel is trusted

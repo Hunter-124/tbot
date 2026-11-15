@@ -173,15 +173,16 @@ def test_register_field_helpers():
 
 
 def test_calibration_maps_chip_axes_to_the_gun_frame(tmp_path):
-    """R_gun_imu from the config maps chip axes to gun axes (as-built: identity, layout.md "As-built IMU");
-    a non-trivial map is checked with a rotated config."""
+    """R_gun_imu from the config maps chip axes to gun axes (as-built, measured 2026-11-15 by calib-imu axes:
+    gun +X = chip -Y, +Y = chip -X, +Z = chip -Z); a second map is checked with a rotated config."""
     cfg = make_cfg()
     cal = ImuCalibration.from_config(cfg, calib(tmp_path))
-    accel = np.array([[0.0, 0.0, G_MPS2]])  # level gun: specific force along chip +Z
+    accel = np.array([[0.0, 0.0, -G_MPS2]])  # level gun: the chip is face-down, specific force along chip -Z
     gyro = np.array([[1.0, 2.0, 3.0]])
     a_gun, g_gun = cal.apply(accel, gyro)
     assert np.allclose(a_gun[0], [0.0, 0.0, G_MPS2])
-    assert np.allclose(g_gun[0], [1.0, 2.0, 3.0])
+    assert np.allclose(g_gun[0], [-2.0, -1.0, -3.0])
+    accel = np.array([[0.0, 0.0, G_MPS2]])
     # the old pod_cap mount: chip +X -> gun -Z, chip +Y -> gun -Y, chip +Z -> gun -X
     cfg.imu.R_gun_imu = [[0.0, 0.0, -1.0], [0.0, -1.0, 0.0], [-1.0, 0.0, 0.0]]
     cal = ImuCalibration.from_config(cfg, calib(tmp_path))
@@ -289,10 +290,11 @@ def test_driver_init_sequence_and_sample_stream(tmp_path):
     assert np.all(np.diff(t) > 0)
     assert float(np.median(np.diff(t))) == pytest.approx(2_000_000.0, rel=0.1)
     assert 0 < int(t[-1] - t[0]) <= 500_000_000
-    # Chip +Z reads +1 g (4096 LSB at +/-8 g); as-built R_gun_imu is the identity (layout.md "As-built IMU").
-    assert np.allclose(samples[0].accel, [0.0, 0.0, G_MPS2], atol=1e-9)
+    # Chip +Z reads +1 g (4096 LSB at +/-8 g); samples come out in the gun frame through R_gun_imu.
+    R = np.array(make_cfg().imu.R_gun_imu, dtype=np.float64)
+    assert np.allclose(samples[0].accel, R @ [0.0, 0.0, G_MPS2], atol=1e-9)
     chip_gyro = np.radians(np.array([100.0, -200.0, 300.0]) / GYRO_LSB_PER_DPS[1000])
-    assert np.allclose(samples[0].gyro, chip_gyro, atol=1e-12)
+    assert np.allclose(samples[0].gyro, R @ chip_gyro, atol=1e-12)
     assert samples[0].temp_c == pytest.approx(25.0, abs=0.1)
     assert bus.closed is False  # an injected bus is not ours to close
 
@@ -554,3 +556,20 @@ def test_attitude_alpha_recovers_a_constant_angular_acceleration():
     est2.update([still_sample(t0, np.eye(3))])
     est2.update([ImuSample(t_ns=t0 + i * 2_000_000, gyro=np.array([0.0, 0.0, 2.0]), accel=g) for i in range(1, 51)])
     assert np.allclose(est2.alpha_g(t0 + 100_000_000), 0.0, atol=1e-9)
+
+
+def test_is_still_pose_needs_a_held_new_pose():
+    from tbot.tools.calib_imu import is_still_pose
+
+    rng = np.random.default_rng(0)
+    bias = np.array([0.01, 0.1, 0.0])
+    g = np.array([0.0, 0.0, 9.80665])
+    accel = g + rng.normal(0.0, 0.02, (200, 3))
+    gyro = bias + rng.normal(0.0, 0.002, (200, 3))
+    assert is_still_pose(gyro, accel, bias, [])
+    # the same pose again is not new; a pose 90 deg away is
+    assert not is_still_pose(gyro, accel, bias, [g / np.linalg.norm(g)])
+    assert is_still_pose(gyro, accel, bias, [np.array([1.0, 0.0, 0.0])])
+    # moving (gyro) or shaking (accel) is not held
+    assert not is_still_pose(gyro + np.radians([0.0, 0.0, 10.0]), accel, bias, [])
+    assert not is_still_pose(gyro, accel + rng.normal(0.0, 1.0, (200, 3)), bias, [])

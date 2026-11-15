@@ -577,10 +577,11 @@ contacts and connector seating remain open.
   148° and horizontal 118°. The barrel is visible and must be masked.
   Software uses a 1280 × 800 nominal sensor at 3.0 µm pitch and a default
   640 × 400, 120 fps capture mode.
-- **As-built IMU:** translation (483.1, 0, 0), no board rotation. Board +X,
-  +Y, +Z align with gun +X, +Y, +Z respectively: board-to-gun matrix
-  [[1,0,0],[0,1,0],[0,0,1]]. Confirm the actual sensor chip's axes and sign
-  against calibration; a board-frame identity is not itself a sensor test.
+- **As-built IMU:** translation (483.1, 0, 0). The model has no board rotation
+  (board axes = gun axes), but the sensor chip as installed is NOT: measured
+  2026-11-15 with `tbot calib-imu axes` (three hand-held poses, fit within
+  0.8 deg of an exact axis swap), gun +X = chip -Y, gun +Y = chip -X,
+  gun +Z = chip -Z. Chip-to-gun matrix R_gun_imu = [[0,-1,0],[-1,0,0],[0,0,-1]].
 - **Software nominal camera frame:** camera +x = gun -Y, camera +y = gun -Z,
   camera +z = gun +X. Thus nominal `R_gun_cam` has rows [0,0,1], [-1,0,0],
   [0,-1,0]. Mount error roll/pitch/yaw prior is [0,0,0]°; camera image
