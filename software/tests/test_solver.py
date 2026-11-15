@@ -333,3 +333,58 @@ def test_no_confirmed_track_and_unknown_actuator(scene_cfg):
     bad = load_config(sets=SCENE_SETS + ["actuator.type=hydraulic"])
     with pytest.raises(ValueError, match="hydraulic"):
         FireSolver(bad, scene.shot, scene.mount, scene.latency)
+
+
+class AcceleratingSwing:
+    """Gun yawing about world +Z with constant angular acceleration (a shooter speeding up the swing)."""
+
+    def __init__(self, az0: float, el0: float, rate0: float, accel: float, with_alpha: bool = True):
+        self.az0, self.el0, self.rate0, self.accel = az0, el0, rate0, accel
+        self.ready = True
+        if not with_alpha:
+            self.alpha_g = None  # an attitude source without the acceleration estimate
+
+    def _rate(self, t_ns: int) -> float:
+        return self.rate0 + self.accel * (int(t_ns) - T0) * 1e-9
+
+    def R_wg(self, t_ns: int) -> np.ndarray:
+        t = (int(t_ns) - T0) * 1e-9
+        return _frame_from_azel(self.az0 + self.rate0 * t + 0.5 * self.accel * t * t, self.el0)
+
+    def omega_g(self, t_ns: int) -> np.ndarray:
+        return self.R_wg(t_ns).T @ np.array([0.0, 0.0, self._rate(t_ns)])
+
+    def alpha_g(self, t_ns: int) -> np.ndarray:
+        return self.R_wg(t_ns).T @ np.array([0.0, 0.0, self.accel])
+
+
+def test_solver_extrapolates_the_swing_with_its_angular_acceleration(scene_cfg):
+    """A brisk swing (2 rad/s, 9 rad/s^2): with alpha the predicted bore at shot exit matches the truth; a
+    constant-rate extrapolation is off by ~alpha*dt^2/2, and the solver's sigma carries part of that."""
+    cfg, scene = scene_cfg
+    delay = scene.latency.fire_delay_s("servo")
+    t = T0 + 40 * DT_NS
+    bore_g = np.asarray(scene.mount.bore_dir_g, dtype=float)
+
+    def bore_err_and_sigma(att):
+        tracker = ClayTracker(cfg, scene.cam, scene.mount)
+        solver = FireSolver(cfg, scene.shot, scene.mount, scene.latency)
+        rng = np.random.default_rng(1)
+        d = None
+        for n in range(41):
+            tn = T0 + n * DT_NS
+            rot = att.R_wg(tn)
+            det = scene.detect(_fast_crosser(n / FPS), rot, tn, rng, 0.1)
+            tracker.update(tn, [det] if det is not None else [], rot)
+            d = solver.evaluate(tn, tracker, att, True, 1.0 / FPS)
+        truth = att.R_wg(d.t_exit_ns) @ bore_g
+        truth /= np.linalg.norm(truth)
+        return math.degrees(math.acos(min(1.0, float(np.dot(truth, d.bore_dir_w))))), d.sigma_rad
+
+    err_alpha, sig_alpha = bore_err_and_sigma(AcceleratingSwing(-0.6, 0.15, 2.0, 9.0))
+    err_const, _ = bore_err_and_sigma(AcceleratingSwing(-0.6, 0.15, 2.0, 9.0, with_alpha=False))
+    expect_const = math.degrees(0.5 * 9.0 * delay * delay)
+    assert err_const == pytest.approx(expect_const, rel=0.15)
+    assert err_alpha < 0.05 * expect_const
+    assert sig_alpha >= cfg.fire.gun_accel_sigma_frac * math.radians(expect_const) * 0.99
+    assert t  # keeps the frame index explicit

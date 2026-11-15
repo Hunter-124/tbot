@@ -142,6 +142,7 @@ class FireConfig:
     max_range_m: float
     min_elevation_deg: float
     watchdog_ms: float
+    gun_accel_sigma_frac: float = 0.3
 
 
 @dataclass
@@ -559,7 +560,9 @@ class LatencyBudget:
                 cmd[t] = float(stats["mean"])
                 if "std" in stats:
                     jit[t] = float(stats["std"])
-                sources[f"actuator.{t}"] = "measured"
+                # An operator estimate written into latency.json is labelled as such, not as a measurement.
+                method = str(rec.get("method", "")).lower()
+                sources[f"actuator.{t}"] = "estimate" if "estimate" in method else "measured"
         return cls(
             camera_timestamp_offset_ns=cam_off,
             exposure_to_user_ms=exp_ms,

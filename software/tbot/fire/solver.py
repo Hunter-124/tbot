@@ -127,9 +127,12 @@ class FireSolver:
 
         rot_now = np.asarray(attitude.R_wg(now_ns), dtype=np.float64).reshape(3, 3)
         omega = np.asarray(attitude.omega_g(now_ns), dtype=np.float64).reshape(3)
+        alpha_fn = getattr(attitude, "alpha_g", None)
+        alpha = (np.asarray(alpha_fn(now_ns), dtype=np.float64).reshape(3) if callable(alpha_fn)
+                 else np.zeros(3, dtype=np.float64))
         delay_s = self.latency.fire_delay_s(self._atype)
         jitter_s = self.latency.fire_jitter_s(self._atype)
-        g = self._geometry(now_ns, now_ns, track, tracker, rot_now, omega, delay_s, jitter_s)
+        g = self._geometry(now_ns, now_ns, track, tracker, rot_now, omega, delay_s, jitter_s, alpha)
 
         fire = False
         fc = self.cfg.fire
@@ -148,7 +151,7 @@ class FireSolver:
             if period_ns > 0:
                 for k in range(1, int(fc.horizon_frames) + 1):
                     gk = self._geometry(
-                        now_ns, now_ns + k * period_ns, track, tracker, rot_now, omega, delay_s, jitter_s
+                        now_ns, now_ns + k * period_ns, track, tracker, rot_now, omega, delay_s, jitter_s, alpha
                     )
                     future.append(gk["p_hit"])
                     if better_k == 0 and gk["p_hit"] > g["p_hit"]:
@@ -186,6 +189,8 @@ class FireSolver:
                 "dist_m": g["dist"],
                 "clay_el_rad": g["clay_el"],
                 "track_sigma_rad": g["track_sigma"],
+                "gun_sigma_rad": g["gun_sigma"],
+                "gun_alpha_rad_s2": float(np.linalg.norm(alpha)),
                 "clay_rate_rad_s": g["omega_clay"],
                 "future_p_hit": future,
             },
@@ -202,10 +207,19 @@ class FireSolver:
         omega: np.ndarray,
         delay_s: float,
         jitter_s: float,
+        alpha: np.ndarray | None = None,
     ) -> dict:
         """Miss angle, uncertainty and hit probability for a trigger command issued at decide_ns."""
         t_exit_ns = int(decide_ns) + int(round(delay_s * 1e9))
-        rot_exit = rot_now @ _rotvec(omega * ((t_exit_ns - now_ns) * 1e-9))
+        dt_exit = (t_exit_ns - now_ns) * 1e-9
+        if alpha is None:
+            alpha = np.zeros(3, dtype=np.float64)
+        # Constant angular acceleration over the delay: a brisk swing changes rate by hundreds of deg/s^2, and a
+        # constant-rate extrapolation then lands the shot behind (or ahead of) where the bore really is.
+        rot_exit = rot_now @ _rotvec(omega * dt_exit + 0.5 * alpha * dt_exit * dt_exit)
+        # The acceleration itself is not constant: carry a fraction of its effect as uncertainty, so the solver
+        # does not fire confidently in the middle of a violent change of swing.
+        gun_sigma = float(self.cfg.fire.gun_accel_sigma_frac) * 0.5 * float(np.linalg.norm(alpha)) * dt_exit * dt_exit
         bore_w = _unit(rot_exit @ self._bore_g)
         muzzle_w = rot_exit @ self._muzzle_g
 
@@ -243,6 +257,7 @@ class FireSolver:
             track_sigma**2
             + (omega_clay * jitter_s) ** 2
             + (omega_clay * dtof_dr * float(track.range_sigma_m)) ** 2
+            + gun_sigma**2
         )
         pattern = (max(shot._pattern_min_m, shot._pattern_ref_m * dist / shot._pattern_ref_range_m)
                    if tabulated else float(shot.pattern_radius(dist))) / dist
@@ -260,5 +275,6 @@ class FireSolver:
             "bore_dir_w": bore_w,
             "clay_el": math.asin(max(-1.0, min(1.0, float(lead_dir[2])))),
             "track_sigma": track_sigma,
+            "gun_sigma": gun_sigma,
             "omega_clay": omega_clay,
         }

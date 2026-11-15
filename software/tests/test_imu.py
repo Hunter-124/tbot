@@ -534,3 +534,23 @@ def test_kabsch_recovers_a_known_rotation():
     assert np.linalg.norm(log_so3(kabsch(a, noisy) @ R_true.T)) < 5e-3
     with pytest.raises(ValueError):
         kabsch(a[:1], b[:1])
+
+
+def test_attitude_alpha_recovers_a_constant_angular_acceleration():
+    """alpha_g is the gyro slope over the last 30 ms: the solver extrapolates the swing with it."""
+    cfg = make_cfg(**{"attitude.init_still_s": 0.0, "imu.sample_rate_hz": 500})
+    est = AttitudeEstimator(cfg)
+    t0 = 1_000_000_000
+    assert np.allclose(est.alpha_g(t0), 0.0)  # no history yet
+    est.update([still_sample(t0, np.eye(3))])
+    alpha = np.array([1.5, -8.0, 4.0])  # rad/s^2, a brisk swing
+    g = np.array([0.0, 0.0, G_MPS2])
+    rng = np.random.default_rng(3)
+    est.update([ImuSample(t_ns=t0 + i * 2_000_000, gyro=alpha * (i * 0.002) + rng.normal(0.0, 1e-3, 3), accel=g)
+                for i in range(1, 101)])
+    assert est.alpha_g(t0 + 200_000_000) == pytest.approx(alpha, abs=0.3)
+    # a constant rate has no acceleration
+    est2 = AttitudeEstimator(cfg)
+    est2.update([still_sample(t0, np.eye(3))])
+    est2.update([ImuSample(t_ns=t0 + i * 2_000_000, gyro=np.array([0.0, 0.0, 2.0]), accel=g) for i in range(1, 51)])
+    assert np.allclose(est2.alpha_g(t0 + 100_000_000), 0.0, atol=1e-9)

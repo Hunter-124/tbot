@@ -21,6 +21,8 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 __all__ = ["AttitudeEstimator", "FixedAttitude", "exp_so3", "log_so3", "orthonormalize"]
 
 MAX_GAP_S = 0.2  # a gap longer than this is a dropout: do not integrate blindly through it
+ALPHA_WINDOW_S = 0.03  # gyro history used for the angular-acceleration slope (15 samples at 500 Hz)
+ALPHA_MIN_SAMPLES = 5
 MIN_ACCEL_NORM = 1e-3
 
 
@@ -274,6 +276,37 @@ class AttitudeEstimator:
         # t is strictly between the endpoints.
         before, after = self._ts[i - 1], self._ts[i]
         return np.array(self._ws[i - 1] if (t - before) <= (after - t) else self._ws[i], dtype=np.float64)
+
+    def alpha_g(self, t_ns: int, window_s: float = ALPHA_WINDOW_S) -> np.ndarray:
+        """Gun-frame angular acceleration (rad/s^2): least-squares slope of the gyro over the window ending at
+        t_ns. Zero until the window holds enough samples. The solver uses it to extrapolate the swing over the
+        trigger delay; a constant-rate extrapolation misses by alpha * dt^2 / 2 (~2 deg for a brisk swing)."""
+        if len(self._ts) < 3:
+            return np.zeros(3)
+        t_end = min(int(t_ns), self._ts[-1])
+        lo = bisect.bisect_left(self._ts, t_end - int(window_s * 1e9))
+        hi = bisect.bisect_right(self._ts, t_end)
+        n = hi - lo
+        if n < ALPHA_MIN_SAMPLES:
+            return np.zeros(3)
+        t0 = self._ts[hi - 1]
+        st = stt = sx = sy = sz = stx = sty = stz = 0.0
+        for k in range(lo, hi):
+            tk = (self._ts[k] - t0) * 1e-9
+            w = self._ws[k]
+            st += tk
+            stt += tk * tk
+            sx += w[0]
+            sy += w[1]
+            sz += w[2]
+            stx += tk * w[0]
+            sty += tk * w[1]
+            stz += tk * w[2]
+        den = n * stt - st * st
+        if den <= 0.0:
+            return np.zeros(3)
+        return np.array([(n * stx - st * sx) / den, (n * sty - st * sy) / den, (n * stz - st * sz) / den],
+                        dtype=np.float64)
 
     @property
     def history_len(self) -> int:

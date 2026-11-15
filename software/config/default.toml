@@ -104,6 +104,8 @@ max_shots_per_arm = 1
 min_range_m = 8.0
 max_range_m = 40.0
 min_elevation_deg = -5.0
+gun_accel_sigma_frac = 0.3    # uncertainty carried for the swing's angular acceleration over the trigger delay, as a
+                              # fraction of its 0.5*alpha*dt^2 effect (the solver extrapolates with alpha) [INFERENCE]
 watchdog_ms = 250.0
 
 [arming]
