@@ -149,6 +149,41 @@ def test_latency_camera_sim_writes_calibration_and_recovers_the_bias(tmp_path, c
     assert cam["exposure_to_user_ms"]["min"] >= DELIVERY_MS + EXPOSURE_US / 2e3 - 0.5
 
 
+def test_latency_camera_rerun_reports_the_absolute_offset_not_the_residual(tmp_path, capsys):
+    """The source already applies the offset on disk; a second run must not save only the residual."""
+    args = ["--sim", "--trials", "30", "--calib-dir", str(tmp_path), "--json",
+            "--set", f"camera.exposure_us={EXPOSURE_US}", "--set", "camera.width=320",
+            "--set", "camera.height=200", "--set", f"camera.fps={FPS}",
+            "--sim-offset-ms", str(-BIAS_MS), "--sim-jitter-ms", "0"]
+    # Seed a wrong offset on disk, as if an earlier run had saved a bad one.
+    (tmp_path / "latency.json").write_text(json.dumps(
+        {"camera": {"timestamp_offset_ns": 3_000_000, "timestamp_offset_sigma_ns": 5e6}}))
+    assert latency_camera.main(args) == 0
+    res = json.loads(capsys.readouterr().out)
+    assert res["applied_offset_ns"] == 3_000_000
+    assert res["timestamp_offset_ns"] == pytest.approx(-BIAS_MS * 1e6, abs=0.2e6)
+    assert json.loads((tmp_path / "latency.json").read_text())["camera"]["timestamp_offset_ns"] == \
+        pytest.approx(-BIAS_MS * 1e6, abs=0.2e6)
+    # Again on top of the now-correct offset: residual ~0, absolute unchanged.
+    assert latency_camera.main(args) == 0
+    res = json.loads(capsys.readouterr().out)
+    assert abs(res.get("residual_offset_ns", 0)) < 0.2e6 or res.get("offset_kept_from_disk")
+    assert res["timestamp_offset_ns"] == pytest.approx(-BIAS_MS * 1e6, abs=0.2e6)
+
+
+def test_latency_camera_keeps_a_tighter_offset_from_disk(tmp_path, capsys):
+    (tmp_path / "latency.json").write_text(json.dumps(
+        {"camera": {"timestamp_offset_ns": 1_000, "timestamp_offset_sigma_ns": 1.0}}))
+    assert latency_camera.main(
+        ["--sim", "--trials", "30", "--calib-dir", str(tmp_path), "--json",
+         "--set", f"camera.exposure_us={EXPOSURE_US}", "--set", "camera.width=320",
+         "--set", "camera.height=200", "--set", f"camera.fps={FPS}"]
+    ) == 0
+    res = json.loads(capsys.readouterr().out)
+    assert res["offset_kept_from_disk"] and res["timestamp_offset_ns"] == 1_000
+    assert json.loads((tmp_path / "latency.json").read_text())["camera"]["timestamp_offset_ns"] == 1_000
+
+
 def test_latency_camera_sim_feeds_the_latency_budget(tmp_path):
     from tbot.config import load_calibration
 

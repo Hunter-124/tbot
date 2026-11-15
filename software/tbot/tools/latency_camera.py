@@ -118,7 +118,8 @@ class SimLedCamera(SourceBase):
     Frame k integrates over [t0 + k*period, +exposure]; the pixel level of the LED disc is linear in
     the fraction of that window during which the LED was on. The reported mid-exposure timestamp is
     biased by -timestamp_offset_ns (so a correct analysis recovers timestamp_offset_ns), and the frame
-    reaches user space delivery_latency_ms after the end of the exposure.
+    reaches user space delivery_latency_ms after the end of the exposure. Like PicamSource, it adds the
+    already-calibrated applied_offset_ns to every timestamp, so a re-run measures only the residual.
     """
 
     def __init__(
@@ -135,6 +136,7 @@ class SimLedCamera(SourceBase):
         led_on_dn: float = 215.0,
         seed: int = 0,
         t0_ns: int = 1_000_000_000,
+        applied_offset_ns: int = 0,
     ):
         super().__init__()
         self.width = int(cfg.camera.width)
@@ -149,6 +151,7 @@ class SimLedCamera(SourceBase):
         self.exposure_ns = int(round(self.exposure_us * 1e3))
         self.delivery_ns = int(round(delivery_latency_ms * 1e6))
         self.timestamp_offset_ns = int(timestamp_offset_ns)
+        self.applied_timestamp_offset_ns = int(applied_offset_ns)
         self.jitter_ns = float(jitter_ms) * 1e6
         self.led_off_dn = float(led_off_dn)
         self.led_on_dn = float(led_on_dn)
@@ -200,7 +203,7 @@ class SimLedCamera(SourceBase):
         self._seq = k + 1
         self.clock.set(capture)
         fraction = self.led.lit_fraction(start, end)
-        t_exposure = start + self.exposure_ns // 2 - self.timestamp_offset_ns
+        t_exposure = start + self.exposure_ns // 2 - self.timestamp_offset_ns + self.applied_timestamp_offset_ns
         return Frame(
             image=self._render(fraction),
             seq=k,
@@ -492,6 +495,7 @@ def main(argv: list[str] | None = None) -> int:
             timestamp_offset_ns=int(round(args.sim_offset_ms * 1e6)),
             jitter_ms=args.sim_jitter_ms,
             seed=args.seed,
+            applied_offset_ns=int(calib.budget.camera_timestamp_offset_ns) if calib.budget is not None else 0,
         )
     else:
         source = open_source(cfg.camera.source, cfg, calib)
@@ -532,6 +536,31 @@ def main(argv: list[str] | None = None) -> int:
 
     fps = float(source.nominal_fps) if source.nominal_fps > 0 else float(cfg.camera.fps)
     result = analyze_led_trials(records, 1.0 / fps)
+    # The source already adds the calibrated offset to t_exposure_ns, so the analysis recovered only the
+    # residual: add the applied part back to get the absolute offset. (The phase-corrected latency is
+    # unaffected - it uses applied + residual through t_exposure_ns.)
+    applied_ns = int(getattr(source, "applied_timestamp_offset_ns", 0))
+    result["applied_offset_ns"] = applied_ns
+    if result["n_partial"]:
+        result["residual_offset_ns"] = result["timestamp_offset_ns"]
+        result["timestamp_offset_ns"] += applied_ns
+        prev = (calib.latency or {}).get("camera", {}) if getattr(calib, "latency", None) else {}
+        prev_sigma = prev.get("timestamp_offset_sigma_ns")
+        if (
+            "timestamp_offset_ns" in prev
+            and isinstance(prev_sigma, (int, float))
+            and np.isfinite(prev_sigma)
+            and not result["timestamp_offset_sigma_ns"] < prev_sigma
+        ):
+            result["warnings"].append(
+                f"kept the offset on disk ({prev['timestamp_offset_ns'] / 1e6:+.3f} ms, sigma "
+                f"{prev_sigma / 1e6:.3f} ms): this run's estimate "
+                f"({result['timestamp_offset_ns'] / 1e6:+.3f} ms, sigma "
+                f"{result['timestamp_offset_sigma_ns'] / 1e6:.3f} ms) is no tighter"
+            )
+            result["timestamp_offset_ns"] = int(prev["timestamp_offset_ns"])
+            result["timestamp_offset_sigma_ns"] = float(prev_sigma)
+            result["offset_kept_from_disk"] = True
     result["roi"] = list(found["roi"])
     result["off_level"] = found["off_level"]
     result["on_level"] = found["on_level"]

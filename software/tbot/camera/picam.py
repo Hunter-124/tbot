@@ -173,6 +173,12 @@ class PicamSource(SourceBase):
         )
         self._picam2.configure(config)
 
+    @property
+    def applied_timestamp_offset_ns(self) -> int:
+        """The calibrated offset already added to every frame's t_exposure_ns (`tbot latency-camera`
+        measures only the residual on top of it)."""
+        return self._offset_ns
+
     # ----------------------------------------------------------------------------- lifecycle
     def start(self) -> None:
         if self._camera_closed:

@@ -15,7 +15,7 @@ BLOCK_END="# --- end tbot ---"
 # Lines that must exist exactly once, inside our block, in config.txt.
 CONFIG_LINES=(
 	"camera_auto_detect=0"            # the OV9281 is not auto-detectable: load it explicitly
-	"dtoverlay=ov9281"                # no parameter needed on Pi 3B: https://www.inno-maker.com/product/cam-mipi9281raw-v2/
+	"dtoverlay=ov9281,arducam"        # arducam = slow regulator power-up; without it this inno-maker module probes on I2C but streams no frames ("Camera frontend has timed out"), seen on trixie 2026-11-14
 	"dtparam=i2c_arm=on"              # GY-521 / MPU-6050 on bus 1 (BCM 2/3)
 	"dtparam=i2c_arm_baudrate=400000" # imu.sample_rate_hz = 500 needs fast-mode I2C
 	"dtoverlay=pwm,pin=18,func=2"     # PWM0 on BCM 18 for the MG996R servo
@@ -37,6 +37,7 @@ APT_PACKAGES=(
 	python3-smbus                     # available on Bookworm and Trixie; smbus2 is not in Trixie
 	i2c-tools
 	python3-venv
+	python3-setuptools                # the --no-build-isolation editable-install fallback imports setuptools.build_meta
 	python3-pytest
 )
 
