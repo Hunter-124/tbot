@@ -80,8 +80,13 @@ def _angle_between(a: np.ndarray, b: np.ndarray) -> float:
 
 
 def _unit(v: np.ndarray) -> np.ndarray:
-    n = float(np.linalg.norm(v))
+    n = _norm3(v)
     return v / n if n > 0.0 else v
+
+
+def _norm3(v: np.ndarray) -> float:
+    """np.linalg.norm of a 1-D vector (NumPy computes it as sqrt(v . v) too) without its ~65 us overhead."""
+    return math.sqrt(float(v @ v))
 
 def _tof(shot, distance: float) -> float:
     # np.interp already clamps at the table ends, so the scalar np.clip in
@@ -190,7 +195,7 @@ class FireSolver:
                 "clay_el_rad": g["clay_el"],
                 "track_sigma_rad": g["track_sigma"],
                 "gun_sigma_rad": g["gun_sigma"],
-                "gun_alpha_rad_s2": float(np.linalg.norm(alpha)),
+                "gun_alpha_rad_s2": _norm3(alpha),
                 "clay_rate_rad_s": g["omega_clay"],
                 "future_p_hit": future,
             },
@@ -219,7 +224,7 @@ class FireSolver:
         rot_exit = rot_now @ _rotvec(omega * dt_exit + 0.5 * alpha * dt_exit * dt_exit)
         # The acceleration itself is not constant: carry a fraction of its effect as uncertainty, so the solver
         # does not fire confidently in the middle of a violent change of swing.
-        gun_sigma = float(self.cfg.fire.gun_accel_sigma_frac) * 0.5 * float(np.linalg.norm(alpha)) * dt_exit * dt_exit
+        gun_sigma = float(self.cfg.fire.gun_accel_sigma_frac) * 0.5 * _norm3(alpha) * dt_exit * dt_exit
         bore_w = _unit(rot_exit @ self._bore_g)
         muzzle_w = rot_exit @ self._muzzle_g
 
@@ -228,12 +233,12 @@ class FireSolver:
         rng = float(track.range_m)
         t_arr_ns = t_exit_ns
         p_clay = rng * tracker.predict_dir(track, t_arr_ns)
-        dist = float(np.linalg.norm(p_clay - muzzle_w))
+        dist = _norm3(p_clay - muzzle_w)
         tof = _tof(shot, dist)
         for _ in range(_TOF_ITERS):
             t_arr_ns = t_exit_ns + int(round(tof * 1e9))
             p_clay = rng * tracker.predict_dir(track, t_arr_ns)
-            dist = float(np.linalg.norm(p_clay - muzzle_w))
+            dist = _norm3(p_clay - muzzle_w)
             tof = _tof(shot, dist)
 
         to_clay = p_clay - muzzle_w

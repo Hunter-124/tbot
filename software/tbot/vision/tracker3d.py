@@ -37,6 +37,11 @@ _RANGE_MIN_M = 1.0
 _RANGE_MAX_M = 200.0
 
 
+def _norm3(v: np.ndarray) -> float:
+    """np.linalg.norm of a 1-D vector (NumPy computes it as sqrt(v . v) too) without its ~65 us overhead."""
+    return math.sqrt(float(v @ v))
+
+
 @lru_cache(maxsize=64)
 def _matrices(dt_us: int, q: float) -> tuple[np.ndarray, np.ndarray]:
     """(F, Q) for a step of dt_us microseconds; frames repeat the same step, so these are cached.
@@ -225,15 +230,15 @@ class CartesianClayTracker(ClayTracker):
     def predict_dir(self, track: Track, t_ns: int) -> np.ndarray:
         """Unit world direction at t_ns: the mean position only (no covariance work)."""
         p = self._position(track, t_ns)
-        return p / max(float(np.linalg.norm(p)), 1e-12)
+        return p / max(_norm3(p), 1e-12)
 
     def angular_rate(self, track: Track) -> float:
         """Clay angular speed (rad/s) on the sphere: transverse velocity over range."""
         p, v = track.s[0:3], track.s[3:6]
-        r = max(float(np.linalg.norm(p)), 1e-6)
+        r = max(_norm3(p), 1e-6)
         u = p / r
         vt = v - float(v @ u) * u
-        return float(np.linalg.norm(vt)) / r
+        return _norm3(vt) / r
 
     # ----------------------------------------------------------------- internals
     def _ekf_update(self, sp, Sp, az_m, el_m, sig_az, sig_el, det: Detection, ifov: float):
@@ -244,7 +249,7 @@ class CartesianClayTracker(ClayTracker):
         R = np.diag([sig_az ** 2, sig_el ** 2])
         r_size = self._size_range(det, ifov)
         if r_size is not None:
-            r_p = float(np.linalg.norm(sp[0:3]))
+            r_p = _norm3(sp[0:3])
             Hr = np.zeros((1, 9), dtype=np.float64)
             Hr[0, 0:3] = sp[0:3] / max(r_p, 1e-9)
             H = np.vstack([H, Hr])
@@ -256,7 +261,7 @@ class CartesianClayTracker(ClayTracker):
         A = np.eye(9) - K @ H
         S = A @ Sp @ A.T + K @ R @ K.T
         # keep the clay in front of the camera and at a sane range
-        r = float(np.linalg.norm(s[0:3]))
+        r = _norm3(s[0:3])
         if not (_RANGE_MIN_M <= r <= _RANGE_MAX_M) and r > 0.0:
             s[0:3] *= min(max(r, _RANGE_MIN_M), _RANGE_MAX_M) / r
         return s, 0.5 * (S + S.T)
@@ -296,7 +301,7 @@ class CartesianClayTracker(ClayTracker):
         """Refresh the angular view (x, P) and the range estimate from the 3-D state."""
         tr.x, tr.P = _angular_view(tr.s, tr.S)
         p = tr.s[0:3]
-        r = float(np.linalg.norm(p))
+        r = _norm3(p)
         u = p / max(r, 1e-12)
         sig = math.sqrt(max(float(u @ tr.S[0:3, 0:3] @ u), 0.0))
         tr.range_m = min(max(r, _RANGE_MIN_M), _RANGE_MAX_M)

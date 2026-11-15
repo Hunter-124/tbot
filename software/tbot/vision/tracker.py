@@ -247,7 +247,11 @@ class ClayTracker:
     # ----------------------------------------------------------------- internals
     def _measure(self, detections: list[Detection], rot: np.ndarray):
         uv = np.array([[d.u, d.v] for d in detections], dtype=np.float64)
-        rays_c = np.asarray(self.cam.pixel_to_ray(uv), dtype=np.float64).reshape(-1, 3)
+        if len(detections) <= 8 and np.isfinite(uv).all():
+            # point by point through the scalar ray path: no small-array NumPy overhead (~0.3 ms on a Pi 3B)
+            rays_c = np.array([self.cam.pixel_to_ray(p) for p in uv], dtype=np.float64).reshape(-1, 3)
+        else:
+            rays_c = np.asarray(self.cam.pixel_to_ray(uv), dtype=np.float64).reshape(-1, 3)
         rays_g = np.asarray(self.mount.cam_to_gun(rays_c), dtype=np.float64).reshape(-1, 3)
         rays_w = rays_g @ rot.T
         az, el = dir_to_azel(rays_w)

@@ -40,6 +40,7 @@ NOMINAL_R_GUN_CAM = np.array(
 _Z_EPS = 1e-9  # rays with z <= this are behind/along the image plane -> nan pixels
 _NEWTON_ITERS = 32  # fisheye theta_d -> theta inversion
 _NEWTON_TOL = 1e-14
+_IFOV_SCALAR_MAX = 8  # ifov of up to this many points goes point by point (scalar ray path)
 
 # barrel_mask sampling of the barrel surface
 _BARREL_SLICE_STEP_M = 0.002  # axial spacing of the sampled rings
@@ -345,12 +346,30 @@ class CameraModel:
         if pts.shape[0] == 0:
             return np.zeros(0, dtype=np.float64)
         h = 0.5
+        if pts.shape[0] <= _IFOV_SCALAR_MAX and np.isfinite(pts).all():
+            # a few points (the tracker's detections): the scalar ray path and plain math, no small-array NumPy
+            # calls (four vectorised pixel_to_ray calls cost ~1.5 ms on a Pi 3B)
+            out = np.empty(pts.shape[0], dtype=np.float64)
+            for k in range(pts.shape[0]):
+                u, v = float(pts[k, 0]), float(pts[k, 1])
+                ang_u = _angle3(self.pixel_to_ray(np.array([u - h, v])), self.pixel_to_ray(np.array([u + h, v])))
+                ang_v = _angle3(self.pixel_to_ray(np.array([u, v - h])), self.pixel_to_ray(np.array([u, v + h])))
+                out[k] = 0.5 * (ang_u + ang_v) / (2.0 * h)
+            return float(out[0]) if single else out
         du = np.array([h, 0.0], dtype=np.float64)
         dv = np.array([0.0, h], dtype=np.float64)
         ang_u = _ray_angle(self.pixel_to_ray(pts - du), self.pixel_to_ray(pts + du))
         ang_v = _ray_angle(self.pixel_to_ray(pts - dv), self.pixel_to_ray(pts + dv))
         out = 0.5 * (ang_u + ang_v) / (2.0 * h)
         return float(out[0]) if single else out
+
+
+def _angle3(a: np.ndarray, b: np.ndarray) -> float:
+    """_ray_angle for one pair of 3-vectors, in plain floats (same formula, same rounding order)."""
+    ax, ay, az = float(a[0]), float(a[1]), float(a[2])
+    bx, by, bz = float(b[0]), float(b[1]), float(b[2])
+    cx, cy, cz = ay * bz - az * by, az * bx - ax * bz, ax * by - ay * bx
+    return math.atan2(math.sqrt(cx * cx + cy * cy + cz * cz), ax * bx + ay * by + az * bz)
 
 
 def _ray_angle(a: np.ndarray, b: np.ndarray) -> np.ndarray:
