@@ -48,6 +48,7 @@ log = logging.getLogger("tbot.run")
 LEAD_PREVIEW_S = overlay_mod.LEAD_PREVIEW_S  # overlay velocity arrow horizon
 FPS_EMA_ALPHA = 0.1
 SOLVE_EMA_ALPHA = 0.1
+HOT_TEMP_C = 75.0  # warn before the Pi 3B firmware throttles at 80 C
 
 
 def _ms(t0_ns: int, t1_ns: int) -> float:
@@ -115,7 +116,8 @@ class Pipeline:
         self.last_telemetry: dict | None = None
         self.events: list[dict] = []
         self.health: dict = {}
-        self._health_flags = {"under_voltage_now": False, "throttled_now": False}
+        self._health_flags = {"under_voltage_now": False, "throttled_now": False, "soft_temp_limit_now": False,
+                              "hot": False}
 
         self.server: DebugServer | None = None
         self.recorder = None
@@ -143,6 +145,7 @@ class Pipeline:
     _HEALTH_WARNINGS = (
         ("under_voltage_now", "UNDER-VOLTAGE on the Pi supply (sagging pack or thin wiring)"),
         ("throttled_now", "CPU THROTTLED (hot pod or low supply voltage)"),
+        ("soft_temp_limit_now", "SOFT TEMPERATURE LIMIT reached (clock reduced: hot pod)"),
     )
 
     def _check_health(self, health: dict) -> None:
@@ -153,6 +156,13 @@ class Pipeline:
             if active and not self._health_flags[key]:
                 log.warning("health: %s (source %s)", message, (health or {}).get("source"))
             self._health_flags[key] = active
+        # early heat warning: the Pi 3B firmware throttles the ARM clock at 80 C, which costs frame rate
+        temp = (health or {}).get("cpu_temp_c")
+        if temp is not None:
+            hot = bool(self._health_flags.get("hot")) and temp > HOT_TEMP_C - 3.0 or temp >= HOT_TEMP_C
+            if hot and not self._health_flags.get("hot"):
+                log.warning("health: Pi at %.1f C (throttling starts at 80 C): shade/ventilate the pod", temp)
+            self._health_flags["hot"] = hot
 
     # ------------------------------------------------------------------ lifecycle
     def start(self) -> None:
