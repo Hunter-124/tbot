@@ -52,13 +52,24 @@ measured, write it with the same structure (`actuator.servo.cmd_to_break_ms.mean
 - Sim (50 fps, 80 ms, 6 seeds x 4 scenarios, P(hit) >= 0.5): 17/23 shots hit, incoming 5/5. Simulator
   evidence only; nothing has been tested on real clays.
 
+## Frame rate
+
+The camera and driver are not the limit: capture-only on the Pi 3B delivers 50/100/150/200 fps with zero
+drops (250 fps requested times out: above the selected 10-bit mode's 247 fps). The live 50 fps is the
+processing budget: detect ~13 ms, track ~4 ms, solve ~1.2 ms, attitude ~0.7 ms per frame. Frames the pipeline
+is too slow for are skipped (newest frame wins); the trackers use real timestamps, so a skip is only a longer
+step. A higher rate needs a cheaper detector (ROI around tracks) or a faster Pi.
+
 ## Open items
 
-1. **Camera connector (blocker for the range):** during the hand-held sync swing the camera stopped
-   ~15 s in (libcamera "check that your camera sensor connector is attached securely") and the Pi
-   rebooted shortly after. Reseat/secure the CSI ribbon at both ends and strain-relieve it, then prove it
-   with a long recording while swinging hard. IMU calibration itself is done (axes + sync); redo
-   `calib-imu bias` at the range temperature (z drifted 0.48 -> 0.84 deg/s between 24 C and 22 C).
+1. **Camera connector:** during the hand-held sync swing the camera stopped ~15 s in (libcamera "Camera
+   frontend has timed out ... check that your camera sensor connector is attached securely"); the sensor still
+   answered on I2C but no frames came, also with stock `rpicam-vid`, across a power cycle. It streamed again
+   (20 s at 50.0 fps) after the rig was handled; secure and strain-relieve the ribbon and prove it with a long
+   hard-swing recording before the range. `tbot run` / `tbot record` now reopen a stalled camera
+   (`camera.stall_s`, `RecoveringSource`) instead of ending; frames during an outage are lost and tracks are
+   reset. Recovery is unit-tested; not yet exercised on a real mid-stream stall. Redo `calib-imu bias` at the
+   range temperature (z drifted 0.48 -> 0.84 deg/s between 24 C and 22 C).
 2. Lens intrinsics (`tbot board`, `calib-intrinsics`), then re-run `calib-boresight --barrel` on a full
    1280x800 still: the pitch disagreement above is the nominal lens model.
 3. Detector thresholds and the static mask on real sky footage (`tbot record`, `calib-detector`): sky

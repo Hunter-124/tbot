@@ -14,6 +14,8 @@ rotate_180 = false            # layout.md "As-built camera": no board rotation, 
                               # on the rig 2026-11-14: the barrel (above the lens) appears at the TOP of the raw image
 emulate_mono = "none"         # cv/video sources only: none | luma | red (red = mono sensor behind an orange long-pass)
 buffer_count = 4
+stall_s = 0.5                 # live picam (tbot run / record): no frame this long = stalled -> close and reopen the camera
+reopen_timeout_s = 5.0        # a reopened camera with no first frame within this is stalled again (retries back off to 5 s)
 
 [optics]                      # nominal prior until calib/intrinsics.json exists (innomaker manual V1.4 §3.1)
 model = "fisheye"             # fisheye (cv2.fisheye, equidistant base) | pinhole

@@ -19,7 +19,7 @@ from pathlib import Path
 
 import numpy as np
 
-from tbot.camera import open_source
+from tbot.camera import open_live_source
 from tbot.camera.replay import (
     EVENTS_JSONL,
     FRAMES_BIN,
@@ -439,7 +439,7 @@ def main(argv: list[str] | None = None) -> int:
     else:
         out = resolve_path(Path(cfg.record.dir) / f"{time.strftime('%Y%m%d-%H%M%S')}-rec")
 
-    source = open_source(cfg.camera.source, cfg, calib)
+    source = open_live_source(cfg.camera.source, cfg, calib)
     simulated = isinstance(source.clock, SimClock)
     imu = _open_imu(cfg, calib, source)
     writer: SessionWriter | None = None
@@ -463,8 +463,9 @@ def main(argv: list[str] | None = None) -> int:
                 if simulated:
                     break
                 timeouts += 1
-                if timeouts >= 10:
-                    print("\ntbot record: no frames for 10 s — giving up", file=sys.stderr)
+                give_up = 60 if getattr(source, "endless", False) else 10  # a recovering camera gets longer
+                if timeouts >= give_up:
+                    print(f"\ntbot record: no frames for {give_up} s — giving up", file=sys.stderr)
                     status = 1
                     break
                 continue

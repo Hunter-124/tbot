@@ -19,7 +19,7 @@ import numpy as np
 
 from tbot.app import overlay as overlay_mod
 from tbot.app.stream import DebugServer, jsonable
-from tbot.camera import open_source
+from tbot.camera import open_live_source
 from tbot.config import (
     Calibration,
     Config,
@@ -344,6 +344,11 @@ class Pipeline:
         t_read = time.perf_counter_ns()
         if frame is None:
             return None
+        if getattr(self.source, "gap_after_restart", False):
+            # the camera was reopened: tracks from before the outage would be extrapolated across it
+            self.source.gap_after_restart = False
+            self.tracker.reset()
+            log.warning("camera restarted (%d so far): tracks reset", int(getattr(self.source, "restarts", 0)))
 
         samples = self.imu.read()
         t_imu = time.perf_counter_ns()
@@ -591,7 +596,7 @@ class Pipeline:
                             log.error("no frame from %s within %.0f s", self.source.name, startup_timeout_s)
                             rc = 1
                             break
-                    elif now - self._last_frame_wall > idle_end_s:
+                    elif now - self._last_frame_wall > idle_end_s and not getattr(self.source, "endless", False):
                         log.info("source %s delivered no frame for %.2f s: stopping", self.source.name, idle_end_s)
                         break
                     time.sleep(0.002)
@@ -646,7 +651,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.record is not None:
         cfg.record.mode = args.record
 
-    source = open_source(cfg.camera.source, cfg, calib)
+    source = open_live_source(cfg.camera.source, cfg, calib)
     gpio = open_gpio(cfg)
     if args.sim_armed and not isinstance(gpio, SimGpio):
         gpio.close()

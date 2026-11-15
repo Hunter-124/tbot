@@ -34,6 +34,8 @@ class CameraConfig:
     rotate_180: bool
     emulate_mono: str
     buffer_count: int
+    stall_s: float = 0.5
+    reopen_timeout_s: float = 5.0
 
 
 @dataclass
