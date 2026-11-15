@@ -159,6 +159,7 @@ regression on top of it — run both after changing anything in the detect → t
 
 ## Documentation
 
+- [docs/INTEGRATION_STATUS.md](docs/INTEGRATION_STATUS.md) — bench integration handoff: per-rig values on the Pi, calibration state, open items.
 - [docs/PREFLIGHT.md](docs/PREFLIGHT.md) — ordered offline optimisation, diagnostics, profiling and bench workflow before assembly.
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — module/API contract, frames, clock, calibration file formats, safety model.
 - [docs/OPTICS.md](docs/OPTICS.md) — the mono camera and lens, what "orange" means without colour, range vs clay size in pixels, filters, exposure and focus, camera pose.
