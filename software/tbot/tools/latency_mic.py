@@ -13,6 +13,10 @@ hammer already down shows the impact only. cmd_to_break_ms uses the LAST strong 
 Times include mic latency (USB/ALSA, a few ms, uncalibrated) and sound flight (~0.3 ms at 10 cm); pass
 --mic-latency-ms / --mic-distance-m to remove them once known.
 
+--led lights the latency LED (gpio.latency_led_pin) immediately before each fire command and turns it off
+1 s later, so a camera that sees both the LED and the trigger (a webcam beside the gun) times the stroke:
+frames from the LED's first lit frame to the trigger fully back = command -> break, independent of the mic.
+
     tbot latency-mic --trials 10
 """
 from __future__ import annotations
@@ -73,6 +77,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--out", default=None, help="run directory (default runs/latency-mic-<time>)")
     ap.add_argument("--notes", default="")
     ap.add_argument("--no-write", action="store_true")
+    ap.add_argument("--led", action="store_true",
+                    help="light the latency LED at each fire command (video timing reference)")
     args = ap.parse_args(argv)
     cfg, calib = load_from_args(args)
     log = lambda s: print(s, flush=True)  # noqa: E731
@@ -84,6 +90,9 @@ def main(argv: list[str] | None = None) -> int:
     gpio = open_gpio(cfg)
     arming = ArmingSwitch(gpio, cfg)
     actuator = make_actuator(cfg, gpio, arming)
+    led_pin = int(cfg.gpio.latency_led_pin) if args.led else None
+    if led_pin is not None:
+        gpio.setup_output(led_pin, 0)
     err = getattr(actuator, "travel_error", None)
     if err:
         log(f"refusing: {err}")
@@ -110,11 +119,17 @@ def main(argv: list[str] | None = None) -> int:
             if not arming.armed or arming.press_count != pressed_at:
                 log("  released before the shot: trial skipped (press again)")
                 continue
+            if led_pin is not None:
+                gpio.write(led_pin, 1)
             t_cmd = time.monotonic_ns()
             if not actuator.fire(t_cmd):
+                if led_pin is not None:
+                    gpio.write(led_pin, 0)
                 log("  fire refused (one shot per press: release and press again)")
                 continue
             time.sleep(1.0)
+            if led_pin is not None:
+                gpio.write(led_pin, 0)
             c = mic.clip(t_cmd - 100_000_000, t_cmd + 900_000_000)
             rec: dict = {"trial": n, "cmd_ns": t_cmd}
             if c is not None:
@@ -131,6 +146,8 @@ def main(argv: list[str] | None = None) -> int:
             results.append(rec)
             log(f"  trial {n}: onsets after cmd (ms, peak): {rec.get('onsets_ms', [])}  -> release the button")
     finally:
+        if led_pin is not None:
+            gpio.write(led_pin, 0)
         actuator.close()
         mic.stop()
         arming.close()
