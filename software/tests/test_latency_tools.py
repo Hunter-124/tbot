@@ -70,6 +70,16 @@ def test_analyze_led_trials_recovers_timestamp_offset_and_latency():
     assert res["warnings"] == []
 
 
+def test_analyze_led_trials_phase_offset_override_shifts_only_the_corrected_latency():
+    trials = _generated_trials()
+    own = latency_camera.analyze_led_trials(trials, 1.0 / FPS)
+    forced = latency_camera.analyze_led_trials(trials, 1.0 / FPS, phase_offset_ns=own["timestamp_offset_ns"] + 4e6)
+    assert forced["timestamp_offset_ns"] == own["timestamp_offset_ns"]
+    assert forced["exposure_to_user_ms"] == own["exposure_to_user_ms"]
+    assert forced["exposure_end_to_user_ms"]["mean"] == pytest.approx(
+        own["exposure_end_to_user_ms"]["mean"] - 4.0, abs=0.01)
+
+
 def test_analyze_led_trials_warns_when_no_frame_is_partially_lit():
     trials = [
         {

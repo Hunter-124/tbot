@@ -381,7 +381,7 @@ def run_led_trials(
     return records
 
 
-def analyze_led_trials(trials, frame_period_s: float) -> dict:
+def analyze_led_trials(trials, frame_period_s: float, *, phase_offset_ns: float | None = None) -> dict:
     """Camera latency statistics from the records of run_led_trials (pure function).
 
     exposure_to_user_ms = t_capture - t_on: it contains up to one frame period of phase wait, so its
@@ -389,6 +389,8 @@ def analyze_led_trials(trials, frame_period_s: float) -> dict:
     exposure_end_to_user_ms removes that phase wait using the recovered timestamp offset.
     timestamp_offset_ns must be ADDED to the sensor's mid-exposure timestamp to put it on the
     monotonic clock: for a global shutter the LED came on at (exposure end - fraction*exposure).
+    phase_offset_ns, if given, replaces this run's own offset estimate in exposure_end_to_user_ms (used
+    when a tighter offset from an earlier run is kept).
     """
     user_ms: list[float] = []
     offsets_ns: list[float] = []
@@ -425,7 +427,8 @@ def analyze_led_trials(trials, frame_period_s: float) -> dict:
                 f"only {n_partial} partially lit frame(s) (want {MIN_PARTIAL_TRIALS}): the timestamp "
                 f"offset is noisy - run more trials or {advice}"
             )
-    end_to_user_ms = [(t_cap - (t_exp + offset_ns + 0.5 * exp_ns)) / 1e6 for t_cap, t_exp, exp_ns in corr]
+    phase_ns = offset_ns if phase_offset_ns is None else float(phase_offset_ns)
+    end_to_user_ms = [(t_cap - (t_exp + phase_ns + 0.5 * exp_ns)) / 1e6 for t_cap, t_exp, exp_ns in corr]
     if not corr:
         warnings.append("no frame reported an exposure time; the phase-corrected latency is unavailable")
 
@@ -561,6 +564,10 @@ def main(argv: list[str] | None = None) -> int:
             result["timestamp_offset_ns"] = int(prev["timestamp_offset_ns"])
             result["timestamp_offset_sigma_ns"] = float(prev_sigma)
             result["offset_kept_from_disk"] = True
+            # Re-derive the phase-corrected latency with the kept offset, not this run's noisy one. The frames'
+            # t_exposure_ns already include the applied offset, so pass the kept offset relative to it.
+            redo = analyze_led_trials(records, 1.0 / fps, phase_offset_ns=result["timestamp_offset_ns"] - applied_ns)
+            result["exposure_end_to_user_ms"] = redo["exposure_end_to_user_ms"]
     result["roi"] = list(found["roi"])
     result["off_level"] = found["off_level"]
     result["on_level"] = found["on_level"]
