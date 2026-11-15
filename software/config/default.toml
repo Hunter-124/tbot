@@ -47,6 +47,13 @@ hsv_lo = [5, 110, 70]         # OpenCV HSV (H 0-180): clay orange
 hsv_hi = [25, 255, 255]
 color_combine = "or"          # and | or : how the HSV mask combines with the contrast mask on colour frames
 debug = false
+matched_sigma_px = 0.5        # Gaussian matched filter before the threshold (0 = off): pools a small blurred clay's
+                              # light; sim: 4x fewer false detections in open sky, +2-12 % detections [INFERENCE]
+grow_k_sigma = 3.0            # hysteresis (0 = off): grow each k_sigma seed into neighbours above this many sigmas
+                              # before the min_area test, so an edge-on clay's partial pixels count
+max_peak_fraction = 0.85      # reject a blob whose raw peak holds more than this share of the raw contrast in its 3x3
+                              # neighbourhood: a hot pixel / speck is one pixel, a real clay is spread by the optics
+                              # (psf_px). 1.0 = off. Replaces min_area_px as the speck filter once matched/grown
 psf_px = 1.2                  # 4-sigma diameter of the system blur (pixel box alone = 1.15 px); calibrate: tbot calib-detector --psf [INFERENCE]
 
 [tracker]

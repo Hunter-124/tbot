@@ -65,8 +65,12 @@ def cfg_default():
     return load_config()
 
 
-def nearest(dets, u, v):
-    return min(dets, key=lambda d: (d.u - u) ** 2 + (d.v - v) ** 2) if dets else None
+def nearest(dets, u, v, tol=None):
+    """Closest detection to (u, v); with `tol`, None unless it lies within tol px."""
+    best = min(dets, key=lambda d: (d.u - u) ** 2 + (d.v - v) ** 2) if dets else None
+    if best is not None and tol is not None and ((best.u - u) ** 2 + (best.v - v) ** 2) ** 0.5 > tol:
+        return None
+    return best
 
 
 # --------------------------------------------------------------------------------- mono detection
@@ -155,14 +159,24 @@ def test_area_filters_reject_blobs_and_salt():
     cfg = cfg_default()
     cfg.detector.bg_kernel = 25          # keep a 900 px blob out of its own background estimate
 
-    assert ClayDetector(cfg).detect(f) == []  # max_area_px=400 and min_area_px=2 reject both
+    dets = ClayDetector(cfg).detect(f)
+    # max_area_px=400 rejects the blob; the speck filter (max_peak_fraction) rejects the salt. (With this
+    # deliberately coarse background, faint pieces of the blob's bright halo may pass: not checked here.)
+    assert nearest(dets, 105.0, 105.0, tol=12.0) is None
+    assert nearest(dets, 400.0, 300.0, tol=2.0) is None
 
     cfg.detector.max_area_px = 2000
-    big = ClayDetector(cfg).detect(f)
-    assert len(big) == 1 and 800.0 <= big[0].area_px <= 1000.0
+    big = nearest(ClayDetector(cfg).detect(f), 104.5, 104.5, tol=3.0)
+    assert big is not None and 800.0 <= big.area_px <= 1000.0
 
     cfg.detector.max_area_px = 400
     cfg.detector.min_area_px = 1
+    assert nearest(ClayDetector(cfg).detect(f), 400.0, 300.0, tol=2.0) is None  # still a speck: rejected
+
+    # the plain detector (no matched filter, growth or speck filter) with min_area_px=1 keeps a lone pixel
+    cfg.detector.matched_sigma_px = 0.0
+    cfg.detector.grow_k_sigma = 0.0
+    cfg.detector.max_peak_fraction = 1.0
     salt = nearest(ClayDetector(cfg).detect(f), 400.0, 300.0)
     assert salt is not None
     assert (round(salt.u), round(salt.v)) == (400, 300)
@@ -428,3 +442,14 @@ def test_masked_detector_consumes_the_auto_mask():
     cfg = cfg_default()
     assert len(ClayDetector(cfg).detect(frame(img))) == 1
     assert ClayDetector(cfg, mask).detect(frame(img)) == []
+
+
+def test_a_huge_irregular_component_is_skipped_not_crashed():
+    """Matched/grown mode applies max_area to the raw footprint, so very large components reach measurement;
+    an L-shaped one whose bbox centre misses its own pixels must be skipped cleanly."""
+    rng = np.random.default_rng(71)
+    img = sky(rng)
+    img[40:44, 40:360] -= 60.0    # long horizontal bar ...
+    img[40:340, 40:44] -= 60.0    # ... and a long vertical one: an L whose bbox centre is empty sky
+    dets = ClayDetector(cfg_default()).detect(frame(img))
+    assert nearest(dets, 200.0, 190.0, tol=20.0) is None

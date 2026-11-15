@@ -2,8 +2,11 @@
 
 The OV9281 is monochrome and a 108 mm clay spans only ~1.5-8 px at 8-40 m with the 640x400 prior
 (fx = 466.7 px), so detection is *local contrast* against a smoothly varying sky, never hue: a box-blur
-background on a downscaled image is subtracted, the residual is thresholded in robust noise sigmas, and
-the surviving connected components are measured with sub-pixel, contrast-weighted moments.
+background on a downscaled image is subtracted, the residual is smoothed by a small Gaussian matched to a
+distant clay (`detector.matched_sigma_px`) and thresholded in robust noise sigmas OF THAT SMOOTHED IMAGE, and
+the surviving connected components are measured with sub-pixel, contrast-weighted moments on the raw residual.
+The matched filter is what finds a 25-30 m clay whose light is spread over 2-4 pixels, none of which clears the
+per-pixel threshold alone, and it suppresses single-pixel spikes (hot pixels) relative to the noise.
 Colour sources (laptop webcam) may additionally AND/OR an HSV orange mask.
 
 Everything is vectorised (no per-pixel Python) and works on preallocated buffers so the Pi 3B does not
@@ -36,6 +39,18 @@ DEV_MAX = 64
 # Safety valve for pathological frames (e.g. colour OR-mode on a scene full of orange): measure at most
 # this many components per frame, largest first. A real sky yields a handful.
 CANDIDATE_LIMIT = 64
+# With the matched filter on, a blob is MEASURED on the raw residual above this many raw sigmas (the
+# smoothed, grown detection footprint is fatter than the object and would bias the size up ~12 %).
+MEAS_SEED_SIGMAS = 2.5
+# Hysteresis growth reaches this far from a seed pixel (an edge-on clay is ~2 px long at 30 m).
+GROW_RADIUS_PX = 2
+# Matched/grown components may exceed max_area_px by this factor before their raw footprint is measured.
+COMPONENT_AREA_HEADROOM = 3
+# Local-contrast test (matched mode): ring distance beyond the blob's half-size, and the required margin.
+LOCAL_RING_PX = 3
+LOCAL_K_SIGMA = 4.5
+# The matched-filter image is kept in int16 at this many counts per DN (integer noise estimator, finer steps).
+MATCHED_SCALE = 4
 # Variance of a unit pixel box (uniform over 1 px): the smallest second moment anything can have.
 PIXEL_BOX_VAR = 1.0 / 12.0
 # Seed weights (thresholded pixels only) are soft-thresholded at this many sigma so noise barely
@@ -60,9 +75,29 @@ ADAPTIVE_MAX_HALF = 40
 # A Gaussian weight narrower than this samples almost nothing and the deconvolution is unstable.
 MIN_WEIGHT_VAR = 0.5
 
+_OFF3_Y = np.array([-1, -1, -1, 0, 0, 0, 1, 1, 1])
+_OFF3_X = np.array([-1, 0, 1, -1, 0, 1, -1, 0, 1])
+
 _POLARITIES = ("bright", "dark", "both")
 _MODES = ("auto", "mono", "color")
 _COMBINES = ("and", "or")
+
+
+class _LazyContrast:
+    """gray - bg (int16) computed only for the slices/indices actually read.
+
+    With the matched filter on, the full-frame raw residual is only needed on a subsample (noise estimate)
+    and inside a few measurement windows; a full uint8 -> int16 subtraction costs ~2.2 ms on a Pi 3B."""
+
+    def __init__(self, gray: np.ndarray, bg: np.ndarray):
+        self.gray, self.bg = gray, bg
+        self.shape = gray.shape
+
+    def __getitem__(self, idx):
+        return self.gray[idx].astype(np.int16) - self.bg[idx].astype(np.int16)
+
+    def full(self) -> np.ndarray:
+        return cv2.subtract(self.gray, self.bg, dtype=cv2.CV_16S)
 
 
 class ClayDetector:
@@ -76,6 +111,7 @@ class ClayDetector:
         self.timings_ms: dict[str, float] = {}
         self.debug: dict[str, np.ndarray] = {}
         self.noise_sigma: float = float("nan")
+        self.match_sigma: float = float("nan")  # noise sigma of the matched-filter image, in DN
         self.frames_seen: int = 0
         self._since_noise: int = 0
         self._key: tuple | None = None
@@ -119,6 +155,8 @@ class ClayDetector:
         self._smooth = np.empty((dh, dw), np.uint8)
         self._bg = np.empty((h, w), np.uint8)
         self._contrast = np.empty((h, w), np.int16)
+        self._matched = np.empty((h, w), np.int16)
+        self._gsm = np.empty((h, w), np.uint8)
         # inRange writes byte masks; bool views also work with NumPy's logical operations.
         self._bin = np.empty((h, w), np.uint8).view(np.bool_)
         self._bin2 = np.empty((h, w), np.uint8).view(np.bool_)
@@ -161,41 +199,64 @@ class ClayDetector:
                    interpolation=cv2.INTER_AREA)
         cv2.blur(self._small, (k, k), dst=self._smooth)
         cv2.resize(self._smooth, (w, h), dst=self._bg, interpolation=cv2.INTER_LINEAR)
-        contrast = cv2.subtract(gray, self._bg, dst=self._contrast, dtype=cv2.CV_16S)
+        ms = float(getattr(det, "matched_sigma_px", 0.0) or 0.0)
+        if ms > 0.0 and not use_hsv:
+            contrast = _LazyContrast(gray, self._bg)  # raw residual on demand (see _LazyContrast)
+        else:
+            contrast = cv2.subtract(gray, self._bg, dst=self._contrast, dtype=cv2.CV_16S)
         t_bg = time.perf_counter()
 
-        # ---- noise sigma and threshold ------------------------------------
+        # ---- matched filter, noise sigma and threshold ---------------------
+        if ms > 0.0:
+            # Matched filter on the 8-bit image (OpenCV's fixed-point uint8 Gaussian is fast on ARM; an int16
+            # separable filter cost ~4 ms on the Pi 3B), then the same background subtraction as the plain
+            # contrast: smoothing is linear and the background is already smooth, so this IS the smoothed
+            # contrast, at 1 DN resolution.
+            ks = 2 * int(math.ceil(3.0 * ms)) + 1
+            cv2.GaussianBlur(gray, (ks, ks), ms, dst=self._gsm, borderType=cv2.BORDER_REFLECT)
+            cv2.subtract(self._gsm, self._bg, dst=self._matched, dtype=cv2.CV_16S)
+            stat = self._matched
+            unit = 1.0
+        else:
+            stat = contrast
+            unit = 1.0
         mask = self._mask_for(h, w)
         if self._since_noise <= 0 or not np.isfinite(self.noise_sigma):
             self.noise_sigma = self._estimate_sigma(contrast, mask)
+            self.match_sigma = self._estimate_sigma(stat, mask) / unit if ms > 0.0 else self.noise_sigma
             self._since_noise = max(1, int(det.noise_every))
         self._since_noise -= 1
         self.frames_seen += 1
         sigma = self.noise_sigma
-        thr = max(float(det.k_sigma) * sigma, float(det.min_contrast))
+        # the detection statistic is thresholded in its own sigmas; the DN floor (min_contrast) is applied
+        # to each component's raw peak in _measure, since smoothing lowers a small blob's peak
+        thr_dn = float(det.k_sigma) * self.match_sigma if ms > 0.0 else max(float(det.k_sigma) * sigma,
+                                                                             float(det.min_contrast))
+        thr = thr_dn * unit
 
         binary = self._bin
         if math.isfinite(thr):
             # Contrast is integral in [-255, 255], so strict float comparisons reduce to
             # inclusive integer ranges. OpenCV writes the byte mask without converting the
             # entire frame to floating point, and accepts reusable destination buffers.
-            bright_lo = max(-256, min(256, math.floor(thr) + 1))
-            dark_hi = max(-256, min(256, math.ceil(-thr) - 1))
+            top = int(255 * unit)
+            bright_lo = max(-top - 1, min(top + 1, math.floor(thr) + 1))
+            dark_hi = max(-top - 1, min(top + 1, math.ceil(-thr) - 1))
             if det.polarity == "bright":
-                cv2.inRange(contrast, bright_lo, 255, dst=binary.view(np.uint8))
+                cv2.inRange(stat, bright_lo, top, dst=binary.view(np.uint8))
             elif det.polarity == "dark":
-                cv2.inRange(contrast, -255, dark_hi, dst=binary.view(np.uint8))
+                cv2.inRange(stat, -top, dark_hi, dst=binary.view(np.uint8))
             else:
-                cv2.inRange(contrast, bright_lo, 255, dst=binary.view(np.uint8))
-                cv2.inRange(contrast, -255, dark_hi, dst=self._bin2.view(np.uint8))
+                cv2.inRange(stat, bright_lo, top, dst=binary.view(np.uint8))
+                cv2.inRange(stat, -top, dark_hi, dst=self._bin2.view(np.uint8))
                 np.logical_or(binary, self._bin2, out=binary)
         elif det.polarity == "bright":
-            np.greater(contrast, thr, out=binary)
+            np.greater(stat, thr, out=binary)
         elif det.polarity == "dark":
-            np.less(contrast, -thr, out=binary)
+            np.less(stat, -thr, out=binary)
         else:
-            np.greater(contrast, thr, out=binary)
-            np.less(contrast, -thr, out=self._bin2)
+            np.greater(stat, thr, out=binary)
+            np.less(stat, -thr, out=self._bin2)
             np.logical_or(binary, self._bin2, out=binary)
 
         if use_hsv:
@@ -210,10 +271,16 @@ class ClayDetector:
                 np.logical_or(binary, orange, out=binary)
         if mask is not None:
             np.logical_and(binary, mask, out=binary)
+        gk = float(getattr(det, "grow_k_sigma", 0.0) or 0.0)
+        grow_low = gk * (thr / float(det.k_sigma)) if 0.0 < gk < float(det.k_sigma) and math.isfinite(thr) else None
         t_thr = time.perf_counter()
 
         # ---- components ---------------------------------------------------
-        dets = self._measure(binary, contrast, sigma, det, frame.t_exposure_ns, mask)
+        # Hue-selected blobs (colour sources) may have no luma contrast at all: measure them the plain way.
+        matched_on = ms > 0.0 and not use_hsv
+        dets = self._measure(binary, contrast, sigma, det, frame.t_exposure_ns, mask,
+                             stat if matched_on else None, self.match_sigma * unit if matched_on else None,
+                             grow_low if matched_on else None)
         t_cc = time.perf_counter()
 
         dets.sort(key=lambda d: d.score, reverse=True)
@@ -221,7 +288,10 @@ class ClayDetector:
             dets = dets[: int(det.max_detections)]
 
         if det.debug:
-            debug = {"contrast": contrast.copy(), "binary": np.where(binary, 255, 0).astype(np.uint8)}
+            full = contrast.full() if isinstance(contrast, _LazyContrast) else contrast.copy()
+            debug = {"contrast": full, "binary": np.where(binary, 255, 0).astype(np.uint8)}
+            if ms > 0.0:
+                debug["matched"] = self._matched.copy()
             if use_hsv:
                 debug["orange"] = np.where(orange, 255, 0).astype(np.uint8)
             self.debug = debug
@@ -235,6 +305,36 @@ class ClayDetector:
             "total": (time.perf_counter() - t0) * 1e3,
         }
         return dets
+
+    @staticmethod
+    @lru_cache(maxsize=8)
+    def _matched_kernel(ms: float) -> np.ndarray:
+        ks = 2 * int(math.ceil(3.0 * ms)) + 1
+        k = cv2.getGaussianKernel(ks, ms).astype(np.float32) * np.float32(MATCHED_SCALE ** 0.5)
+        k.setflags(write=False)
+        return k
+
+    # ------------------------------------------------------------- hysteresis
+    @staticmethod
+    def _grown_enough(labels, stats, lid: int, stat: np.ndarray, low: float, det, mask, kernel) -> bool:
+        """Hysteresis for one small seed component: does it reach min_area_px once same-polarity pixels above
+        `low` within GROW_RADIUS_PX of it are added? Local (a few pixels), not a flood fill: an edge-on clay's
+        partial pixels count, a faint cloud edge or sky gradient cannot be followed, and a dark seed only takes
+        dark pixels (a big dark blob is ringed by a bright halo where it pulls its own background down)."""
+        r = GROW_RADIUS_PX
+        h, w = labels.shape
+        x0, y0 = int(stats[lid, cv2.CC_STAT_LEFT]), int(stats[lid, cv2.CC_STAT_TOP])
+        x1 = x0 + int(stats[lid, cv2.CC_STAT_WIDTH])
+        y1 = y0 + int(stats[lid, cv2.CC_STAT_HEIGHT])
+        wx0, wy0, wx1, wy1 = max(0, x0 - r), max(0, y0 - r), min(w, x1 + r), min(h, y1 + r)
+        seed = labels[wy0:wy1, wx0:wx1] == lid
+        st = stat[wy0:wy1, wx0:wx1]
+        sign = 1 if int(st[seed].sum()) >= 0 else -1
+        weak = (st * sign) > low
+        if mask is not None:
+            weak &= mask[wy0:wy1, wx0:wx1]
+        near = cv2.dilate(seed.view(np.uint8), kernel).view(np.bool_)
+        return int(np.count_nonzero(seed | (near & weak))) >= int(det.min_area_px)
 
     # ----------------------------------------------------------------- noise
     def _estimate_sigma(self, contrast: np.ndarray, mask: np.ndarray | None) -> float:
@@ -253,7 +353,9 @@ class ClayDetector:
 
     # ------------------------------------------------------------ components
     def _measure(self, binary: np.ndarray, contrast: np.ndarray, sigma: float,
-                 det, t_ns: int, mask: np.ndarray | None) -> list[Detection]:
+                 det, t_ns: int, mask: np.ndarray | None,
+                 matched: np.ndarray | None = None, matched_sigma: float | None = None,
+                 grow_low: float | None = None) -> list[Detection]:
         n, labels, stats, _ = cv2.connectedComponentsWithStats(binary.view(np.uint8), connectivity=8)
         if n <= 1:
             return []
@@ -262,12 +364,37 @@ class ClayDetector:
         hs = stats[1:, cv2.CC_STAT_HEIGHT]
         long_side = np.maximum(ws, hs).astype(np.float64)
         short_side = np.maximum(np.minimum(ws, hs), 1).astype(np.float64)
-        keep = (
-            (areas >= int(det.min_area_px))
-            & (areas <= int(det.max_area_px))
-            & (long_side / short_side <= float(det.max_aspect))
-        )
+        if matched is None:
+            keep = (
+                (areas >= int(det.min_area_px))
+                & (areas <= int(det.max_area_px))
+                & (long_side / short_side <= float(det.max_aspect))
+            )
+        else:
+            # Matched/grown footprints are a little fatter than the object (growth is local, <= GROW_RADIUS_PX):
+            # screen components with headroom here - large sky structures and streaks still fail - and apply
+            # the exact max_area / aspect limits to each blob's RAW footprint once it is found (below).
+            min_seed = 1 if grow_low is not None else int(det.min_area_px)  # small seeds are grown below
+            keep = (
+                (areas >= min_seed)
+                & (areas <= COMPONENT_AREA_HEADROOM * int(det.max_area_px))
+                & (long_side / short_side <= float(det.max_aspect))
+            )
         idx = np.nonzero(keep)[0]
+        if idx.size and matched is not None and grow_low is not None:
+            # vectorised pre-screen of tiny seeds (the Python loop below costs ~0.1 ms each on a Pi 3B): the
+            # raw residual somewhere in the 3x3 around the seed's corner pixel must reach the DN floor
+            small = areas[idx] < int(det.min_area_px)
+            if small.any():
+                ys = stats[idx[small] + 1, cv2.CC_STAT_TOP]
+                xs = stats[idx[small] + 1, cv2.CC_STAT_LEFT]
+                hh, ww = contrast.shape
+                yy = np.clip(ys[:, None] + _OFF3_Y[None, :], 0, hh - 1)
+                xx = np.clip(xs[:, None] + _OFF3_X[None, :], 0, ww - 1)
+                best = np.abs(contrast[yy, xx].astype(np.int32)).max(axis=1)
+                ok = np.ones(idx.size, dtype=bool)
+                ok[np.flatnonzero(small)] = best >= float(det.min_contrast)
+                idx = idx[ok]
         if idx.size == 0:
             return []
         if idx.size > CANDIDATE_LIMIT:  # keep the largest; a real frame never gets here
@@ -281,8 +408,12 @@ class ClayDetector:
         moat_half = max(ADAPTIVE_MIN_HALF,
                         min(ADAPTIVE_MAX_HALF, int(0.5 * max(1, int(det.bg_kernel)) * max(1, int(det.bg_downscale))) - 1))
         out: list[Detection] = []
+        grow_k = np.ones((2 * GROW_RADIUS_PX + 1, 2 * GROW_RADIUS_PX + 1), np.uint8)
         for i in idx:
             lid = int(i) + 1
+            if grow_low is not None and int(stats[lid, cv2.CC_STAT_AREA]) < int(det.min_area_px):
+                if not self._grown_enough(labels, stats, lid, matched, grow_low, det, mask, grow_k):
+                    continue
             x0 = int(stats[lid, cv2.CC_STAT_LEFT])
             y0 = int(stats[lid, cv2.CC_STAT_TOP])
             bw = int(stats[lid, cv2.CC_STAT_WIDTH])
@@ -303,12 +434,70 @@ class ClayDetector:
             own = lab_r == lid
             c_r = contrast[py0:py1, px0:px1].astype(np.float32)
             core = c_r[own]
+            if core.size == 0:  # a huge, oddly shaped component whose pixels miss the window: not a clay
+                continue
             peak = float(core[int(np.argmax(np.abs(core)))])
+            if matched is not None:
+                if abs(peak) < float(det.min_contrast):  # DN floor on the raw residual
+                    continue
+                m_core = matched[py0:py1, px0:px1][own].astype(np.float32)
+                m_peak = float(m_core[int(np.argmax(np.abs(m_core)))])
+                peak_sign = 1.0 if m_peak >= 0.0 else -1.0
+                if peak * peak_sign < 0.0:  # the raw extreme fights the matched polarity: use the matched sign
+                    peak = float(core[int(np.argmax(core * peak_sign))])
+                sp = 1.0 if peak >= 0.0 else -1.0
+                comp = lab_r == lid
+                pol = sp * c_r
+                ry, rx = np.unravel_index(int(np.argmax(np.where(comp, pol, -np.inf))), pol.shape)
+                # speck filter: a hot pixel holds (nearly) all of its 3x3 neighbourhood's contrast
+                nb = np.maximum(pol[max(0, ry - 1):ry + 2, max(0, rx - 1):rx + 2], 0.0)
+                if float(pol[ry, rx]) > float(det.max_peak_fraction) * float(nb.sum()):
+                    continue
+                # local-contrast test: a clay stands out from its immediate surroundings (the optics blur is
+                # small); a patch of sky texture is part of a broad shallow gradient. Peak over the median of
+                # the ring LOCAL_RING_PX out (beyond the clay itself) must exceed LOCAL_K_SIGMA raw sigmas.
+                rr = LOCAL_RING_PX + max(int(stats[lid, cv2.CC_STAT_WIDTH]), int(stats[lid, cv2.CC_STAT_HEIGHT])) // 2
+                ya, yb, xa, xb = ry - rr, ry + rr, rx - rr, rx + rr
+                if ya >= 0 and xa >= 0 and yb < pol.shape[0] and xb < pol.shape[1]:
+                    ring = np.concatenate((pol[ya, xa:xb + 1], pol[yb, xa:xb + 1], pol[ya + 1:yb, xa], pol[ya + 1:yb, xb]))
+                    if float(pol[ry, rx]) - float(np.median(ring)) < LOCAL_K_SIGMA * sigma:
+                        continue
+                # Measure on the RAW footprint exactly as without the matched filter (pixels above the raw
+                # threshold), so every blob the plain detector could see is measured identically; a faint blob
+                # with no such pixel falls back to its pixels above MEAS_SEED_SIGMAS raw sigmas.
+                raw_thr = max(k_sigma * sigma, float(det.min_contrast))
+                raw_fp = comp & (pol > raw_thr)
+                seed_thr = raw_thr
+                if not raw_fp.any():
+                    seed_thr = MEAS_SEED_SIGMAS * sigma
+                    raw_fp = comp & (pol > seed_thr)
+                raw_fp[ry, rx] = True
+                fy_, fx_ = np.nonzero(raw_fp)
+                x0, y0 = px0 + int(fx_.min()), py0 + int(fy_.min())
+                bw, bh = int(fx_.max() - fx_.min()) + 1, int(fy_.max() - fy_.min()) + 1
+                area = float(raw_fp.sum())
+                if area > int(det.max_area_px) or max(bw, bh) / max(min(bw, bh), 1) > float(det.max_aspect):
+                    continue
+                gy, gx = py0 + int(ry), px0 + int(rx)
+                half = min(moat_half, max(ADAPTIVE_MIN_HALF,
+                                          int(WINDOW_SIGMAS * alpha_half * max(bw, bh) / 4.0 + 0.5)))
+                cxi = x0 + 0.5 * (bw - 1)
+                cyi = y0 + 0.5 * (bh - 1)
+                px0 = max(0, int(round(cxi)) - half)
+                py0 = max(0, int(round(cyi)) - half)
+                px1 = min(w_img, int(round(cxi)) + half + 1)
+                py1 = min(h_img, int(round(cyi)) + half + 1)
+                lab_r = labels[py0:py1, px0:px1]
+                c_r = contrast[py0:py1, px0:px1].astype(np.float32)
+                own = (lab_r == lid) & (sp * c_r > seed_thr)
+                if py0 <= gy < py1 and px0 <= gx < px1:
+                    own[gy - py0, gx - px0] = True
+                core = c_r[own]
             sign = np.float32(1.0 if peak >= 0.0 else -1.0)
             # UNTHRESHOLDED flux of this blob's polarity. Noise is zero-mean here, so it adds variance
             # to the moments but no bias; pixels owned by another blob (or masked out) are dropped.
             img_w = sign * c_r
-            keep_px = own | (lab_r == 0)
+            keep_px = (lab_r == lid) | (lab_r == 0) if matched is not None else own | (lab_r == 0)
             if mask is not None:
                 keep_px = keep_px & mask[py0:py1, px0:px1]
             # The blob sits inside its own background estimate, so the box blur leaves a shallow moat
@@ -341,7 +530,7 @@ class ClayDetector:
             rad = ((0.5 * (oxx - oyy)) ** 2 + oxy * oxy) ** 0.5
             lam = max(mid + rad, PIXEL_BOX_VAR)
             diameter = 4.0 * lam**0.5 / PROFILE_FACTOR
-            snr = abs(peak) / sigma
+            snr = (abs(m_peak) / matched_sigma) if matched is not None else abs(peak) / sigma
             # 0.5 at the detection threshold, saturating towards 1; shrunk for non-compact blobs.
             s_snr = snr / (snr + k_sigma)
             compact = min(1.0, area / (0.25 * np.pi * diameter * diameter))

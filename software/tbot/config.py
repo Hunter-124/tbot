@@ -74,6 +74,9 @@ class DetectorConfig:
     color_combine: str
     debug: bool
     psf_px: float
+    matched_sigma_px: float = 0.5
+    grow_k_sigma: float = 3.0
+    max_peak_fraction: float = 0.85
 
 
 @dataclass
