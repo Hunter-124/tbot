@@ -14,7 +14,7 @@ quoted from a source (innomaker CAM-MIPIOV9281 V2 user manual V1.4, `design/layo
 | Frame rate | up to ~144 fps at 1280×800, 210–309 fps at 640×400 (vendor; Pi 3B achieved rate unverified) | innomaker manual V1.4 |
 | Interface | 2-lane MIPI CSI-2, RAW8/RAW10, `dtoverlay=ov9281`, libcamera/Picamera2 | innomaker manual V1.4 |
 | Lens | M12, f = 2.8 mm, F2.2, vendor "FOV D148 / H118", TV distortion < −17 % | innomaker manual V1.4 §3.1 |
-| Mount | pod_cap, lens axis gun (Y 0, Z 17), lens tip X 675.6, board rotated 180° | layout.md "Front cap — pod_cap AS BUILT" |
+| Mount | nose module, lens axis gun (Y 0, Z 8), lens tip X 546.2, board not rotated | layout.md "As-built camera" |
 
 Runtime default is **640 × 400 @ 120 fps, 500 µs exposure, gain 1.0** (`config/default.toml [camera]`): the binned
 mode halves the data rate and doubles the per-pixel light at the cost of angular resolution. 1280 × 800 is a
@@ -222,21 +222,23 @@ From `design/layout.md` (pod_cap AS BUILT) and `config/default.toml [mount]`:
 
 | Fact | Value |
 |---|---|
-| Optical centre, gun frame | X 670 (lens tip 675.6 − ~5.6 `[INFERENCE ±5]`), Y 0, **Z 17** |
-| Bore axis | Y 0, **Z 49** → the lens sits **32 mm below the bore** |
-| Muzzle | X 841, Z 49 |
-| Barrel OD | 24.0 mm @ X 500 → 20.5 mm @ X 841 (linear) |
-| Board orientation | rotated 180° about the lens axis (J1 edge up) → `camera.rotate_180 = true` |
+| Optical centre, gun frame | X ~540 (lens tip 546.2, entrance pupil `[INFERENCE]`), Y 0, **Z 8** |
+| Bore axis | Y 0, **Z 62** → the lens sits **54 mm below the bore** |
+| Muzzle | X 819, Z 62 (scan, ±2) |
+| Barrel OD | 21.5 mm @ X 500 → 22.5 mm @ X 819 (calipered, linear) |
+| Board orientation | not rotated (J1 at the bottom edge) → `camera.rotate_180 = false` |
 
-**Rotation.** The PCB is mounted upside down, so the raw sensor image is upside down. The *source* fixes it
+**Rotation.** The as-built PCB is upright (layout.md), so the raw image is upright: the barrel, above the lens,
+shows at the top of the frame. If a board is ever mounted upside down, the *source* fixes it
 (`PicamSource` applies `cv2.rotate` when `camera.rotate_180`); replay and synthetic data are stored already
 upright. Everything downstream — pixels, masks, boresight, overlays — is in the upright image. If you ever see the
 clay falling upward, that flag is wrong, not the tracker.
 
-**The barrel is in the picture.** Sitting 32 mm below the bore and looking forward past 171 mm of barrel, the
-underside of the barrel occupies the top of the frame — roughly the top third at 640 × 400
-`[INFERENCE: barrel underside 21.8 mm above the lens axis at the muzzle (Z 49 − 20.5/2 − 17), 171 mm ahead
-→ 7.3° above the axis → ~59 px above the image centre, i.e. rows 0–141 of 400]`. Two mechanisms remove it:
+**The barrel is in the picture.** Sitting 54 mm below the bore and looking forward past ~279 mm of barrel, the
+underside of the barrel occupies the top of the frame `[barrel underside 42.75 mm above the lens axis at the
+muzzle (Z 62 − 22.5/2 − 8), 279 mm ahead → 8.7° above the axis → ~71 px above the image centre at 640 × 400]`.
+On the rig (2026-11-14, unrectified) the barrel tip ends near row 135 of 400, consistent with that plus the
+~3° pitch mount error. Two mechanisms remove it:
 
 - `optics.barrel_mask(cam, mount, cfg)` projects the barrel cylinder from the mount geometry and dilates it by
   `mount.barrel_mask_margin_px = 6`. It is automatic, it needs no recording, and it moves correctly when the
@@ -247,10 +249,10 @@ underside of the barrel occupies the top of the frame — roughly the top third 
 
 Run the auto-mask once the pod is actually on the gun; the geometric mask alone is the fallback, not the goal.
 
-**Parallax is handled, not ignored.** The camera is 171 mm behind and 32 mm below the muzzle, so the bore line does
+**Parallax is handled, not ignored.** The camera is 279 mm behind and 54 mm below the muzzle, so the bore line does
 not sit at a fixed pixel: `MountModel.bore_pixel(cam, range_m)` moves with range, and the solver computes the miss
-angle as seen **from the muzzle**, including the shot drop. At 20 m the 32 mm offset is 1.6 mrad ≈ 0.09° — small
-against the pattern, but at 8 m it is 4 mrad and the sign matters. Do not try to "zero" it with the boresight: the
+angle as seen **from the muzzle**, including the shot drop. At 20 m the 54 mm offset is 2.7 mrad ≈ 0.15° — small
+against the pattern, but at 8 m it is 6.8 mrad and the sign matters. Do not try to "zero" it with the boresight: the
 boresight calibration solves for the camera's *rotation* error (`cam_rpy_deg`), and the translation comes from the
 CAD numbers above. If the pod is re-printed or shimmed, update `mount.cam_pos_mm` rather than absorbing the shift
 into the boresight angles.

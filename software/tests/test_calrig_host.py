@@ -631,8 +631,10 @@ def test_run_hold_and_info_and_estop_sim(tmp_path, capsys):
     assert tool.main(["run", "hold", "--sim", "--out", str(tmp_path), "-p", "duration_s=5", "--pose", "inverted"]) == 0
     (d,) = [p for p in tmp_path.iterdir() if p.is_dir()]
     imu = read_csv(d / "imu.csv")
-    az = np.mean([float(r["ax"]) for r in imu])
-    assert az == pytest.approx(9.80665, abs=0.05)               # inverted: chip +x sees up (R_gun_imu row/col)
+    chip = np.array([np.mean([float(r[k]) for r in imu]) for k in ("ax", "ay", "az")])
+    # inverted: world up is gun -Z; the chip sees it through R_gun_imu (chip = R^T gun)
+    R = np.asarray(load_config().imu.R_gun_imu, dtype=float)
+    assert chip == pytest.approx(R.T @ np.array([0.0, 0.0, -9.80665]), abs=0.05)
     assert tool.main(["info", "--sim"]) == 0
     out = capsys.readouterr().out
     assert "firmware : fw=calrig-uno/" in out and "0.1125" in out.replace("0.11250", "0.1125")

@@ -281,7 +281,8 @@ def test_bore_pixel_parallax(cfg):
     near = mount.bore_pixel(cam, 10.0)
     dx = (mount.muzzle_pos_g[0] - mount.cam_pos_g[0]) + 10.0
     dz = mount.muzzle_pos_g[2] - mount.cam_pos_g[2]
-    assert dz == pytest.approx(0.032, abs=1e-9)
+    assert dz == pytest.approx((cfg.mount.muzzle_pos_mm[2] - cfg.mount.cam_pos_mm[2]) / 1000.0, abs=1e-9)
+    assert dz > 0.0  # as-built: 54 mm below the bore
     expect_v = cam.cy - cam.fy * math.atan2(dz, dx)
     assert near[1] < cam.cy  # the bore line sits ABOVE the optical axis at short range
     assert near[1] == pytest.approx(expect_v, abs=0.5)
@@ -353,8 +354,10 @@ def test_barrel_mask_margin_grows_the_silhouette(cfg):
     edge6 = np.flatnonzero(m6[:, 319] == 0).max()
     assert edge6 - edge0 == 6
     assert np.all((m6 == 0) | (m0 == 255))  # the margin only ever adds masked pixels
-    # the geometric edge is the muzzle rim: 7.25 deg above the optical axis
-    expect = cam.cy - cam.fy * math.atan2(49.0 - 10.25 - 17.0, 841.0 - 670.0)
+    # the geometric edge is the muzzle rim, seen from the optical centre (as-built: ~8.7 deg above the axis)
+    m = cfg.mount
+    rim_z = m.barrel_axis_z_mm - m.barrel_od_mm[-1][1] / 2.0 - m.cam_pos_mm[2]
+    expect = cam.cy - cam.fy * math.atan2(rim_z, m.muzzle_pos_mm[0] - m.cam_pos_mm[0])
     assert edge0 == pytest.approx(expect, abs=1.5)
 
 

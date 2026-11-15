@@ -173,11 +173,18 @@ def test_register_field_helpers():
 
 
 def test_calibration_maps_chip_axes_to_the_gun_frame(tmp_path):
-    """design/layout.md: chip +X -> gun -Z, chip +Y -> gun -Y, chip +Z -> gun -X."""
+    """R_gun_imu from the config maps chip axes to gun axes (as-built: identity, layout.md "As-built IMU");
+    a non-trivial map is checked with a rotated config."""
     cfg = make_cfg()
     cal = ImuCalibration.from_config(cfg, calib(tmp_path))
     accel = np.array([[0.0, 0.0, G_MPS2]])  # level gun: specific force along chip +Z
     gyro = np.array([[1.0, 2.0, 3.0]])
+    a_gun, g_gun = cal.apply(accel, gyro)
+    assert np.allclose(a_gun[0], [0.0, 0.0, G_MPS2])
+    assert np.allclose(g_gun[0], [1.0, 2.0, 3.0])
+    # the old pod_cap mount: chip +X -> gun -Z, chip +Y -> gun -Y, chip +Z -> gun -X
+    cfg.imu.R_gun_imu = [[0.0, 0.0, -1.0], [0.0, -1.0, 0.0], [-1.0, 0.0, 0.0]]
+    cal = ImuCalibration.from_config(cfg, calib(tmp_path))
     a_gun, g_gun = cal.apply(accel, gyro)
     assert np.allclose(a_gun[0], [-G_MPS2, 0.0, 0.0])
     assert np.allclose(g_gun[0], [-3.0, -2.0, -1.0])
@@ -282,10 +289,10 @@ def test_driver_init_sequence_and_sample_stream(tmp_path):
     assert np.all(np.diff(t) > 0)
     assert float(np.median(np.diff(t))) == pytest.approx(2_000_000.0, rel=0.1)
     assert 0 < int(t[-1] - t[0]) <= 500_000_000
-    # Chip +Z reads +1 g (4096 LSB at +/-8 g) -> gun -X; gyro maps (x,y,z) -> (-z,-y,-x).
-    assert np.allclose(samples[0].accel, [-G_MPS2, 0.0, 0.0], atol=1e-9)
+    # Chip +Z reads +1 g (4096 LSB at +/-8 g); as-built R_gun_imu is the identity (layout.md "As-built IMU").
+    assert np.allclose(samples[0].accel, [0.0, 0.0, G_MPS2], atol=1e-9)
     chip_gyro = np.radians(np.array([100.0, -200.0, 300.0]) / GYRO_LSB_PER_DPS[1000])
-    assert np.allclose(samples[0].gyro, [-chip_gyro[2], -chip_gyro[1], -chip_gyro[0]], atol=1e-12)
+    assert np.allclose(samples[0].gyro, chip_gyro, atol=1e-12)
     assert samples[0].temp_c == pytest.approx(25.0, abs=0.1)
     assert bus.closed is False  # an injected bus is not ours to close
 

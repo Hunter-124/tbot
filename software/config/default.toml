@@ -10,7 +10,8 @@ fps = 120.0                   # Pi 3B processing budget; sensor does more at 640
 exposure_us = 500.0           # short exposure = no motion blur on a 20 m/s clay; daylight at F2.2
 analogue_gain = 1.0
 auto_exposure = false
-rotate_180 = true             # camera board rotated 180 deg about the lens axis (design/layout.md)
+rotate_180 = false            # layout.md "As-built camera": no board rotation, J1 at the bottom edge. Confirmed
+                              # on the rig 2026-11-14: the barrel (above the lens) appears at the TOP of the raw image
 emulate_mono = "none"         # cv/video sources only: none | luma | red (red = mono sensor behind an orange long-pass)
 buffer_count = 4
 
@@ -21,12 +22,12 @@ pixel_pitch_um = 3.0          # at full resolution
 sensor_width_px = 1280
 
 [mount]                       # gun frame, mm (design/layout.md)
-cam_pos_mm = [670.0, 0.0, 17.0]      # optical centre: lens axis Y0 Z17; X = lens tip 675.6 - ~5.6 [INFERENCE +/-5]
+cam_pos_mm = [540.0, 0.0, 8.0]       # layout.md "As-built camera": optical axis +X through Y0 Z8; entrance pupil ~X 540 [INFERENCE]
 cam_rpy_deg = [0.0, 0.0, 0.0]        # mount error about gun X,Y,Z; calib/boresight.json overrides
-lens_tip_x_mm = 675.6
-muzzle_pos_mm = [841.0, 0.0, 49.0]
-barrel_axis_z_mm = 49.0
-barrel_od_mm = [[500.0, 24.0], [841.0, 20.5]]   # (X, OD) linear profile
+lens_tip_x_mm = 546.2
+muzzle_pos_mm = [819.0, 0.0, 62.0]   # layout.md barrel-mask geometry (IMG_0462 scan, +/-2)
+barrel_axis_z_mm = 62.0
+barrel_od_mm = [[500.0, 21.5], [819.0, 22.5]]   # (X, OD) linear profile, calipered (layout.md)
 barrel_mask_margin_px = 6
 clay_diameter_m = 0.108       # ISSF/ATA standard clay 108-110 mm
 
@@ -71,7 +72,7 @@ gyro_range_dps = 1000
 accel_range_g = 8
 dlpf_hz = 98
 poll_hz = 100
-R_gun_imu = [[0.0, 0.0, -1.0], [0.0, -1.0, 0.0], [-1.0, 0.0, 0.0]]   # layout.md pod_cap AXIS MAP
+R_gun_imu = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]   # layout.md "As-built IMU": board axes = gun axes [INFERENCE until tbot calib-imu axes]
 
 [attitude]
 accel_gain = 0.02             # complementary-filter gain per sample when the accel is trusted
