@@ -9,6 +9,12 @@ that makes the camera model agree with the barrel:
 Roll is unobservable from one point; give `--pixel2` on a plumb line through the target (a hanging
 string) and the solver adds the constraint that the plane through both rays stays vertical.
 
+`--barrel IMAGE` needs no target at all: the barrel is in the camera's view, and its two silhouette edges
+are generators of the (tapered) barrel cone, so they meet in the image at the projection of the cone's apex
+on the bore axis - the bore direction itself for a straight barrel. The tool fits both edges in the
+undistorted ray plane, intersects them and solves pitch/yaw against that apex direction (roll stays fixed).
+Take the still with the gun pointed at something plain and lit (a wall or sky) so the barrel stands out.
+
 `--poi-offset-cm dy,dz@range_m` records a patterning result (where the pattern centre lands relative to
 the point of aim) as `poi_offset_rad`; it is written independently of the rpy solve, so the two can be
 measured in separate runs.
@@ -25,7 +31,7 @@ import cv2
 import numpy as np
 
 from tbot.config import Calibration, Config, add_common_args, load_from_args, now_iso, update_json
-from tbot.optics import CameraModel, MountModel
+from tbot.optics import CameraModel, MountModel, barrel_mask
 
 GN_ITERS = 40
 GN_TOL_RAD = 1e-12
@@ -85,9 +91,10 @@ def _unit(v: np.ndarray) -> np.ndarray:
 
 
 def _residuals(cam: CameraModel, cfg: Config, rpy: np.ndarray, bore_px: tuple[float, float],
-               range_m: float, plumb_px: tuple[float, float] | None) -> np.ndarray:
+               range_m: float, plumb_px: tuple[float, float] | None,
+               target_dir_g: np.ndarray | None = None) -> np.ndarray:
     mount = mount_for_rpy(cfg, rpy)
-    target = bore_target_dir(mount, range_m)
+    target = bore_target_dir(mount, range_m) if target_dir_g is None else target_dir_g
     d = _unit(mount.cam_to_gun(cam.pixel_to_ray(np.array(bore_px, dtype=np.float64))))
     res = list(np.cross(d, target))  # |cross| = sin(miss angle), zero only when the rays coincide
     if plumb_px is not None:
@@ -99,22 +106,24 @@ def _residuals(cam: CameraModel, cfg: Config, rpy: np.ndarray, bore_px: tuple[fl
 
 def solve_mount_rpy(cam: CameraModel, cfg: Config, bore_px: tuple[float, float], range_m: float,
                     plumb_px: tuple[float, float] | None = None,
-                    roll_rad: float = 0.0) -> tuple[np.ndarray, dict]:
+                    roll_rad: float = 0.0, target_dir_g: np.ndarray | None = None) -> tuple[np.ndarray, dict]:
     """Solve the camera mount correction (roll, pitch, yaw) in radians.
 
     Pitch and yaw come from the bore pixel; roll stays at `roll_rad` unless a plumb-line pixel is given.
-    Small-angle closed form first (the correction rotates the observed ray onto the bore direction),
-    then Gauss-Newton on the exact model.
+    `target_dir_g` (unit, gun frame, from the optical centre) replaces "the bore line at range_m" as the
+    direction the pixel must map to (used by --barrel). Small-angle closed form first, then Gauss-Newton.
     """
-    if range_m <= 0.0:
+    if target_dir_g is None and range_m <= 0.0:
         raise ValueError(f"--range-m must be positive, got {range_m}")
+    if target_dir_g is not None:
+        target_dir_g = _unit(np.asarray(target_dir_g, dtype=np.float64).reshape(3))
     rpy = np.array([float(roll_rad), 0.0, 0.0], dtype=np.float64)
 
     # closed-form start: the rotation vector that takes the uncorrected ray onto the bore direction is
     # (roll, pitch, yaw) to first order, and only its pitch/yaw parts are observable from one point.
     mount0 = mount_for_rpy(cfg, rpy)
     d0 = _unit(mount0.cam_to_gun(cam.pixel_to_ray(np.array(bore_px, dtype=np.float64))))
-    target = bore_target_dir(mount0, range_m)
+    target = bore_target_dir(mount0, range_m) if target_dir_g is None else target_dir_g
     axis = np.cross(d0, target)
     s = float(np.linalg.norm(axis))
     if s > 1e-15:
@@ -125,14 +134,14 @@ def solve_mount_rpy(cam: CameraModel, cfg: Config, bore_px: tuple[float, float],
     free = (0, 1, 2) if plumb_px is not None else (1, 2)
     iters = 0
     for iters in range(1, GN_ITERS + 1):
-        r = _residuals(cam, cfg, rpy, bore_px, range_m, plumb_px)
+        r = _residuals(cam, cfg, rpy, bore_px, range_m, plumb_px, target_dir_g)
         J = np.zeros((r.size, len(free)), dtype=np.float64)
         for col, k in enumerate(free):
             plus, minus = rpy.copy(), rpy.copy()
             plus[k] += _JAC_STEP_RAD
             minus[k] -= _JAC_STEP_RAD
-            J[:, col] = (_residuals(cam, cfg, plus, bore_px, range_m, plumb_px)
-                         - _residuals(cam, cfg, minus, bore_px, range_m, plumb_px)) / (2.0 * _JAC_STEP_RAD)
+            J[:, col] = (_residuals(cam, cfg, plus, bore_px, range_m, plumb_px, target_dir_g)
+                         - _residuals(cam, cfg, minus, bore_px, range_m, plumb_px, target_dir_g)) / (2.0 * _JAC_STEP_RAD)
         step, *_ = np.linalg.lstsq(J, -r, rcond=None)
         for col, k in enumerate(free):
             rpy[k] += float(step[col])
@@ -141,7 +150,7 @@ def solve_mount_rpy(cam: CameraModel, cfg: Config, bore_px: tuple[float, float],
 
     mount = mount_for_rpy(cfg, rpy)
     d = _unit(mount.cam_to_gun(cam.pixel_to_ray(np.array(bore_px, dtype=np.float64))))
-    target = bore_target_dir(mount, range_m)
+    target = bore_target_dir(mount, range_m) if target_dir_g is None else target_dir_g
     miss = float(math.atan2(float(np.linalg.norm(np.cross(d, target))), float(np.dot(d, target))))
     info = {
         "iterations": iters,
@@ -154,6 +163,101 @@ def solve_mount_rpy(cam: CameraModel, cfg: Config, bore_px: tuple[float, float],
         d2 = _unit(mount.cam_to_gun(cam.pixel_to_ray(np.array(plumb_px, dtype=np.float64))))
         info["plumb_tilt_deg"] = math.degrees(math.asin(abs(float(_unit(np.cross(d, d2))[2]))))
     return rpy, info
+
+
+# ----------------------------------------------------------------------------------- barrel method
+BARREL_SEARCH_FRAC = 0.12  # search this fraction of the width either side of the nominal barrel silhouette
+BARREL_MIN_ROWS = 12
+
+
+def barrel_apex_dir_g(cfg: Config) -> np.ndarray:
+    """Gun-frame unit direction (from the optical centre) whose image is where the barrel edges meet.
+
+    The silhouette edges of a cone are lines through its apex, so their images meet at the apex's image. For a
+    barrel that narrows toward the muzzle the apex is ahead on the bore axis; for one that widens it is behind
+    the camera and the pinhole image is that of the opposite (forward) direction; a straight barrel gives +X.
+    """
+    m = cfg.mount
+    (x1, od1), (x2, od2) = (tuple(map(float, p)) for p in (m.barrel_od_mm[0], m.barrel_od_mm[-1]))
+    cam = np.asarray(m.cam_pos_mm, dtype=np.float64)
+    k = (od2 - od1) / 2.0 / (x2 - x1)  # radius slope (mm/mm)
+    if abs(k) < 1e-9:
+        return np.array([1.0, 0.0, 0.0])
+    apex = np.array([x1 - (od1 / 2.0) / k, 0.0, float(m.barrel_axis_z_mm)])
+    v = apex - cam
+    if v[0] < 0.0:
+        v = -v
+    return _unit(v)
+
+
+def _fit_line(points: np.ndarray) -> tuple[float, float, float]:
+    """x = a*y + b, iteratively trimmed least squares; returns (a, b, rms)."""
+    keep = np.ones(len(points), dtype=bool)
+    a = b = 0.0
+    for _ in range(4):
+        a, b = np.polyfit(points[keep, 1], points[keep, 0], 1)
+        r = points[:, 0] - (a * points[:, 1] + b)
+        sd = float(np.std(r[keep]))
+        new = np.abs(r) <= max(2.5 * sd, 1e-4)
+        if new.sum() < BARREL_MIN_ROWS or np.array_equal(new, keep):
+            break
+        keep = new
+    r = points[keep, 0] - (a * points[keep, 1] + b)
+    return float(a), float(b), float(np.sqrt(np.mean(r * r)))
+
+
+def barrel_vanishing_pixel(image: np.ndarray, cfg: Config, cam: CameraModel) -> tuple[tuple[float, float], dict]:
+    """Fit the barrel's two silhouette edges in `image` (at cam's resolution) and intersect them.
+
+    Edges are found row by row as the strongest dark->bright pair of horizontal gradients near the nominal
+    silhouette, converted to undistorted rays, and fitted as straight lines in the z=1 plane (a fisheye bends
+    them in pixels). Returns the intersection pixel and fit statistics.
+    """
+    gray = image if image.ndim == 2 else cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    gray = gray.astype(np.float32)
+    h, w = gray.shape
+    nominal = barrel_mask(cam, MountModel.from_config(cfg, None), cfg) == 0  # True = barrel (nominal mount)
+    rows = np.flatnonzero(nominal.any(axis=1))
+    if len(rows) < BARREL_MIN_ROWS:
+        raise ValueError("the configured barrel geometry puts no barrel in this image")
+    sm = cv2.GaussianBlur(gray, (0, 0), max(1.0, w / 640.0 * 1.5))
+    gx = cv2.Sobel(sm, cv2.CV_32F, 1, 0, ksize=5)
+    pad = int(BARREL_SEARCH_FRAC * w)
+    y_end = int(rows.max() - 0.1 * (rows.max() - rows.min()))  # stay clear of the rounded muzzle end
+    left, right = [], []
+    for y in range(int(rows.min()), max(int(rows.min()) + 1, y_end), max(1, h // 200)):
+        cols = np.flatnonzero(nominal[y])
+        if not len(cols):
+            continue
+        lo, hi = max(0, int(cols.min()) - pad), min(w, int(cols.max()) + pad)
+        g = gx[y, lo:hi]
+        if len(g) < 8:
+            continue
+        il, ir = int(np.argmin(g)), int(np.argmax(g))  # barrel is darker: falling edge left, rising edge right
+        if ir - il < 4 or g[il] > -0.25 * float(np.abs(gx[y]).max()) or g[ir] < 0.25 * float(np.abs(gx[y]).max()):
+            continue
+        left.append((lo + il, y))
+        right.append((lo + ir, y))
+    if len(left) < BARREL_MIN_ROWS:
+        raise ValueError(f"found the barrel edges on only {len(left)} rows (need {BARREL_MIN_ROWS}); "
+                         "point the gun at something plain and lit so the barrel stands out")
+
+    def plane(pts):  # pixels -> undistorted (x/z, y/z)
+        rays = cam.pixel_to_ray(np.asarray(pts, dtype=np.float64))
+        return np.column_stack([rays[:, 0] / rays[:, 2], rays[:, 1] / rays[:, 2]])
+
+    al, bl, rl = _fit_line(plane(left))
+    ar, br, rr = _fit_line(plane(right))
+    if abs(al - ar) < 1e-6:
+        raise ValueError("the barrel edges are parallel in the image: cannot intersect them")
+    yv = (br - bl) / (al - ar)
+    xv = al * yv + bl
+    uv = cam.ray_to_pixel(np.array([[xv, yv, 1.0]]))[0]
+    px_per_rad = 1.0 / float(cam.ifov(np.asarray(uv, dtype=np.float64)))
+    return (float(uv[0]), float(uv[1])), {
+        "rows": len(left), "edge_rms_px": [rl * px_per_rad, rr * px_per_rad],
+        "left_px": left, "right_px": right,
+    }
 
 
 # --------------------------------------------------------------------------------- frame handling
@@ -238,6 +342,10 @@ def main(argv: list[str] | None = None) -> int:
     g.add_argument("--pixel2", default=None, metavar="U,V",
                    help="second pixel on a plumb line through the target (gives roll)")
     g.add_argument("--image", default=None, metavar="PATH", help="still image instead of a live source")
+    g.add_argument("--barrel", default=None, metavar="IMAGE",
+                   help="solve pitch/yaw from the barrel silhouette in this still (no target needed; any "
+                        "resolution with the operating field of view, e.g. a full 1280x800 rpicam-still)")
+    g.add_argument("--barrel-debug", default=None, metavar="PNG", help="with --barrel: save the fitted edges")
     g.add_argument("--gui", action="store_true", help="click the point(s) in a window (needs a display)")
     g.add_argument("--plumb", action="store_true",
                    help="with --gui: also click a second point on a plumb line (gives roll)")
@@ -264,6 +372,11 @@ def main(argv: list[str] | None = None) -> int:
         patch["poi_offset_rad"] = poi_offset_rad(dy, dz, rng)
         print(f"poi    : pattern centre {dy * 100:+.1f} cm gun-left, {dz * 100:+.1f} cm up at {rng:g} m "
               f"-> poi_offset_rad [{patch['poi_offset_rad'][0]:+.6f}, {patch['poi_offset_rad'][1]:+.6f}] rad")
+
+    if args.barrel:
+        rc = _barrel_solve(args, cfg, calib, patch)
+        if rc:
+            return rc
 
     want_solve = bool(args.pixel or args.gui or args.image)
     if want_solve:
@@ -367,6 +480,67 @@ def main(argv: list[str] | None = None) -> int:
     patch["created"] = now_iso()
     update_json(out, patch)
     print(f"wrote  : {out}")
+    return 0
+
+
+def _barrel_solve(args, cfg: Config, calib: Calibration, patch: dict) -> int:
+    """--barrel: fit the barrel edges, solve pitch/yaw against the cone-apex direction, fill `patch`."""
+    image = cv2.imread(str(args.barrel), cv2.IMREAD_GRAYSCALE)
+    if image is None:
+        print(f"tbot calib-boresight: cannot read {args.barrel}", file=sys.stderr)
+        return 1
+    if cfg.camera.rotate_180:
+        image = cv2.rotate(image, cv2.ROTATE_180)
+    width, height = int(cfg.camera.width), int(cfg.camera.height)
+    if calib.intrinsics:
+        width = int(calib.intrinsics.get("width", width))
+        height = int(calib.intrinsics.get("height", height))
+    h_img, w_img = image.shape
+    if abs(w_img / h_img - width / height) > 0.02:
+        print(f"tbot calib-boresight: {w_img}x{h_img} does not have the {width}x{height} field of view",
+              file=sys.stderr)
+        return 2
+    cam_img = CameraModel.from_calibration(calib.intrinsics, cfg, w_img, h_img)
+    try:
+        px_img, fit = barrel_vanishing_pixel(image, cfg, cam_img)
+    except ValueError as e:
+        print(f"tbot calib-boresight: --barrel: {e}", file=sys.stderr)
+        return 1
+    s = width / w_img
+    bore_px = ((px_img[0] + 0.5) * s - 0.5, (px_img[1] + 0.5) * s - 0.5)
+    cam = CameraModel.from_calibration(calib.intrinsics, cfg, width, height)
+    target = barrel_apex_dir_g(cfg)
+    roll_rad = math.radians(args.roll_deg) if args.roll_deg is not None else _existing_roll_rad(cfg, calib)
+    rpy, info = solve_mount_rpy(cam, cfg, bore_px, 0.0, None, roll_rad, target_dir_g=target)
+    rpy_deg = [float(math.degrees(v)) for v in rpy]
+    taper_deg = math.degrees(math.atan2(float(target[2]), float(target[0])))
+    print(f"barrel : edges on {fit['rows']} rows, rms {fit['edge_rms_px'][0]:.2f} / {fit['edge_rms_px'][1]:.2f} px; "
+          f"meet at ({px_img[0]:.1f}, {px_img[1]:.1f}) in {w_img}x{h_img} -> ({bore_px[0]:.2f}, {bore_px[1]:.2f})")
+    print(f"taper  : barrel OD profile puts that point {taper_deg:+.2f} deg in pitch off the bore direction")
+    print(f"camera : {width}x{height} {cam.model}  fx {cam.fx:.2f}"
+          + ("  (nominal prior — run calib-intrinsics first)" if not calib.intrinsics else ""))
+    print(f"solved : rpy_deg roll {rpy_deg[0]:+.4f}  pitch {rpy_deg[1]:+.4f}  yaw {rpy_deg[2]:+.4f}"
+          f"   ({info['iterations']} iterations, residual {info['residual_deg']:.2e} deg)")
+    if args.barrel_debug:
+        vis = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+        for pts, col in ((fit["left_px"], (0, 0, 255)), (fit["right_px"], (0, 255, 0))):
+            for x, y in pts:
+                cv2.circle(vis, (int(x), int(y)), 2, col, -1)
+        cv2.drawMarker(vis, (int(round(px_img[0])), int(round(px_img[1]))), (255, 0, 255), cv2.MARKER_CROSS, 30, 2)
+        cv2.imwrite(str(args.barrel_debug), vis)
+        print(f"debug  : {args.barrel_debug}")
+    if info["correction_deg"] > MAX_CORRECTION_DEG and not args.force:
+        print(f"tbot calib-boresight: correction of {info['correction_deg']:.1f} deg exceeds "
+              f"{MAX_CORRECTION_DEG:g} deg — check the image (or --force)", file=sys.stderr)
+        return 1
+    patch.update({
+        "rpy_deg": rpy_deg,
+        "method": "barrel",
+        "barrel_pixel": [float(bore_px[0]), float(bore_px[1])],
+        "barrel_apex_dir_g": [float(v) for v in target],
+        "width": width,
+        "height": height,
+    })
     return 0
 
 

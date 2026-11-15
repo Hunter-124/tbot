@@ -325,3 +325,15 @@ def test_run_bench_returns_stats_without_writing(tmp_path):
     assert result["frames"] == 6
     assert result["total_ms"]["n"] == 6
     assert not (tmp_path / "bench.json").exists()
+
+
+def test_budget_labels_an_operator_estimate_as_estimate(tmp_path):
+    from tbot.config import LatencyBudget
+    cfg = load_config()
+    est = {"actuator": {"servo": {"cmd_to_break_ms": {"mean": 80.0, "std": 2.5}, "method": "manual estimate"}}}
+    budget = LatencyBudget.from_config(cfg, est)
+    assert budget.cmd_to_break_ms["servo"] == pytest.approx(80.0)
+    assert budget.jitter_ms["servo"] == pytest.approx(2.5)
+    assert budget.sources["actuator.servo"] == "estimate"
+    est["actuator"]["servo"]["method"] = "mic"
+    assert LatencyBudget.from_config(cfg, est).sources["actuator.servo"] == "measured"

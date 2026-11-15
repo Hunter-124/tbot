@@ -490,3 +490,53 @@ def test_boresight_range_changes_the_parallax_correction(tmp_path):
     expected = math.atan2(d10[2], d10[0]) - math.atan2(d25[2], d25[0])
     assert expected > 0.0
     assert math.degrees(near[1]) == pytest.approx(-math.degrees(expected), abs=1e-6)
+
+
+# ------------------------------------------------------------------------------- boresight from the barrel
+def _barrel_still(cfg, rpy_deg, w=1280, h=800):
+    """Synthetic still: a dark barrel (the model's own silhouette for this mount error) on a lit wall."""
+    from tbot.optics import barrel_mask
+    cam = CameraModel.nominal(cfg, w, h)
+    mount = MountModel.from_config(cfg, {"rpy_deg": list(rpy_deg), "poi_offset_rad": [0.0, 0.0]})
+    m0 = cfg.mount.barrel_mask_margin_px
+    cfg.mount.barrel_mask_margin_px = 0
+    try:
+        barrel = barrel_mask(cam, mount, cfg) == 0
+    finally:
+        cfg.mount.barrel_mask_margin_px = m0
+    img = np.full((h, w), 170.0, np.float32)
+    img[barrel] = 60.0
+    img = cv2.GaussianBlur(img, (0, 0), 3.0)  # out-of-focus barrel edges
+    img += np.random.default_rng(0).normal(0.0, 1.5, img.shape)
+    return np.clip(img, 0, 255).astype(np.uint8)
+
+
+@pytest.mark.parametrize("rpy", [(0.0, -2.0, -4.0), (0.0, 1.0, 2.5)])
+def test_barrel_boresight_recovers_a_known_mount_error(tmp_path, rpy):
+    cfg = load_config(sets=["camera.rotate_180=false"])
+    path = tmp_path / "barrel.png"
+    cv2.imwrite(str(path), _barrel_still(cfg, rpy))
+    rc = cb.main(["--calib-dir", str(tmp_path), "--barrel", str(path), "--set", "camera.rotate_180=false"])
+    assert rc == 0
+    out = json.loads((tmp_path / "boresight.json").read_text())
+    assert out["method"] == "barrel"
+    assert out["rpy_deg"][1] == pytest.approx(rpy[1], abs=0.25)  # pitch
+    assert out["rpy_deg"][2] == pytest.approx(rpy[2], abs=0.25)  # yaw
+
+
+def test_barrel_apex_direction_follows_the_taper():
+    cfg = load_config()
+    cfg.mount.barrel_od_mm = [[500.0, 22.0], [819.0, 22.0]]
+    assert cb.barrel_apex_dir_g(cfg) == pytest.approx([1.0, 0.0, 0.0])  # straight barrel: the bore itself
+    cfg.mount.barrel_od_mm = [[500.0, 21.5], [819.0, 22.5]]  # widens toward the muzzle: apex behind
+    d = cb.barrel_apex_dir_g(cfg)
+    assert d[0] > 0.99 and d[2] < 0.0  # forward and slightly down
+    cfg.mount.barrel_od_mm = [[500.0, 24.0], [819.0, 20.5]]  # narrows: apex ahead, above the lens
+    assert cb.barrel_apex_dir_g(cfg)[2] > 0.0
+
+
+def test_barrel_boresight_refuses_an_image_without_a_barrel(tmp_path):
+    path = tmp_path / "blank.png"
+    cv2.imwrite(str(path), np.full((800, 1280), 150, np.uint8))
+    assert cb.main(["--calib-dir", str(tmp_path), "--barrel", str(path)]) == 1
+    assert not (tmp_path / "boresight.json").exists()

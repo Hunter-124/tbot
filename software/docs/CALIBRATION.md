@@ -269,7 +269,7 @@ harder, longer, with texture in the frame.
 
 **Purpose.** Where the bore points in the image. This is the single calibration that decides whether the shot goes
 where the solver thinks it goes. It solves the *rotation* error of the camera mount (`cam_rpy_deg`); the
-translation (camera 32 mm below the bore, 171 mm behind the muzzle) comes from the CAD and is handled as parallax.
+translation (camera 54 mm below the bore, ~279 mm behind the muzzle) comes from the CAD and is handled as parallax.
 
 **Setup.** Gun **unloaded**, clamped or sandbagged so it cannot move. Either:
 - a bore laser in the chamber/muzzle projecting onto a target at a measured range, or
@@ -294,7 +294,22 @@ tbot calib-boresight --range-m 25 --gui --plumb               # click both
 tbot calib-boresight --range-m 25 --pixel 318.5,214.0 --roll-deg 0.0   # or fix it explicitly
 ```
 
-**Writes.** `calib/boresight.json`: `rpy_deg`, `range_m`, `bore_pixel`, `width`, `height`, `created`.
+**No target? Use the barrel.** The barrel is in the top of the frame, and its two silhouette edges are generators of
+the (slightly tapered) barrel cone, so in the undistorted image they meet at the image of the cone's apex on the bore
+axis — the bore direction for a straight barrel; `mount.barrel_od_mm` supplies the taper correction. Take a full
+still with the gun pointed at something plain and lit, then:
+
+```bash
+rpicam-still -n -t 1500 --width 1280 --height 800 --shutter 20000 --gain 4 -e png -o barrel.png
+tbot calib-boresight --barrel barrel.png --barrel-debug barrel_fit.png
+```
+
+It solves pitch and yaw (roll stays as before). The fit is only as good as the lens model at the top of the frame:
+run it **after** `calib-intrinsics`. On the rig (2026-11-14, nominal lens) the raw-pixel and undistorted fits
+disagreed by ~1 deg in pitch for exactly that reason; yaw agreed within 0.1 deg. Confirm on a pattern board.
+
+**Writes.** `calib/boresight.json`: `rpy_deg`, `range_m`, `bore_pixel`, `width`, `height`, `created`
+(`--barrel`: `method: barrel`, `barrel_pixel`, `barrel_apex_dir_g` instead of `range_m`/`bore_pixel`).
 
 **Pass criteria.**
 - The correction is small: a few degrees. The tool refuses anything over 15° without `--force` — a large value
