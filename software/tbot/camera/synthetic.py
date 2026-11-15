@@ -2,9 +2,11 @@
 
 The scene is rendered from the scenario ground truth (tbot.sim.scenario) through the real camera model:
 sky gradient and clouds fixed in world azimuth/elevation, textured ground below the horizon, the barrel
-silhouette from tbot.optics.barrel_mask drawn dark, and the clay as a physically sized tilted disc with
-exposure motion blur. Mono uint8 by default (the OV9281 is monochrome), BGR when cfg.sim.render_color.
-Simulated timestamps start at 1_000_000_000 ns; everything is deterministic for a given seed.
+silhouette from tbot.optics.barrel_mask drawn dark, and every intact clay as a physically sized tilted
+disc with exposure motion blur. A clay reported hit (break_clay, called by the shot judge in closed loop)
+is drawn from then on as a few small fading fragments (no motion blur). Mono uint8 by default (the OV9281
+is monochrome), BGR when cfg.sim.render_color. Simulated timestamps start at 1_000_000_000 ns; scene and
+truth are deterministic for a given seed and given breaks.
 """
 
 from __future__ import annotations
@@ -168,6 +170,7 @@ class SyntheticSource(SourceBase):
         self.frame_t_ns = T0_NS
         self.clock.set(T0_NS)
         self.dropped = 0
+        self.scenario.reset_breaks()  # a fresh pass throws whole clays again
 
     def stop(self) -> None:
         pass
@@ -202,14 +205,29 @@ class SyntheticSource(SourceBase):
         t_s = (int(t_ns) - T0_NS) * 1e-9
         out = self.scenario.truth(t_s)
         out["clay_px"] = None
-        if out["visible"]:
-            px = self._clay_pixel(t_s)
-            if px is not None:
-                u, v = px
-                ui, vi = int(round(u)), int(round(v))
-                if 0 <= ui < self.width and 0 <= vi < self.height and self.mask[vi, ui] != 0:
-                    out["clay_px"] = (u, v)
+        for c in out["clays"]:
+            c["clay_px"] = self._visible_pixel(t_s, c["index"]) if c["visible"] else None
+            if c["index"] == out["clay_index"] and out["visible"]:
+                out["clay_px"] = c["clay_px"]
         return out
+
+    def break_clay(self, index: int, t_ns: int) -> bool:
+        """Closed-loop hook: clay `index` was hit by a shot arriving at t_ns (source clock).
+
+        From then on it is rendered as fading debris instead of a whole clay and reported not visible.
+        Returns False when there is nothing to break (see Scenario.break_clay).
+        """
+        return self.scenario.break_clay(int(index), (int(t_ns) - T0_NS) * 1e-9)
+
+    def _visible_pixel(self, t_s: float, i: int) -> tuple[float, float] | None:
+        px = self._clay_pixel(t_s, i)
+        if px is None:
+            return None
+        u, v = px
+        ui, vi = int(round(u)), int(round(v))
+        if 0 <= ui < self.width and 0 <= vi < self.height and self.mask[vi, ui] != 0:
+            return (u, v)
+        return None
 
     # ---------------------------------------------------------------- rendering
     def _project(self, dir_w: np.ndarray, R: np.ndarray) -> tuple[float, float] | None:
@@ -220,8 +238,8 @@ class SyntheticSource(SourceBase):
             return None
         return float(uv[0, 0]), float(uv[0, 1])
 
-    def _clay_pixel(self, t_s: float) -> tuple[float, float] | None:
-        d = self.scenario.clay_dir_w(t_s)
+    def _clay_pixel(self, t_s: float, i: int | None = None) -> tuple[float, float] | None:
+        d = self.scenario.clay_dir_w(t_s, i)
         if d is None:
             return None
         return self._project(d, self.scenario.R_wg(t_s))
@@ -256,8 +274,11 @@ class SyntheticSource(SourceBase):
         cfg = self.cfg
         R = self.scenario.R_wg(t_s)
         img = self._background(R)
-        if self.scenario.clay_visible(t_s):
-            self._draw_clay(img, t_s)
+        for c in self.scenario.clays:
+            if self.scenario.clay_visible(t_s, c.index):
+                self._draw_clay(img, t_s, c.index)
+        if self.scenario.debris:
+            self._draw_fragments(img, t_s, R)
         np.copyto(img, self._barrel_fill, where=self._barrel_where)
         sigma = float(cfg.sim.noise_sigma)
         if sigma > 0.0:
@@ -266,12 +287,46 @@ class SyntheticSource(SourceBase):
         np.clip(img, 0.0, 255.0, out=img)
         return img.astype(np.uint8)
 
-    def _draw_clay(self, img: np.ndarray, t_s: float) -> None:
+    def _draw_fragments(self, img: np.ndarray, t_s: float, R: np.ndarray) -> None:
+        """Debris of broken clays: small fading discs, area-weighted (sub-pixel pieces still dim)."""
+        pos, size, alpha = self.scenario.fragments_w(t_s)
+        s = _SUPERSAMPLE
+        for p, sz, a in zip(pos, size, alpha):
+            rng_m = float(np.linalg.norm(p))
+            if rng_m < 1e-3 or a <= 0.0:
+                continue
+            px = self._project(p / rng_m, R)
+            if px is None:
+                continue
+            ifov = float(np.asarray(self.cam.ifov(np.array([[px[0], px[1]]], dtype=np.float64))).ravel()[0])
+            if not math.isfinite(ifov) or ifov <= 0.0:
+                continue
+            r_px = math.atan2(0.5 * float(sz), rng_m) / ifov
+            x0 = max(int(math.floor(px[0] - r_px)) - 1, 0)
+            x1 = min(int(math.ceil(px[0] + r_px)) + 2, self.width)
+            y0 = max(int(math.floor(px[1] - r_px)) - 1, 0)
+            y1 = min(int(math.ceil(px[1] + r_px)) + 2, self.height)
+            if x1 <= x0 or y1 <= y0 or (x1 - x0) * (y1 - y0) > 40000:
+                continue
+            pw, ph = x1 - x0, y1 - y0
+            us = x0 - 0.5 + (np.arange(pw * s, dtype=np.float64) + 0.5) / s
+            vs = y0 - 0.5 + (np.arange(ph * s, dtype=np.float64) + 0.5) / s
+            inside = ((us[None, :] - px[0]) ** 2 + (vs[:, None] - px[1]) ** 2) <= max(r_px, 0.5 / s) ** 2
+            cov = inside.astype(np.float64).reshape(ph, s, pw, s).mean(axis=(1, 3)) * float(a)
+            patch = img[y0:y1, x0:x1]
+            if img.ndim == 3:
+                c = cov[:, :, None]
+                patch *= np.float32(1.0) - c.astype(np.float32)
+                patch += (c * self._clay_bgr).astype(np.float32)
+            else:
+                patch += (cov * float(self.cfg.sim.clay_contrast)).astype(np.float32)
+
+    def _draw_clay(self, img: np.ndarray, t_s: float, i: int = 0) -> None:
         sc = self.scenario
         exp = self._exposure_s
-        p_first = self._clay_pixel(t_s - 0.5 * exp)
-        p_last = self._clay_pixel(t_s + 0.5 * exp)
-        p_mid = self._clay_pixel(t_s)
+        p_first = self._clay_pixel(t_s - 0.5 * exp, i)
+        p_last = self._clay_pixel(t_s + 0.5 * exp, i)
+        p_mid = self._clay_pixel(t_s, i)
         if p_mid is None:
             return
         motion = 0.0
@@ -284,10 +339,10 @@ class SyntheticSource(SourceBase):
         centres: list[tuple[float, float, float]] = []
         for dt in offs:
             tk = t_s + float(dt)
-            px = self._clay_pixel(tk)
+            px = self._clay_pixel(tk, i)
             if px is None:
                 continue
-            rng_m = sc.clay_range_m(tk)
+            rng_m = sc.clay_range_m(tk, i)
             ifov = float(np.asarray(self.cam.ifov(np.array([[px[0], px[1]]], dtype=np.float64))).ravel()[0])
             if not math.isfinite(ifov) or ifov <= 0.0:
                 continue
@@ -320,11 +375,11 @@ class SyntheticSource(SourceBase):
         used = 0
         for dt in offs:
             tk = t_s + float(dt)
-            if not sc.clay_visible(tk):
+            if not sc.clay_visible(tk, i):
                 continue
-            P = sc.clay_pos_w(tk)
+            P = sc.clay_pos_w(tk, i)
             rays_w = rays_g @ sc.R_wg(tk).T
-            cov += _disc_coverage(rays_w, P, sc.clay_axis_w, 0.5 * sc.clay_diameter_m, sc.clay_thickness_m)
+            cov += _disc_coverage(rays_w, P, sc.clays[i].axis_w, 0.5 * sc.clay_diameter_m, sc.clay_thickness_m)
             used += 1
         if used == 0:
             return

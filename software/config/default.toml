@@ -199,6 +199,9 @@ render_color = false
 gyro_noise_dps = 0.05
 swing_lag_s = 0.12            # simulated shooter: pursuit lag of the swing behind the clay
 swing_noise_deg = 0.15
+debris_fragments = 6          # fragments a broken clay turns into (rendered, judged as debris_shots)
+debris_spread_mps = 3.0       # random velocity spread of the fragments around the clay's [INFERENCE]
+debris_life_s = 0.7           # mean visible lifetime of a fragment; it fades out over it [INFERENCE]
 
 [calrig]                      # CalRig B yaw table (docs/CALRIG.md, firmware contract docs/CALRIG_PROTOCOL.md)
 port = "/dev/ttyACM0"         # Arduino Uno USB serial; opening it resets the board (zero is lost, see CALRIG.md)
