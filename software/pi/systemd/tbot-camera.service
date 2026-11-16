@@ -1,0 +1,19 @@
+# TBOT camera mode (tbotctl camera on|off): the arming button saves full-res stills to snaps/ for calibration.
+# Never drives the trigger actuator. Conflicts with the pipeline service, which needs the camera too.
+[Unit]
+Description=TBOT camera mode (arming button = take a picture)
+After=multi-user.target
+Conflicts=tbot-run.service
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/TBOT/software
+ExecStart=/home/pi/tbot-venv/bin/tbot snap --config config/local.toml --stream
+Restart=on-failure
+RestartSec=3
+KillSignal=SIGTERM
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target

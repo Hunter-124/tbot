@@ -101,6 +101,7 @@ def run(args) -> int:
         print(f"unknown test(s): {sorted(unknown)}; choose from {', '.join(TESTS)}")
         return 2
     cfg, calib = load_from_args(args)
+    cfg.camera.auto_exposure = False  # timing is read from pixel levels: exposure must not move
     cfg.record.mode = "off"
     cfg.fire.live = bool(args.live)
     if args.sim:

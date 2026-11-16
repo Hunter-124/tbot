@@ -160,13 +160,19 @@ class PicamSource(SourceBase):
         self.sensor_mode = select_sensor_mode(self._picam2.sensor_modes, self.width, self.height)
 
         frame_us = int(round(1e6 / max(self.nominal_fps, 1e-3)))
+        # libcamera's AE stays off: tbot's controller (camera/autoexposure.py) caps the exposure time for motion
+        # blur, which libcamera's would not. auto_exposure=false means the fixed exposure_us / analogue_gain.
+        self._ae = None
+        if cam.auto_exposure:
+            from tbot.camera.autoexposure import AeSettings, AutoExposure  # noqa: PLC0415
+            self._ae = AutoExposure(AeSettings.from_camera(cam), self._exposure_us, self._gain)
+            self._exposure_us, self._gain = self._ae.exposure_us, self._ae.gain
         controls: dict[str, Any] = {
             "FrameDurationLimits": (frame_us, frame_us),
-            "AeEnable": bool(cam.auto_exposure),
+            "AeEnable": False,
+            "ExposureTime": int(round(self._exposure_us)),
+            "AnalogueGain": self._gain,
         }
-        if not cam.auto_exposure:
-            controls["ExposureTime"] = int(round(self._exposure_us))
-            controls["AnalogueGain"] = self._gain
         config = self._picam2.create_video_configuration(
             main={"size": (self.width, self.height), "format": "YUV420"},
             raw={"size": _mode_size(self.sensor_mode)},
@@ -265,7 +271,18 @@ class PicamSource(SourceBase):
         """Change the manual exposure while streaming (`tbot hitl` display test). Frames carry the applied
         ExposureTime in their metadata, so the switch-over frames report their real exposure."""
         self._exposure_us = float(exposure_us)
+        self._ae = None  # a manual exposure request ends auto-exposure for this source
         self._picam2.set_controls({"AeEnable": False, "ExposureTime": int(round(self._exposure_us))})
+
+    def _auto_expose(self, frame: Frame) -> None:
+        ae = self._ae
+        if ae is None:
+            return
+        new = ae.update(frame.image, frame.exposure_us, frame.gain)
+        if new is not None:
+            self._exposure_us, self._gain = new
+            self._picam2.set_controls({"AeEnable": False, "ExposureTime": int(round(new[0])),
+                                       "AnalogueGain": float(new[1])})
 
     # ----------------------------------------------------------------------------- capture
     def _capture_loop(self) -> None:
@@ -286,7 +303,9 @@ class PicamSource(SourceBase):
                 finally:
                     request.release()
                 if not self._stop.is_set():
-                    self._publish(self._make_frame(array, metadata, t_capture_ns))
+                    frame = self._make_frame(array, metadata, t_capture_ns)
+                    self._publish(frame)
+                    self._auto_expose(frame)
         except BaseException as exc:  # noqa: BLE001 - surfaced to the consumer in read()
             if not self._stop.is_set():
                 with self._cond:

@@ -475,6 +475,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     cfg, calib = load_from_args(args)
+    cfg.camera.auto_exposure = False  # timing is read from pixel levels: exposure must not move
     if args.trials < 1:
         parser.error("--trials must be >= 1")
     if args.max_wait_ms < args.min_wait_ms:

@@ -9,7 +9,15 @@ height = 400
 fps = 120.0                   # Pi 3B processing budget; sensor does more at 640x400
 exposure_us = 500.0           # short exposure = no motion blur on a 20 m/s clay; daylight at F2.2
 analogue_gain = 1.0
-auto_exposure = false
+auto_exposure = true          # tbot's own AE (camera/autoexposure.py), not libcamera's: exposure capped for blur,
+                              # then gain. exposure_us / analogue_gain are the starting point (or the fixed values when false)
+ae_target_dn = 110.0          # median frame brightness goal
+ae_highlight_dn = 235.0       # 99.5th percentile (the sky) is kept below this: a clipped sky hides the clay
+ae_min_exposure_us = 20.0
+ae_max_exposure_us = 500.0    # motion-blur cap: 12 mm lens, 20 m/s crossing at 20 m = 1 px at 640x400 per 500 us
+ae_min_gain = 1.0
+ae_max_gain = 8.0             # OV9281 analogue gain tops out near 15.5; above ~8 the noise costs detections [INFERENCE]
+ae_every = 3                  # frames between corrections (the sensor applies a change 2-3 frames later)
 rotate_180 = false            # layout.md "As-built camera": no board rotation, J1 at the bottom edge. Confirmed
                               # on the rig 2026-11-14: the barrel (above the lens) appears at the TOP of the raw image
 emulate_mono = "none"         # cv/video sources only: none | luma | red (red = mono sensor behind an orange long-pass)

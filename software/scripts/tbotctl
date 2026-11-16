@@ -8,14 +8,17 @@
 #   tbotctl log            follow the log
 #   tbotctl boot on|off    start (always in dry run) at power-up, or not
 #   tbotctl preflight      go / no-go checks (tbot doctor + hardware check when the camera is free)
+#   tbotctl camera on|off  CAMERA MODE: the arming button saves stills to snaps/ (no trigger), also at power-up
 set -euo pipefail
 unit=tbot-run.service
+cam_unit=tbot-camera.service
 here="$(cd -- "$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")/.." && pwd)"
 tbot="${TBOT_BIN:-$HOME/tbot-venv/bin/tbot}"
 cmd=${1:-status}
 case "$cmd" in
     install)
         sudo install -m 644 "$here/pi/systemd/$unit" /etc/systemd/system/$unit
+        sudo install -m 644 "$here/pi/systemd/$cam_unit" /etc/systemd/system/$cam_unit
         sudo systemctl daemon-reload
         chmod +x "$here/scripts/tbot-run.sh" "$here/scripts/tbotctl"
         sudo ln -sf "$here/scripts/tbotctl" /usr/local/bin/tbotctl
@@ -57,6 +60,23 @@ case "$cmd" in
             on) sudo systemctl enable $unit; echo "starts at power-up, always in DRY RUN" ;;
             off) sudo systemctl disable $unit ;;
             *) echo "usage: tbotctl boot on|off" >&2; exit 2 ;;
+        esac
+        ;;
+    camera)
+        case ${2:-} in
+            on)
+                [[ -f /etc/systemd/system/$cam_unit ]] || "$0" install
+                sudo systemctl disable --now $unit 2>/dev/null || true
+                pkill -f "[t]bot-venv/bin/tbot (focus|calib-|snap)" 2>/dev/null || true
+                sleep 2
+                sudo systemctl enable --now $cam_unit
+                sleep 6
+                echo "CAMERA MODE on, also at every power-up: press the arming button to save a still to $here/snaps/"
+                echo "(the trigger servo is not used in this mode; tbotctl camera off to leave it)"
+                journalctl -u $cam_unit -n 3 --no-pager -o cat
+                ;;
+            off) sudo systemctl disable --now $cam_unit; echo "camera mode off (camera free)" ;;
+            *) echo "usage: tbotctl camera on|off" >&2; exit 2 ;;
         esac
         ;;
     preflight)
