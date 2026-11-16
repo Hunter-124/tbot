@@ -9,6 +9,12 @@ that makes the camera model agree with the barrel:
 Roll is unobservable from one point; give `--pixel2` on a plumb line through the target (a hanging
 string) and the solver adds the constraint that the plane through both rays stays vertical.
 
+`--laser` finds the bore-laser dot by itself (headless: no display, no pixel to read off). It averages
+`--laser-frames` frames, masks the barrel, and with `--laser-turns N` asks you to turn the laser in the bore
+N times and uses the centre of the circle the dot traces (a bore laser is never exactly on the bore axis).
+`--laser-bg` first takes a frame with the beam blocked, so lamps and windows cancel. `--check` solves nothing:
+it reports how far the dot is from where the stored calibration puts the bore line (use it at a second range).
+
 `--barrel IMAGE` needs no target at all: the barrel is in the camera's view, and its two silhouette edges
 are generators of the (tapered) barrel cone, so they meet in the image at the projection of the cone's apex
 on the bore axis - the bore direction itself for a straight barrel. The tool fits both edges in the
@@ -346,6 +352,18 @@ def main(argv: list[str] | None = None) -> int:
                    help="solve pitch/yaw from the barrel silhouette in this still (no target needed; any "
                         "resolution with the operating field of view, e.g. a full 1280x800 rpicam-still)")
     g.add_argument("--barrel-debug", default=None, metavar="PNG", help="with --barrel: save the fitted edges")
+    g.add_argument("--laser", action="store_true",
+                   help="find the bore-laser dot automatically (live camera, or --image); headless")
+    g.add_argument("--laser-frames", type=int, default=20, metavar="N", help="frames averaged per measurement")
+    g.add_argument("--laser-turns", type=int, default=1, metavar="N",
+                   help="measure N times, turning the laser in the bore between them (removes its wobble; 4 is good)")
+    g.add_argument("--laser-bg", action="store_true",
+                   help="first take a background with the beam blocked (lamps, windows and glare cancel)")
+    g.add_argument("--laser-bg-image", default=None, metavar="PATH", help="with --image: the beam-blocked still")
+    g.add_argument("--laser-debug", default=None, metavar="PNG",
+                   help="annotated picture of the result (default <calib-dir>/boresight_laser.png)")
+    g.add_argument("--check", action="store_true",
+                   help="with --laser/--pixel: do not write; report the error of the stored calibration at this range")
     g.add_argument("--gui", action="store_true", help="click the point(s) in a window (needs a display)")
     g.add_argument("--plumb", action="store_true",
                    help="with --gui: also click a second point on a plumb line (gives roll)")
@@ -378,13 +396,27 @@ def main(argv: list[str] | None = None) -> int:
         if rc:
             return rc
 
-    want_solve = bool(args.pixel or args.gui or args.image)
+    want_solve = bool(args.pixel or args.gui or args.image or args.laser)
     if want_solve:
         image: np.ndarray | None = None
-        if not args.pixel and not args.gui:
-            print("tbot calib-boresight: need --pixel u,v (or --gui to click it)", file=sys.stderr)
+        laser_info: dict | None = None
+        if not args.pixel and not args.gui and not args.laser:
+            print("tbot calib-boresight: need --pixel u,v (or --laser to find the dot, or --gui to click it)",
+                  file=sys.stderr)
             return 2
-        if args.image:
+        if args.laser and args.range_m is None:
+            print("tbot calib-boresight: --laser needs --range-m (muzzle to the target, metres)", file=sys.stderr)
+            return 2
+        if args.laser and not args.pixel:
+            try:
+                image, laser_info = _laser_measure(args, cfg, calib)
+            except KeyboardInterrupt:
+                print("aborted", file=sys.stderr)
+                return 1
+            except (RuntimeError, ValueError, OSError) as e:
+                print(f"tbot calib-boresight: --laser: {e}", file=sys.stderr)
+                return 1
+        elif args.image:
             image = cv2.imread(str(args.image), cv2.IMREAD_UNCHANGED)
             if image is None:
                 print(f"tbot calib-boresight: cannot read {args.image}", file=sys.stderr)
@@ -410,6 +442,9 @@ def main(argv: list[str] | None = None) -> int:
         try:
             if args.pixel:
                 bore_px = parse_pixel(args.pixel)
+                plumb_px = parse_pixel(args.pixel2) if args.pixel2 else None
+            elif laser_info is not None:
+                bore_px = (float(laser_info["pixel"][0]), float(laser_info["pixel"][1]))
                 plumb_px = parse_pixel(args.pixel2) if args.pixel2 else None
             else:  # --gui, with a frame from --image or the live source
                 bore_px = _click_pixel(image, "click the BORE target")
@@ -437,6 +472,8 @@ def main(argv: list[str] | None = None) -> int:
                 return 2
 
         cam = CameraModel.from_calibration(calib.intrinsics, cfg, width, height)
+        if args.check:
+            return _check(cfg, calib, cam, bore_px, float(args.range_m), image, laser_info, args)
         roll_rad = math.radians(args.roll_deg) if args.roll_deg is not None else _existing_roll_rad(cfg, calib)
         try:
             rpy, info = solve_mount_rpy(cam, cfg, bore_px, float(args.range_m), plumb_px, roll_rad)
@@ -470,7 +507,23 @@ def main(argv: list[str] | None = None) -> int:
             "bore_pixel": [float(bore_px[0]), float(bore_px[1])],
             "width": width,
             "height": height,
+            "method": "laser" if laser_info is not None else "pixel",
         })
+        if laser_info is not None:
+            ifov_deg = math.degrees(float(cam.ifov(np.array(bore_px, dtype=np.float64))))
+            laser_info["wobble_deg"] = laser_info["wobble_px"] * ifov_deg
+            patch["laser"] = laser_info
+            prev = _stored_rpy_deg(calib)
+            if prev is not None:
+                print(f"change : pitch {rpy_deg[1] - prev[1]:+.3f}  yaw {rpy_deg[2] - prev[2]:+.3f} deg "
+                      "from the stored calibration")
+            if laser_info["turns"] > 1:
+                print(f"laser  : dot circle radius {laser_info['wobble_px']:.2f} px = "
+                      f"{laser_info['wobble_deg']:.3f} deg (the laser's own error, removed by the turns)")
+            else:
+                print("laser  : one orientation only - a bore laser is typically 0.1-0.3 deg off the bore axis; "
+                      "rerun with --laser-turns 4 to remove that")
+            _laser_debug(args, calib, image, laser_info, bore_px, cfg, cam)
 
     if not patch:
         print("tbot calib-boresight: nothing to do — give --pixel/--gui/--image (mount rotation) "
@@ -478,9 +531,171 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     patch["created"] = now_iso()
+    if "rpy_deg" in patch and out.exists():
+        prev_path = out.with_name(out.stem + ".prev" + out.suffix)
+        prev_path.write_bytes(out.read_bytes())  # one step of undo: copy it back to restore
+        print(f"backup : {prev_path}")
     update_json(out, patch)
     print(f"wrote  : {out}")
     return 0
+
+
+# --------------------------------------------------------------------------------- laser method
+LASER_WARMUP_FRAMES = 8
+CHECK_PASS_DEG = 0.15  # stored calibration vs a fresh laser dot: within this, leave it alone
+
+
+def _stored_rpy_deg(calib: Calibration) -> list[float] | None:
+    if calib.boresight and calib.boresight.get("rpy_deg") is not None:
+        return [float(v) for v in calib.boresight["rpy_deg"]]
+    return None
+
+
+def _grab(source, n: int) -> list[np.ndarray]:
+    frames: list[np.ndarray] = []
+    misses = 0
+    while len(frames) < n and misses < 30:
+        frame = source.read(timeout_s=1.0)
+        if frame is None:
+            misses += 1
+            continue
+        frames.append(np.array(frame.image, copy=True))
+    if not frames:
+        raise RuntimeError("the camera delivered no frame (is tbot run / focus / the range service using it?)")
+    return frames
+
+
+def _ask(prompt: str) -> None:
+    try:
+        input(prompt)
+    except EOFError:
+        raise RuntimeError("this step needs a terminal (run it in an interactive SSH session)") from None
+
+
+def _laser_measure(args, cfg: Config, calib: Calibration) -> tuple[np.ndarray, dict]:
+    """Dot position from the live camera (or --image). Returns (a frame, info with 'pixel')."""
+    from tbot.tools import laser_dot
+
+    turns = max(1, int(args.laser_turns))
+    n = max(1, int(args.laser_frames))
+    background = None
+    source = None
+    still = None
+    if args.image:
+        still = cv2.imread(str(args.image), cv2.IMREAD_UNCHANGED)
+        if still is None:
+            raise RuntimeError(f"cannot read {args.image}")
+        if args.laser_bg_image:
+            background = cv2.imread(str(args.laser_bg_image), cv2.IMREAD_UNCHANGED)
+            if background is None:
+                raise RuntimeError(f"cannot read {args.laser_bg_image}")
+        turns = 1
+    else:
+        from tbot.camera import open_source
+
+        source = open_source(cfg.camera.source, cfg, calib)
+        source.start()
+    try:
+        if source is not None:
+            _grab(source, LASER_WARMUP_FRAMES)
+            first = _grab(source, 1)[0]
+        else:
+            first = still
+        h, w = int(first.shape[0]), int(first.shape[1])
+        cam = CameraModel.from_calibration(calib.intrinsics, cfg, w, h)
+        mask = barrel_mask(cam, MountModel.from_config(cfg, calib.boresight), cfg)
+        mask = cv2.erode(mask, np.ones((3, 3), np.uint8), iterations=max(2, w // 80))  # widen the barrel
+
+        if args.laser_bg and source is not None:
+            _ask("BLOCK the laser beam (hand in front of the muzzle) and press Enter ... ")
+            _grab(source, 3)
+            background = np.median(np.stack(_grab(source, min(n, 10))).astype(np.float32), axis=0)
+            _ask("UNBLOCK the beam and press Enter ... ")
+            _grab(source, 3)
+
+        dots: list[tuple[float, float]] = []
+        measures = []
+        image = first
+        for k in range(turns):
+            if k and source is not None:
+                _ask(f"turn the laser about 1/{turns} of a turn in the bore, let the gun settle, press Enter "
+                     f"({k + 1}/{turns}) ... ")
+                _grab(source, 3)
+            frames = _grab(source, n) if source is not None else [still]
+            m = laser_dot.measure_dot(frames, background, mask)
+            image = frames[-1]
+            measures.append(m)
+            dots.append((m.u, m.v))
+            print(f"dot {k + 1}/{turns}: ({m.u:.2f}, {m.v:.2f})  {m.peak_dn:.0f} DN above background, "
+                  f"{m.diameter_px:.1f} px wide, scatter {m.scatter_px:.2f} px over {m.n_found} frames")
+            for wmsg in m.warnings:
+                print(f"  WARNING: {wmsg}")
+    finally:
+        if source is not None:
+            source.stop()
+
+    centre, radius = laser_dot.circle_centre(np.array(dots))
+    return image, {
+        "pixel": [float(centre[0]), float(centre[1])],
+        "dots": [[float(u), float(v)] for u, v in dots],
+        "turns": turns,
+        "frames": n,
+        "wobble_px": float(radius),
+        "scatter_px": float(max(m.scatter_px for m in measures)),
+        "background": background is not None,
+        "warnings": sorted({wmsg for m in measures for wmsg in m.warnings}),
+    }
+
+
+def _laser_debug(args, calib: Calibration, image, laser_info: dict | None, bore_px, cfg: Config,
+                 cam: CameraModel) -> None:
+    if image is None:
+        return
+    from tbot.tools import laser_dot
+
+    path = Path(args.laser_debug) if args.laser_debug else calib.path("boresight_laser.png")
+    predicted = None
+    prev = _stored_rpy_deg(calib)
+    if prev is not None and args.range_m:
+        predicted = mount_for_rpy(cfg, np.radians(prev)).bore_pixel(cam, float(args.range_m))
+    dots = [tuple(d) for d in laser_info["dots"]] if laser_info else [tuple(bore_px)]
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        cv2.imwrite(str(path), laser_dot.annotate(image, dots, tuple(bore_px), predicted))
+        print(f"debug  : {path}")
+    except (OSError, cv2.error) as e:  # the picture is a convenience, never a reason to lose the solve
+        print(f"debug  : not written ({e})")
+
+
+def _check(cfg: Config, calib: Calibration, cam: CameraModel, bore_px, range_m: float, image,
+           laser_info: dict | None, args) -> int:
+    """--check: how far is the observed bore point from where the stored calibration puts it? Writes nothing."""
+    prev = _stored_rpy_deg(calib)
+    if prev is None:
+        print("tbot calib-boresight: --check: no stored calibration (calib/boresight.json) to check",
+              file=sys.stderr)
+        return 2
+    mount = mount_for_rpy(cfg, np.radians(prev))
+    predicted = mount.bore_pixel(cam, range_m)
+    d_obs = _unit(mount.cam_to_gun(cam.pixel_to_ray(np.array(bore_px, dtype=np.float64))))
+    d_exp = bore_target_dir(mount, range_m)
+    err = math.atan2(float(np.linalg.norm(np.cross(d_obs, d_exp))), float(np.dot(d_obs, d_exp)))
+    # +left / +up as seen from behind the gun (gun frame +Y left, +Z up)
+    left_deg = math.degrees(math.atan2(float(d_obs[1]), float(d_obs[0]))
+                            - math.atan2(float(d_exp[1]), float(d_exp[0])))
+    up_deg = math.degrees(math.asin(float(d_obs[2])) - math.asin(float(d_exp[2])))
+    print(f"stored : rpy_deg roll {prev[0]:+.4f}  pitch {prev[1]:+.4f}  yaw {prev[2]:+.4f} puts the bore line at "
+          f"{range_m:g} m on ({predicted[0]:.2f}, {predicted[1]:.2f})")
+    print(f"seen   : ({bore_px[0]:.2f}, {bore_px[1]:.2f})  ->  the bore is {abs(left_deg):.3f} deg "
+          f"{'left' if left_deg >= 0 else 'right'} and {abs(up_deg):.3f} deg {'above' if up_deg >= 0 else 'below'} "
+          "where the calibration says")
+    print(f"error  : {math.degrees(err):.3f} deg = {err * range_m * 100.0:.1f} cm at {range_m:g} m "
+          f"({err * 20.0 * 100.0:.1f} cm at 20 m; the pattern is ~76 cm wide there)")
+    _laser_debug(args, calib, image, laser_info, bore_px, cfg, cam)
+    ok = math.degrees(err) <= CHECK_PASS_DEG
+    print(f"{'PASS' if ok else 'FAIL'}   : limit {CHECK_PASS_DEG:g} deg"
+          + ("" if ok else " - rerun without --check to recalibrate"))
+    return 0 if ok else 1
 
 
 def _barrel_solve(args, cfg: Config, calib: Calibration, patch: dict) -> int:
