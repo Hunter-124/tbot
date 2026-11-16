@@ -133,7 +133,7 @@ def main(argv: list[str] | None = None) -> int:
     cfg, calib = load_from_args(args)
     if args.full_res:
         cfg.camera.width, cfg.camera.height = 1280, 800
-        cfg.camera.fps = min(float(cfg.camera.fps), 30.0)
+        cfg.camera.fps = min(float(cfg.camera.fps), 15.0)  # stills: 15 fps is plenty and keeps the Pi cool for hours
     if cfg.camera.auto_exposure:
         cfg.camera.ae_max_exposure_us = float(args.max_exposure_us)
     out = Path(args.out)
