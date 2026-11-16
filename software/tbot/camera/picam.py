@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import sys
 import threading
+from concurrent import futures
 import time
 from typing import Any, Sequence
 
@@ -147,6 +148,7 @@ class PicamSource(SourceBase):
         self._seq = 0
         self._clock_warned = False
         self._camera_closed = False
+        self.start_probe = None  # linkcheck.LinkDiagnosis of the last start (Pi only), see _probe_link
 
         try:
             from picamera2 import Picamera2  # noqa: PLC0415 - Pi-only, imported lazily by contract
@@ -186,21 +188,75 @@ class PicamSource(SourceBase):
         if self._thread is not None:
             return
         self._stop.clear()
+        self.start_probe = None
         self._picam2.start()
         self._thread = threading.Thread(target=self._capture_loop, name="picam-capture", daemon=True)
         self._thread.start()
+        threading.Thread(target=self._probe_link, name="picam-probe", daemon=True).start()
+
+    PROBE_WINDOW_S = 0.7
+
+    def _probe_link(self) -> None:
+        """Measure the CSI link in the first PROBE_WINDOW_S of the stream (sensor register + unicam interrupt
+        count). It has to be now: about 1 s after a start without frames libcamera's frontend timeout stops
+        the sensor itself, after which neither measurement says anything. Result: self.start_probe."""
+        from tbot.camera import linkcheck  # noqa: PLC0415
+
+        before = linkcheck.unicam_interrupts()
+        if before is None:
+            return  # not a Pi with unicam
+        seq0 = self._seq
+        time.sleep(0.1)
+        streaming = linkcheck.sensor_streaming()
+        time.sleep(max(0.0, self.PROBE_WINDOW_S - 0.1))
+        after = linkcheck.unicam_interrupts()
+        delta = None if after is None else max(0, after - before)
+        self.start_probe = linkcheck.verdict(streaming, delta, self._seq - seq0, self.PROBE_WINDOW_S)
+
+    STOP_TIMEOUT_S = 3.0
+    CAPTURE_WAIT_S = 1.0
+
+    def _cancel_jobs(self) -> None:
+        """Drop picamera2's pending jobs. picamera2 runs stop() as a job queued BEHIND any pending
+        capture_request(); on a stalled CSI link that request never completes, so without this stop()
+        deadlocks and the camera stays acquired (a reopen then fails with "Camera in Running state").
+        cancel_all_and_flush() is picamera2's API for exactly this ("the camera cable has become dislodged")."""
+        cancel = getattr(self._picam2, "cancel_all_and_flush", None)
+        if cancel is not None:
+            try:
+                cancel()
+            except Exception as exc:  # noqa: BLE001
+                print(f"tbot: camera job cancel failed: {exc}", file=sys.stderr)
 
     def stop(self) -> None:
+        """Stop and close the camera. Pending capture jobs are cancelled first (see _cancel_jobs), and the
+        stop/close still runs on a daemon helper thread that is abandoned after STOP_TIMEOUT_S, so a dead
+        camera can never hang the calling tool."""
         self._stop.set()
         thread, self._thread = self._thread, None
-        if thread is not None:
-            thread.join(timeout=2.0)
         if not self._camera_closed:
             self._camera_closed = True
-            try:
-                self._picam2.stop()
-            finally:
-                self._picam2.close()
+            done = threading.Event()
+
+            def _close() -> None:
+                self._cancel_jobs()
+                try:
+                    self._picam2.stop()
+                except Exception as exc:  # noqa: BLE001 - a broken camera may fail to stop cleanly
+                    print(f"tbot: camera stop failed: {exc}", file=sys.stderr)
+                finally:
+                    try:
+                        self._picam2.close()
+                    except Exception as exc:  # noqa: BLE001
+                        print(f"tbot: camera close failed: {exc}", file=sys.stderr)
+                    done.set()
+
+            threading.Thread(target=_close, name="picam-close", daemon=True).start()
+            if not done.wait(self.STOP_TIMEOUT_S):
+                print(f"tbot: camera did not stop within {self.STOP_TIMEOUT_S:g} s (stalled CSI link); "
+                      "abandoning it", file=sys.stderr)
+        if thread is not None:
+            thread.join(timeout=1.0)
         with self._cond:
             self._slot = None
             self._cond.notify_all()
@@ -215,7 +271,14 @@ class PicamSource(SourceBase):
     def _capture_loop(self) -> None:
         try:
             while not self._stop.is_set():
-                request = self._picam2.capture_request()
+                try:
+                    # bounded wait: an unbounded one leaves a job that never completes on a stalled link
+                    request = self._picam2.capture_request(wait=self.CAPTURE_WAIT_S)
+                except (TimeoutError, futures.TimeoutError, futures.CancelledError):
+                    if self._stop.is_set():
+                        break
+                    self._cancel_jobs()  # do not pile up one stuck job per second
+                    continue
                 t_capture_ns = time.monotonic_ns()
                 try:
                     array = request.make_array("main")

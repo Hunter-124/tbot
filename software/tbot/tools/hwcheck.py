@@ -489,6 +489,11 @@ def check_camera(cfg: Config, calib: Calibration | None = None, env: CheckEnv | 
         elapsed = time.monotonic() - t0
         dropped = int(getattr(source, "dropped", 0))
         mode = getattr(source, "sensor_mode", None)
+        link = None
+        if frames == 0 and env.camera_factory is None:  # real camera, stream still requested: which layer?
+            from tbot.camera import linkcheck  # noqa: PLC0415
+
+            link = linkcheck.diagnose(window_s=1.0, source=source)
     except Exception as exc:  # noqa: BLE001
         return CheckResult("camera", FAIL, f"capture failed: {_first_line(exc)}",
                            "rpicam-hello --list-cameras; dmesg | grep -i ov9281", {"cameras": entries})
@@ -511,6 +516,10 @@ def check_camera(cfg: Config, calib: Calibration | None = None, env: CheckEnv | 
                f"{frames} frames in {elapsed:.2f} s = {fps:.1f} fps (cfg {cfg.camera.fps:g}) | "
                f"dropped {dropped} | mean level {mean_level:.1f}")
     if frames == 0:
+        if link is not None:
+            data["link"] = link.as_dict()
+            return CheckResult("camera", FAIL, f"no frames in {elapsed:.2f} s - {link.layer}: {link.message}",
+                               "link: reseat the CSI ribbon at both ends; sensor: sudo reboot", data)
         return CheckResult("camera", FAIL, f"no frames in {elapsed:.2f} s",
                            "rpicam-hello -t 2000; check the ribbon and dtoverlay=ov9281", data)
     if not is_ov9281:

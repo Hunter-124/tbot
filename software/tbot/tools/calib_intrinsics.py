@@ -617,15 +617,19 @@ def _save_view(save_dir: Path, index: int, image: np.ndarray) -> None:
 
 def _corners_live(cfg: Config, calib: Calibration, board, views: int, gui: bool,
                   timeout_s: float, sel_kwargs: dict, save_dir: Path | None, server=None) -> Views:
-    from tbot.camera import open_source
+    import time
 
-    source = open_source(cfg.camera.source, cfg, calib)
+    from tbot.camera import linkcheck, open_live_source
+
+    source = open_live_source(cfg.camera.source, cfg, calib)  # a CSI stall reopens the camera
     source.start()
     size = (int(source.width), int(source.height))
     sel = ViewSelector(board, size, **sel_kwargs)
     layout_known = getattr(board, "locked", True) is not None
+    down_since: float | None = None
+    next_diag = 0.0
     window = "tbot calib-intrinsics"
-    t0 = source.clock.now_ns()
+    t0 = time.monotonic_ns()
     last_report = ""
     try:
         if gui:
@@ -633,9 +637,23 @@ def _corners_live(cfg: Config, calib: Calibration, board, views: int, gui: bool,
         while True:
             frame = source.read(timeout_s=1.0)
             if frame is None:
-                if timeout_s > 0 and (source.clock.now_ns() - t0) > timeout_s * 1e9:
+                now = time.monotonic()
+                down_since = now if down_since is None else down_since
+                if (getattr(source, "endless", False) and now - down_since >= 5.0 and now >= next_diag
+                        and getattr(source, "streaming", True)):
+                    diag = linkcheck.diagnose(window_s=1.5, source=source)
+                    print(f"  camera down for {now - down_since:.0f} s, still retrying - {diag.layer}: "
+                          f"{diag.message}", flush=True)
+                    if server is not None:
+                        server.publish(linkcheck.down_card(size[0], size[1], f"CAMERA DOWN ({diag.layer})",
+                                                           diag.message), {"camera": "down", **diag.as_dict()})
+                    next_diag = time.monotonic() + 10.0
+                if timeout_s > 0 and (time.monotonic_ns() - t0) > timeout_s * 1e9:
                     break
                 continue
+            if down_since is not None:
+                print(f"  camera back after {time.monotonic() - down_since:.1f} s", flush=True)
+                down_since, next_diag = None, 0.0
             corners, reason = sel.offer(frame.image)
             if not layout_known and getattr(board, "locked", True) is not None:
                 layout_known = True
@@ -661,7 +679,7 @@ def _corners_live(cfg: Config, calib: Calibration, board, views: int, gui: bool,
                 break
             if len(sel.accepted) >= 2 * views:
                 break
-            if timeout_s > 0 and (source.clock.now_ns() - t0) > timeout_s * 1e9:
+            if timeout_s > 0 and (time.monotonic_ns() - t0) > timeout_s * 1e9:
                 print("  timeout reached")
                 break
     except KeyboardInterrupt:

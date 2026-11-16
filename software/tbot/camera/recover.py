@@ -74,6 +74,19 @@ class RecoveringSource:
         inner = self._inner
         return self._dropped_before + (int(getattr(inner, "dropped", 0)) if inner is not None else 0)
 
+    @property
+    def clock(self):
+        """The camera clock; kept from the first source so it stays readable while the camera is down."""
+        inner = self.__dict__.get("_inner")
+        if inner is not None and getattr(inner, "clock", None) is not None:
+            self.__dict__["_clock_ref"] = inner.clock
+        return self.__dict__.get("_clock_ref")
+
+    @property
+    def streaming(self) -> bool:
+        """A source instance is open and started (a stream is requested), whether or not frames arrive."""
+        return self._inner is not None and self._inner_started
+
     def imu(self):
         return self._inner.imu() if self._inner is not None else None
 

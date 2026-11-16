@@ -48,8 +48,26 @@ def main(argv: list[str] | None = None) -> int:
     if cmd not in COMMANDS:
         print(f"tbot: unknown command {cmd!r}\n\n{_usage()}", file=sys.stderr)
         return 2
+    _interruptible()
     module = importlib.import_module(COMMANDS[cmd][0])
     return int(module.main(rest) or 0)
+
+
+def _interruptible() -> None:
+    """SIGINT and SIGTERM both raise KeyboardInterrupt, so every tool's Ctrl-C cleanup (camera stop, final
+    report) also runs for `pkill`/`kill`. A job started in the background over SSH (`nohup tbot ... &`)
+    inherits SIGINT as IGNORED and Python keeps that, so without this such a tool could only be killed with
+    -9, leaving the camera half-open. Tools that install their own handlers (tbot run, calrig) override these."""
+    import signal
+
+    def _raise(signum, frame):
+        raise KeyboardInterrupt
+
+    try:
+        signal.signal(signal.SIGINT, signal.default_int_handler)
+        signal.signal(signal.SIGTERM, _raise)
+    except (ValueError, OSError):  # not the main thread (embedded use): leave signals alone
+        pass
 
 
 if __name__ == "__main__":

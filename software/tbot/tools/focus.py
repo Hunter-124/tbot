@@ -10,7 +10,7 @@ import cv2
 import numpy as np
 
 from tbot.app.stream import DebugServer
-from tbot.camera import open_source
+from tbot.camera import linkcheck, open_live_source
 from tbot.config import add_common_args, load_from_args
 from tbot.optics import CameraModel, MountModel, combined_mask
 from tbot.types import SimClock
@@ -82,7 +82,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.seconds is not None and (not np.isfinite(args.seconds) or args.seconds <= 0):
         parser.error("--seconds must be positive")
     cfg, calib = load_from_args(args)
-    source = open_source(cfg.camera.source, cfg, calib)
+    # live camera: a CSI stall reopens the camera instead of ending the session (RecoveringSource)
+    source = open_live_source(cfg.camera.source, cfg, calib)
+    live = bool(getattr(source, "endless", False))
     server = None
     frame = None
     mask = None
@@ -92,6 +94,8 @@ def main(argv: list[str] | None = None) -> int:
     frames = timeouts = 0
     next_report = 0.0
     status = 0
+    down_since: float | None = None
+    next_diag = 0.0
     out = sys.stderr if args.json else sys.stdout
     try:
         source.start()
@@ -105,11 +109,32 @@ def main(argv: list[str] | None = None) -> int:
                 if isinstance(source.clock, SimClock):
                     break
                 timeouts += 1
-                if timeouts >= 20:
-                    print("tbot focus: no frames for 10 s", file=sys.stderr)
+                if not live:
+                    if timeouts >= 20:
+                        print("tbot focus: no frames for 10 s", file=sys.stderr)
+                        status = 1
+                        break
+                    continue
+                down_since = now if down_since is None else down_since
+                if args.seconds is not None and now - down_since > max(10.0, args.seconds):
+                    print("tbot focus: no frames, giving up", file=sys.stderr)
                     status = 1
                     break
+                if now - down_since >= 5.0 and now >= next_diag and getattr(source, "streaming", True):
+                    diag = linkcheck.diagnose(window_s=1.5, source=source)
+                    print(f"tbot focus: camera down for {now - down_since:.0f} s, still retrying "
+                          f"(restarts {getattr(source, 'restarts', 0)}) - {diag.layer}: {diag.message}",
+                          file=sys.stderr, flush=True)
+                    if server is not None:
+                        server.publish(linkcheck.down_card(cfg.camera.width, cfg.camera.height,
+                                                           f"CAMERA DOWN ({diag.layer})", diag.message),
+                                       {"camera": "down", "since_s": round(now - down_since, 1), **diag.as_dict()})
+                    next_diag = time.monotonic() + 10.0
                 continue
+            if down_since is not None:
+                print(f"tbot focus: camera back after {now - down_since:.1f} s", file=sys.stderr, flush=True)
+                down_since = None
+                next_diag = 0.0
             frame = next_frame
             timeouts = 0
             frames += 1
