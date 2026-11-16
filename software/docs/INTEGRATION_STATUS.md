@@ -44,7 +44,7 @@ below are a record, not something a checkout restores.
 
 ## Software state (main)
 
-- Multi-shot (`tbot/fire/engagement.py`): one press fires up to `fire.max_shots_per_arm = 3` shots, each at its
+- Multi-shot (`tbot/fire/engagement.py`): one press fires up to `fire.max_shots_per_arm` shots (default 1; was 3 until 2026-11-16), each at its
   own clay; >= `fire.min_shot_interval_ms = 250` between commands; a shot-at clay (and any duplicate track
   within 1 deg) is never engaged again; tracks born after a shot inside a cone around the broken clay's
   predicted path (2 deg, +15 deg/s, 1.5 s) are debris; after a shot a target needs `min_track_hits` fresh

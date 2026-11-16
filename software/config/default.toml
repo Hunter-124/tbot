@@ -116,7 +116,7 @@ live = false                  # false = dry run: log would-fire decisions, never
 min_hit_probability = 0.5    # fire at the best moment only if P(hit) >= this (miss, 1-sigma uncertainty, pattern radius)
 min_track_hits = 5
 horizon_frames = 3
-max_shots_per_arm = 3         # doubles/triples on one press; each needs its own target (see engagement.py)
+max_shots_per_arm = 1         # one shot per press (raise for doubles; each needs its own target, see engagement.py)
 min_shot_interval_ms = 250.0  # no fire command within this long of the previous one (debris, recoil, trigger reset)
 min_clay_speed_mps = 6.0      # cartesian tracker: never fire at something slower (clays fly 15-30 m/s) [INFERENCE]
 duplicate_deg = 1.0           # a track this close to the target at the shot is the same clay: engaged with it

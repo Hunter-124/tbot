@@ -114,6 +114,7 @@ def test_fire_path_commands_the_actuator_once_per_press(tmp_path):
     cfg, calib = base_cfg(tmp_path)
     cfg.camera.fps = 50.0
     cfg.fire.min_hit_probability = 0.05  # gate reachable regardless of vision accuracy (not a quality claim)
+    cfg.fire.max_shots_per_arm = 3       # the press allows several shots; one clay must still get one
     res = evaluate_run(cfg, calib, "skeet_crossing", 1)
 
     assert res["visible_frames"] > 0, "the clay is never visible: scenario/renderer problem"
