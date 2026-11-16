@@ -42,6 +42,13 @@ them from `export/<part>.step` with the settings above.
 | servo_bracket_L | +Y, inboard band face on the bed | build plate only (guard-taper pocket on the bed face + the round output-hole top) — remove before ironing the inserts | 11.6 g |
 | trig_clamp_R | +Z | none (D7.4 switch-hole and D7 access-bore crowns bridge; ream 7.4 if the switch hole sags) | 8.7 g |
 
+### Lens lock nut
+
+`lens_lock_nut` (split clamp nut, M12 x 0.5, pinched with 1 x M2 x 8 pan head self-tapping) locks the lens focus
+against the lens-holder face; `lens_lock_nut_plain` is a plain jam-nut fallback. Front face on the bed, 0.12 mm
+layers, no supports, under 1 g each. Not sliced or printed yet. Dimensions, the caliper checks to make first and
+fitting: [lens_lock_nut.md](lens_lock_nut.md).
+
 ## Purchased hardware
 
 ### Electronics and actuator
