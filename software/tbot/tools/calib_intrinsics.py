@@ -86,6 +86,139 @@ def find_corners(image: np.ndarray, pattern: tuple[int, int]) -> np.ndarray | No
     return refined.reshape(-1, 2).astype(np.float64)
 
 
+class Chessboard:
+    """Plain chessboard target: every view must show all cols x rows inner corners."""
+
+    def __init__(self, pattern: tuple[int, int], square_m: float) -> None:
+        self.pattern = (int(pattern[0]), int(pattern[1]))
+        self.square_m = float(square_m)
+
+    @property
+    def grid(self) -> tuple[int, int]:
+        """(cols, rows) of the full inner-corner grid, for the pose descriptor."""
+        return self.pattern
+
+    def describe(self) -> str:
+        return f"{self.pattern[0]}x{self.pattern[1]} chessboard, {self.square_m * 1000.0:g} mm squares"
+
+    def detect(self, image: np.ndarray) -> tuple[np.ndarray, np.ndarray] | None:
+        """(image points (N,2), board points (N,3)) or None."""
+        c = find_corners(image, self.pattern)
+        return None if c is None else (c, board_object_points(self.pattern, self.square_m))
+
+    def full_grid(self, img: np.ndarray, obj: np.ndarray) -> np.ndarray:
+        return img
+
+
+ARUCO_DICTS = ("DICT_4X4_50", "DICT_4X4_100", "DICT_4X4_250", "DICT_4X4_1000", "DICT_5X5_50", "DICT_5X5_100",
+               "DICT_5X5_250", "DICT_5X5_1000", "DICT_6X6_50", "DICT_6X6_100", "DICT_6X6_250", "DICT_6X6_1000",
+               "DICT_ARUCO_ORIGINAL")
+CHARUCO_MIN_CORNERS = 12  # fewer corners than this in a view constrain little and fit the homography badly
+
+
+class CharucoBoard:
+    """ChArUco target. Views may show any part of the board (>= CHARUCO_MIN_CORNERS corners), so the board can
+    be pushed into the image corners, where a fisheye model is decided.
+
+    "7x10" is ambiguous (which side is which) and OpenCV >= 4.6 lays out boards with an even row count
+    differently from older generators (legacy pattern). A wrong layout detects nothing, so every candidate is
+    tried until one view shows at least half the board with exactly one layout; that layout is then locked.
+    """
+
+    def __init__(self, squares: tuple[int, int], square_m: float, marker_m: float,
+                 dictionary: str = "DICT_4X4_50", legacy: bool | None = None,
+                 min_corners: int = CHARUCO_MIN_CORNERS) -> None:
+        if dictionary not in ARUCO_DICTS:
+            raise ValueError(f"unknown ArUco dictionary {dictionary!r} ({', '.join(ARUCO_DICTS)})")
+        if not 0 < marker_m < square_m:
+            raise ValueError(f"marker size {marker_m * 1000:g} mm must be smaller than the square "
+                             f"{square_m * 1000:g} mm")
+        sx, sy = int(squares[0]), int(squares[1])
+        if min(sx, sy) < 3:
+            raise ValueError(f"a {sx}x{sy} ChArUco board is too small")
+        self.squares = (sx, sy)
+        self.square_m = float(square_m)
+        self.marker_m = float(marker_m)
+        self.dictionary = dictionary
+        self.min_corners = int(min_corners)
+        d = cv2.aruco.getPredefinedDictionary(getattr(cv2.aruco, dictionary))
+        layouts = [(sx, sy), (sy, sx)] if sx != sy else [(sx, sy)]
+        legacies = [False, True] if legacy is None else [bool(legacy)]
+        self._candidates = []
+        for lay in layouts:
+            for leg in legacies:
+                b = cv2.aruco.CharucoBoard(lay, self.square_m, self.marker_m, d)
+                b.setLegacyPattern(leg)
+                obj = np.asarray(b.getChessboardCorners(), dtype=np.float64).reshape(-1, 3)
+                self._candidates.append((lay, leg, cv2.aruco.CharucoDetector(b), obj))
+        self.locked = None if len(self._candidates) > 1 else self._candidates[0]
+
+    @property
+    def layout(self) -> tuple[tuple[int, int], bool] | None:
+        """((squares_x, squares_y), legacy) once known."""
+        return None if self.locked is None else (self.locked[0], self.locked[1])
+
+    @property
+    def grid(self) -> tuple[int, int]:
+        lay = self.locked[0] if self.locked is not None else self.squares
+        return (lay[0] - 1, lay[1] - 1)
+
+    def describe(self) -> str:
+        if self.locked is None:
+            lay = f"{self.squares[0]}x{self.squares[1]} (layout not yet seen)"
+        else:
+            lay = f"{self.locked[0][0]}x{self.locked[0][1]}{' legacy' if self.locked[1] else ''}"
+        return (f"{lay} ChArUco, {self.square_m * 1000.0:g} mm squares, {self.marker_m * 1000.0:g} mm markers, "
+                f"{self.dictionary}")
+
+    @staticmethod
+    def _run(cand, gray: np.ndarray) -> tuple[np.ndarray, np.ndarray] | None:
+        corners, ids, _, _ = cand[2].detectBoard(gray)
+        if corners is None or ids is None or len(ids) == 0:
+            return None
+        ids = np.asarray(ids, dtype=np.int64).reshape(-1)
+        return np.asarray(corners, dtype=np.float64).reshape(-1, 2), cand[3][ids]
+
+    def detect(self, image: np.ndarray) -> tuple[np.ndarray, np.ndarray] | None:
+        gray = to_gray(image)
+        if self.locked is not None:
+            hit = self._run(self.locked, gray)
+        else:
+            found = [(c, r) for c in self._candidates if (r := self._run(c, gray)) is not None]
+            if not found:
+                return None
+            best = max(found, key=lambda cr: cr[1][0].shape[0])
+            n_inner = best[1][1].shape[0]
+            total = (best[0][0][0] - 1) * (best[0][0][1] - 1)
+            others = [r[0].shape[0] for c, r in found if c is not best[0]]
+            if n_inner * 2 >= total and all(k < self.min_corners for k in others):
+                self.locked = best[0]
+            if self.locked is None:
+                return None  # a partial view cannot tell the layouts apart: wait for a clear one
+            hit = best[1]
+        if hit is None or hit[0].shape[0] < self.min_corners:
+            return None
+        return hit
+
+    def full_grid(self, img: np.ndarray, obj: np.ndarray) -> np.ndarray:
+        """The whole inner-corner grid projected through a board->image homography fitted to the seen
+        corners (approximate under fisheye distortion; only used to describe the pose)."""
+        all_obj = self.locked[3] if self.locked is not None else obj
+        H, _ = cv2.findHomography(obj[:, :2].astype(np.float32), img.astype(np.float32), 0)
+        if H is None:
+            return img
+        pts = cv2.perspectiveTransform(all_obj[:, :2].reshape(-1, 1, 2).astype(np.float64), H)
+        return np.asarray(pts, dtype=np.float64).reshape(-1, 2)
+
+
+def parse_squares(text: str) -> tuple[int, int]:
+    try:
+        a, b = text.lower().replace("*", "x").split("x")
+        return int(a), int(b)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"expected SQUARES_XxSQUARES_Y, e.g. 7x10, got {text!r}") from None
+
+
 def board_object_points(pattern: tuple[int, int], square_m: float) -> np.ndarray:
     """(N, 3) float64 board-frame corner coordinates matching find_corners' raster order (Z = 0)."""
     cols, rows = pattern
@@ -141,33 +274,47 @@ _POSE_WEIGHTS = np.array([1.0, 1.0, 2.0, 2.0, 2.0], dtype=np.float64)
 
 
 class ViewSelector:
-    """Accepts board views that are sharp and bring a new pose, and tracks image coverage."""
+    """Accepts board views that are sharp and bring a new pose, and tracks image coverage.
 
-    def __init__(self, pattern: tuple[int, int], image_size: tuple[int, int], *,
+    `board` is a Chessboard / CharucoBoard, or a (cols, rows) inner-corner tuple (chessboard; object points
+    then use a unit square, which nothing here depends on). `accepted` holds the image points of each accepted
+    view and `objects` the matching board points.
+    """
+
+    def __init__(self, board, image_size: tuple[int, int], *,
                  sharpness_min: float = SHARPNESS_MIN, min_pose_dist: float = MIN_POSE_DIST,
                  grid: int = COVERAGE_GRID) -> None:
-        self.pattern = pattern
+        self.board = Chessboard(board, 1.0) if isinstance(board, tuple) else board
         self.image_size = image_size
         self.sharpness_min = float(sharpness_min)
         self.min_pose_dist = float(min_pose_dist)
         self.accepted: list[np.ndarray] = []
+        self.objects: list[np.ndarray] = []
         self.descriptors: list[np.ndarray] = []
         self.coverage = np.zeros((grid, grid), dtype=bool)
 
+    @property
+    def pattern(self) -> tuple[int, int]:
+        return self.board.grid
+
     def offer(self, image: np.ndarray) -> tuple[np.ndarray | None, str]:
         """(corners, reason): corners is not None only when the view was accepted."""
-        corners = find_corners(image, self.pattern)
-        if corners is None:
+        hit = self.board.detect(image)
+        if hit is None:
+            if getattr(self.board, "locked", True) is None:
+                return None, "no board yet (show the WHOLE board once, flat-on, so its layout can be identified)"
             return None, "no board"
+        corners, obj = hit
         sharp = sharpness(image, corners)
         if sharp < self.sharpness_min:
             return None, f"blurred ({sharp:.0f} < {self.sharpness_min:.0f})"
-        desc = pose_descriptor(corners, self.pattern, self.image_size)
+        desc = pose_descriptor(self.board.full_grid(corners, obj), self.board.grid, self.image_size)
         if self.descriptors:
             d = float(np.min(np.linalg.norm((np.stack(self.descriptors) - desc) * _POSE_WEIGHTS, axis=1)))
             if d < self.min_pose_dist:
                 return None, f"pose already covered ({d:.3f} < {self.min_pose_dist:.3f})"
         self.accepted.append(corners)
+        self.objects.append(obj)
         self.descriptors.append(desc)
         self._mark(corners)
         return corners, "accepted"
@@ -204,9 +351,9 @@ class ViewSelector:
 # --------------------------------------------------------------------------------- calibration core
 def _fisheye_calibrate(obj: list[np.ndarray], img: list[np.ndarray], image_size: tuple[int, int],
                        flags: int) -> tuple[float, np.ndarray, np.ndarray, list, list]:
-    """cv2.fisheye.calibrate across OpenCV versions (4.x wants (N,1,3)/(N,1,2), 5.0 wants (1,N,3)/(1,N,2))."""
-    n = obj[0].shape[0]
-    shapes = (((1, n, 3), (1, n, 2)), ((n, 1, 3), (n, 1, 2)))
+    """cv2.fisheye.calibrate across OpenCV versions (4.x wants (N,1,3)/(N,1,2), 5.0 wants (1,N,3)/(1,N,2)).
+    Views may have different point counts (ChArUco)."""
+    shapes = (((1, -1, 3), (1, -1, 2)), ((-1, 1, 3), (-1, 1, 2)))
     last: Exception | None = None
     for os_, is_ in shapes:
         o = [np.ascontiguousarray(a.reshape(os_), dtype=np.float64) for a in obj]
@@ -246,9 +393,8 @@ def _per_view_rms(obj: np.ndarray, img: np.ndarray, rvec, tvec, K: np.ndarray, D
     return float(math.sqrt(float(np.mean(np.sum(err * err, axis=1)))))
 
 
-def _calibrate_once(obj: np.ndarray, corners: list[np.ndarray], image_size: tuple[int, int],
+def _calibrate_once(objs: list[np.ndarray], corners: list[np.ndarray], image_size: tuple[int, int],
                     model: str) -> tuple[float, np.ndarray, np.ndarray, list[float]]:
-    objs = [obj.copy() for _ in corners]
     if model == "fisheye":
         flags = _calib_flag("CALIB_RECOMPUTE_EXTRINSIC") | _calib_flag("CALIB_FIX_SKEW")
         rms, K, D, rvecs, tvecs = _fisheye_calibrate(objs, corners, image_size, flags)
@@ -260,15 +406,18 @@ def _calibrate_once(obj: np.ndarray, corners: list[np.ndarray], image_size: tupl
         K = np.asarray(K, dtype=np.float64)
         D = np.asarray(D, dtype=np.float64).reshape(-1)
         rms = float(rms)
-    per = [_per_view_rms(obj, c, rv, tv, K, D, model) for c, rv, tv in zip(corners, rvecs, tvecs)]
+    per = [_per_view_rms(o, c, rv, tv, K, D, model) for o, c, rv, tv in zip(objs, corners, rvecs, tvecs)]
     return rms, K, D, per
 
 
 def calibrate_views(corners_list: list[np.ndarray], pattern: tuple[int, int], square_m: float,
-                    image_size: tuple[int, int], model: str = "fisheye") -> dict:
+                    image_size: tuple[int, int], model: str = "fisheye",
+                    object_points: list[np.ndarray] | None = None) -> dict:
     """Calibrate from detected corners. Pure: no I/O, no config.
 
     corners_list: per view, the (N, 2) inner corners from find_corners (N = cols*rows, raster order).
+    object_points: per view, the matching (N, 3) board points instead (ChArUco: N varies per view);
+    pattern/square_m are then not used for the geometry.
     image_size: (width, height). model: "fisheye" (cv2.fisheye, D of 4) or "pinhole" (D of 5).
     Views whose reprojection RMS exceeds REJECT_RMS_FACTOR x the median are dropped and the calibration
     is repeated, because one mis-detected board biases every parameter.
@@ -278,18 +427,26 @@ def calibrate_views(corners_list: list[np.ndarray], pattern: tuple[int, int], sq
         raise ValueError(f"unknown model {model!r} (fisheye | pinhole)")
     cols, rows = pattern
     n_pts = cols * rows
-    views = []
+    if object_points is not None and len(object_points) != len(corners_list):
+        raise ValueError(f"{len(object_points)} object point sets for {len(corners_list)} views")
+    views, objs = [], []
     for i, c in enumerate(corners_list):
         a = np.asarray(c, dtype=np.float64).reshape(-1, 2)
-        if a.shape[0] != n_pts:
-            raise ValueError(f"view {i}: {a.shape[0]} corners, expected {n_pts} for a {cols}x{rows} pattern")
+        if object_points is None:
+            if a.shape[0] != n_pts:
+                raise ValueError(f"view {i}: {a.shape[0]} corners, expected {n_pts} for a {cols}x{rows} pattern")
+            o = board_object_points(pattern, square_m)
+        else:
+            o = np.asarray(object_points[i], dtype=np.float64).reshape(-1, 3)
+            if o.shape[0] != a.shape[0] or a.shape[0] < 6:
+                raise ValueError(f"view {i}: {a.shape[0]} image points for {o.shape[0]} board points")
         views.append(a)
+        objs.append(o)
     if len(views) < 4:
         raise ValueError(f"need at least 4 views, got {len(views)}")
 
-    obj = board_object_points(pattern, square_m)
     keep = list(range(len(views)))
-    rms, K, D, per = _calibrate_once(obj, [views[i] for i in keep], image_size, model)
+    rms, K, D, per = _calibrate_once([objs[i] for i in keep], [views[i] for i in keep], image_size, model)
     rejected: list[int] = []
     for _ in range(MAX_REJECT_PASSES):
         median = float(np.median(per))
@@ -299,7 +456,7 @@ def calibrate_views(corners_list: list[np.ndarray], pattern: tuple[int, int], sq
             break
         rejected += [i for i in keep if i not in good]
         keep = good
-        rms, K, D, per = _calibrate_once(obj, [views[i] for i in keep], image_size, model)
+        rms, K, D, per = _calibrate_once([objs[i] for i in keep], [views[i] for i in keep], image_size, model)
 
     return {
         "model": model,
@@ -381,11 +538,20 @@ def _list_images(d: Path) -> list[Path]:
     return sorted(p for p in d.iterdir() if p.is_file() and p.suffix.lower() in IMAGE_EXTS)
 
 
-def _corners_from_dir(d: Path, pattern: tuple[int, int], verbose: bool) -> tuple[list[np.ndarray], tuple[int, int]]:
+Views = tuple[list[np.ndarray], list[np.ndarray], tuple[int, int]]  # image points, board points, (w, h)
+
+
+def _corners_from_dir(d: Path, board, verbose: bool) -> Views:
     files = _list_images(d)
     if not files:
         raise ValueError(f"no images in {d} (looked for {', '.join(IMAGE_EXTS)})")
+    if getattr(board, "locked", True) is None:  # find the ChArUco layout on the clearest image first
+        for p in files:
+            img = cv2.imread(str(p), cv2.IMREAD_GRAYSCALE)
+            if img is not None and board.detect(img) is not None:
+                break
     corners: list[np.ndarray] = []
+    objects: list[np.ndarray] = []
     size: tuple[int, int] | None = None
     for p in files:
         img = cv2.imread(str(p), cv2.IMREAD_GRAYSCALE)
@@ -397,14 +563,15 @@ def _corners_from_dir(d: Path, pattern: tuple[int, int], verbose: bool) -> tuple
             size = (w, h)
         elif (w, h) != size:
             raise ValueError(f"{p.name} is {w}x{h}, earlier images are {size[0]}x{size[1]}")
-        c = find_corners(img, pattern)
+        hit = board.detect(img)
         if verbose:
-            print(f"  {p.name}: {'board found' if c is not None else 'no board'}")
-        if c is not None:
-            corners.append(c)
+            print(f"  {p.name}: {f'{hit[0].shape[0]} corners' if hit is not None else 'no board'}")
+        if hit is not None:
+            corners.append(hit[0])
+            objects.append(hit[1])
     if size is None:
         raise ValueError(f"no readable images in {d}")
-    return corners, size
+    return corners, objects, size
 
 
 def _open_session(d: Path) -> tuple[np.ndarray, dict]:
@@ -424,11 +591,11 @@ def _open_session(d: Path) -> tuple[np.ndarray, dict]:
     return np.memmap(str(frames_p), dtype=dtype, mode="r", shape=shape), meta
 
 
-def _corners_from_session(d: Path, pattern: tuple[int, int], every: int, views: int, sel_kwargs: dict,
-                          save_dir: Path | None) -> tuple[list[np.ndarray], tuple[int, int]]:
+def _corners_from_session(d: Path, board, every: int, views: int, sel_kwargs: dict,
+                          save_dir: Path | None) -> Views:
     frames, meta = _open_session(d)
     size = (int(meta["width"]), int(meta["height"]))
-    sel = ViewSelector(pattern, size, **sel_kwargs)
+    sel = ViewSelector(board, size, **sel_kwargs)
     step = max(1, int(every))
     for i in range(0, frames.shape[0], step):
         img = np.ascontiguousarray(frames[i])
@@ -440,7 +607,7 @@ def _corners_from_session(d: Path, pattern: tuple[int, int], every: int, views: 
                 _save_view(save_dir, len(sel.accepted) - 1, img)
         if len(sel.accepted) >= views and sel.coverage_frac >= 1.0:
             break
-    return sel.accepted, size
+    return sel.accepted, sel.objects, size
 
 
 def _save_view(save_dir: Path, index: int, image: np.ndarray) -> None:
@@ -448,15 +615,15 @@ def _save_view(save_dir: Path, index: int, image: np.ndarray) -> None:
     cv2.imwrite(str(save_dir / f"view_{index:03d}.png"), to_gray(image))
 
 
-def _corners_live(cfg: Config, calib: Calibration, pattern: tuple[int, int], views: int, gui: bool,
-                  timeout_s: float, sel_kwargs: dict,
-                  save_dir: Path | None) -> tuple[list[np.ndarray], tuple[int, int]]:
+def _corners_live(cfg: Config, calib: Calibration, board, views: int, gui: bool,
+                  timeout_s: float, sel_kwargs: dict, save_dir: Path | None, server=None) -> Views:
     from tbot.camera import open_source
 
     source = open_source(cfg.camera.source, cfg, calib)
     source.start()
     size = (int(source.width), int(source.height))
-    sel = ViewSelector(pattern, size, **sel_kwargs)
+    sel = ViewSelector(board, size, **sel_kwargs)
+    layout_known = getattr(board, "locked", True) is not None
     window = "tbot calib-intrinsics"
     t0 = source.clock.now_ns()
     last_report = ""
@@ -470,16 +637,25 @@ def _corners_live(cfg: Config, calib: Calibration, pattern: tuple[int, int], vie
                     break
                 continue
             corners, reason = sel.offer(frame.image)
+            if not layout_known and getattr(board, "locked", True) is not None:
+                layout_known = True
+                print(f"  board identified: {board.describe()}")
             if corners is not None:
-                print(f"  accepted {len(sel.accepted)}/{views}  coverage "
+                print(f"  accepted {len(sel.accepted)}/{views} ({corners.shape[0]} corners)  coverage "
                       f"{int(sel.coverage.sum())}/{sel.coverage.size}  {sel.coverage_hint()}")
                 if save_dir is not None:
                     _save_view(save_dir, len(sel.accepted) - 1, frame.image)
             elif not gui and reason != last_report:
                 print(f"  waiting: {reason}")
                 last_report = reason
+            if server is not None and server.due():
+                server.publish(_overlay(frame.image, corners, sel, views, reason),
+                               {"views": len(sel.accepted), "target": views,
+                                "coverage": f"{int(sel.coverage.sum())}/{sel.coverage.size}",
+                                "hint": sel.coverage_hint(), "last": reason, "board": board.describe()})
             if gui:
-                if _gui_tick(window, frame.image, pattern, corners, sel, views):
+                cv2.imshow(window, _overlay(frame.image, corners, sel, views, reason))
+                if (cv2.waitKey(1) & 0xFF) in (27, ord("q")):
                     break
             if len(sel.accepted) >= views and sel.coverage_frac >= 1.0:
                 break
@@ -494,12 +670,12 @@ def _corners_live(cfg: Config, calib: Calibration, pattern: tuple[int, int], vie
         source.stop()
         if gui:
             cv2.destroyAllWindows()
-    return sel.accepted, size
+    return sel.accepted, sel.objects, size
 
 
-def _gui_tick(window: str, image: np.ndarray, pattern: tuple[int, int], corners: np.ndarray | None,
-              sel: ViewSelector, views: int) -> bool:
-    """Draw the live coverage view; True when the operator asked to stop (q/ESC)."""
+def _overlay(image: np.ndarray, corners: np.ndarray | None, sel: ViewSelector, views: int,
+             reason: str = "") -> np.ndarray:
+    """Live coverage view: grid cells green once reached, earlier corners orange, this view's corners."""
     vis = cv2.cvtColor(to_gray(image), cv2.COLOR_GRAY2BGR)
     h, w = vis.shape[:2]
     n = sel.coverage.shape[0]
@@ -513,12 +689,15 @@ def _gui_tick(window: str, image: np.ndarray, pattern: tuple[int, int], corners:
         for u, v in acc:
             cv2.circle(vis, (int(round(u)), int(round(v))), 1, (0, 140, 255), -1)
     if corners is not None:
-        cv2.drawChessboardCorners(vis, pattern, corners.reshape(-1, 1, 2).astype(np.float32), True)
+        for u, v in corners:
+            cv2.circle(vis, (int(round(u)), int(round(v))), 3, (0, 255, 0), 1, cv2.LINE_AA)
     cv2.putText(vis, f"views {len(sel.accepted)}/{views}  coverage {int(sel.coverage.sum())}"
-                f"/{sel.coverage.size}  {sel.coverage_hint(limit=2)}  [q] done",
-                (6, 18), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
-    cv2.imshow(window, vis)
-    return (cv2.waitKey(1) & 0xFF) in (27, ord("q"))
+                f"/{sel.coverage.size}  {sel.coverage_hint(limit=2)}",
+                (6, 18), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1, cv2.LINE_AA)
+    if reason:
+        cv2.putText(vis, reason[:90], (6, 36), cv2.FONT_HERSHEY_SIMPLEX, 0.42,
+                    (0, 255, 0) if reason == "accepted" else (0, 200, 255), 1, cv2.LINE_AA)
+    return vis
 
 
 # --------------------------------------------------------------------------------- CLI
@@ -539,40 +718,74 @@ def main(argv: list[str] | None = None) -> int:
     b.add_argument("--cols", type=int, default=DEFAULT_COLS, help="inner corners across (default 9)")
     b.add_argument("--rows", type=int, default=DEFAULT_ROWS, help="inner corners down (default 6)")
     b.add_argument("--square-mm", type=float, default=DEFAULT_SQUARE_MM, help="square size, mm (default 25)")
+    b.add_argument("--charuco", type=parse_squares, default=None, metavar="SXxSY",
+                   help="ChArUco board with this many SQUARES (e.g. 7x10; orientation is detected); "
+                        "--cols/--rows are then ignored")
+    b.add_argument("--marker-mm", type=float, default=None, help="ChArUco marker size, mm (required with --charuco)")
+    b.add_argument("--dict", default="DICT_4X4_50", choices=ARUCO_DICTS, help="ChArUco ArUco dictionary")
+    b.add_argument("--legacy", choices=("auto", "yes", "no"), default="auto",
+                   help="ChArUco pre-OpenCV-4.6 layout (only differs for an even row count; default: detect)")
     o = p.add_argument_group("output")
     o.add_argument("--model", choices=("fisheye", "pinhole"), default=None, help="default: optics.model")
     o.add_argument("--out", default=None, help="output JSON (default <calib-dir>/intrinsics.json)")
     o.add_argument("--gui", action="store_true", help="show the live coverage window (needs a display)")
+    o.add_argument("--stream", action="store_true",
+                   help="live: serve the coverage view on the debug server (http://<pi>:<stream.port>/)")
     o.add_argument("--force", action="store_true", help="write even when the quality guards fail")
     args = p.parse_args(argv)
 
     cfg, calib = load_from_args(args)
-    pattern = (int(args.cols), int(args.rows))
     square_m = float(args.square_mm) / 1000.0
+    try:
+        if args.charuco is not None:
+            if args.marker_mm is None:
+                p.error("--charuco needs --marker-mm")
+            legacy = {"auto": None, "yes": True, "no": False}[args.legacy]
+            board = CharucoBoard(args.charuco, square_m, float(args.marker_mm) / 1000.0, args.dict, legacy)
+        else:
+            board = Chessboard((int(args.cols), int(args.rows)), square_m)
+    except ValueError as e:
+        print(f"tbot calib-intrinsics: {e}", file=sys.stderr)
+        return 2
     model = args.model or cfg.optics.model
     out = Path(args.out) if args.out else calib.path("intrinsics.json")
     views_dir = None if args.no_save_views else calib.dir / "intrinsics_views"
     sel_kwargs = {"sharpness_min": float(args.sharp_min), "min_pose_dist": float(args.min_pose_dist)}
 
+    server = None
     try:
         if args.from_dir:
             src_name = f"images in {args.from_dir}"
-            print(f"scanning {args.from_dir} for a {pattern[0]}x{pattern[1]} board")
-            corners, size = _corners_from_dir(Path(args.from_dir), pattern, verbose=True)
+            print(f"scanning {args.from_dir} for a {board.describe()}")
+            corners, objects, size = _corners_from_dir(Path(args.from_dir), board, verbose=True)
         elif args.session:
             src_name = f"session {args.session} (every {args.every})"
-            print(f"scanning {src_name} for a {pattern[0]}x{pattern[1]} board")
-            corners, size = _corners_from_session(Path(args.session), pattern, args.every, args.views,
-                                                  sel_kwargs, views_dir)
+            print(f"scanning {src_name} for a {board.describe()}")
+            corners, objects, size = _corners_from_session(Path(args.session), board, args.every, args.views,
+                                                           sel_kwargs, views_dir)
         else:
             src_name = f"live {cfg.camera.source}"
-            print(f"live capture from {cfg.camera.source}: hold the board at varied distances and tilts, "
-                  f"cover the image corners (Ctrl-C or q to stop)")
-            corners, size = _corners_live(cfg, calib, pattern, args.views, args.gui, args.timeout_s,
-                                          sel_kwargs, views_dir)
+            if args.stream:
+                from tbot.app.stream import DebugServer
+                server = DebugServer(cfg).start()
+                print(f"coverage view: http://{server.host}:{server.port}/")
+            if views_dir is not None and views_dir.exists() and any(views_dir.iterdir()):
+                old = views_dir.with_name(f"intrinsics_views.prev")
+                if old.exists():
+                    import shutil
+                    shutil.rmtree(old)
+                views_dir.rename(old)
+                print(f"previous views moved to {old}")
+            print(f"live capture from {cfg.camera.source} ({board.describe()}): hold the board at varied "
+                  f"distances and tilts, cover the image corners (Ctrl-C or q to stop)")
+            corners, objects, size = _corners_live(cfg, calib, board, args.views, args.gui, args.timeout_s,
+                                                   sel_kwargs, views_dir, server)
     except (ValueError, OSError) as e:
         print(f"tbot calib-intrinsics: {e}", file=sys.stderr)
         return 1
+    finally:
+        if server is not None:
+            server.stop()
 
     print(f"{len(corners)} usable view(s) at {size[0]}x{size[1]}")
     if len(corners) < 4:
@@ -581,7 +794,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     try:
-        result = calibrate_views(corners, pattern, square_m, size, model)
+        result = calibrate_views(corners, board.grid, square_m, size, model, object_points=objects)
     except (ValueError, RuntimeError, cv2.error) as e:
         print(f"tbot calib-intrinsics: calibration failed: {e}", file=sys.stderr)
         return 1
@@ -622,13 +835,16 @@ def main(argv: list[str] | None = None) -> int:
 
     doc = dict(result)
     doc["created"] = now_iso()
-    doc["notes"] = (f"{pattern[0]}x{pattern[1]} board, {args.square_mm:g} mm squares, {src_name}; "
+    doc["notes"] = (f"{board.describe()}, {src_name}; "
                     f"fov_deg H{fov['h']:.1f}/V{fov['v']:.1f}/D{fov['d']:.1f}; "
                     f"nominal fx {fx_prior:.1f} px ({dev:+.1f} %)"
                     + ("; WRITTEN WITH --force: " + "; ".join(bad) if bad else ""))
     doc["fov_deg"] = fov
-    doc["pattern"] = [pattern[0], pattern[1]]
+    doc["pattern"] = [board.grid[0], board.grid[1]]
     doc["square_mm"] = float(args.square_mm)
+    if isinstance(board, CharucoBoard):
+        doc["charuco"] = {"squares": list(board.layout[0]), "legacy": bool(board.layout[1]),
+                          "marker_mm": float(args.marker_mm), "dict": board.dictionary}
     doc["source"] = src_name
     save_json(out, doc)
     print(f"wrote : {out}  (coverage map {cov_path})")

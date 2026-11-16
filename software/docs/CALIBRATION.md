@@ -114,6 +114,19 @@ tbot calib-intrinsics --session sessions/board-sweep --every 5   # offline, from
 tbot calib-intrinsics --from-dir calib/views                 # offline, from saved stills
 ```
 
+**ChArUco board (the rig's: 7 x 10 squares, 25 mm squares, 18 mm markers, DICT_4X4_50).** Give the
+square count with `--charuco`. The orientation and the pre-OpenCV-4.6 "legacy" layout are worked out
+from the first view that shows at least half the board, so show the whole board flat-on once at the
+start. After that, partial views count (>= 12 corners), so push the board right into the image corners
+and edges: that is where the fisheye distortion is decided. `--stream` serves the coverage view at
+`http://<pi>:8080/` (green cells are covered, and the second line says why a frame was not taken).
+Keep the board at ~0.3–0.6 m: closer than that it is out of focus (the lens is set for infinity), and
+further away the 18 mm markers get too few pixels to decode at 640 x 400.
+
+```bash
+tbot calib-intrinsics --config config/local.toml --charuco 7x10 --square-mm 25 --marker-mm 18 --views 30 --stream
+```
+
 Useful flags: `--model fisheye|pinhole` (default `optics.model` = fisheye), `--cols/--rows`, `--sharp-min`
 (Laplacian-variance floor), `--min-pose-dist` (how different a new view must be), `--timeout-s`, `--out`,
 `--no-save-views`, `--force`.

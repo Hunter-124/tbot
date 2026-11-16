@@ -72,9 +72,9 @@ def _rot(rx: float, ry: float, rz: float) -> np.ndarray:
             @ np.array([[1.0, 0.0, 0.0], [0.0, cx, -sx], [0.0, sx, cx]]))
 
 
-def _render(R_board_cam: np.ndarray, t: np.ndarray) -> np.ndarray:
+def _render(R_board_cam: np.ndarray, t: np.ndarray, texture=None) -> np.ndarray:
     """One view of the board at pose (R, t) (board centre at t, metres, camera frame)."""
-    tex, tex_w, tex_h = _texture()
+    tex, tex_w, tex_h = texture or _texture()
     rays = _ray_grid()
     s = SUPERSAMPLE
     rt = R_board_cam.T
@@ -352,6 +352,99 @@ def test_cli_calibrates_from_a_recorded_session(tmp_path):
     assert doc["n_views"] >= 8
     assert abs(doc["K"][0][0] - TRUE_K[0, 0]) / TRUE_K[0, 0] < 0.02
     assert sorted(p.name for p in (tmp_path / "intrinsics_views").glob("*.png"))[0] == "view_000.png"
+
+
+# ------------------------------------------------------------------------------ ChArUco
+CHARUCO_SQUARES = (7, 10)  # the rig's board: 25 mm squares, 18 mm markers, DICT_4X4_50
+CHARUCO_MARKER_M = 0.018
+
+
+@lru_cache(maxsize=1)
+def _charuco_texture() -> tuple[np.ndarray, float, float]:
+    sq = int(round(SQUARE_M * TEXEL_PER_M))
+    sx, sy = CHARUCO_SQUARES
+    d = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
+    board = cv2.aruco.CharucoBoard(CHARUCO_SQUARES, SQUARE_M, CHARUCO_MARKER_M, d)
+    w, h = (sx + 2) * sq, (sy + 2) * sq
+    tex = board.generateImage((w, h), marginSize=sq)
+    tex = np.where(tex > 127, 245, 20).astype(np.uint8)
+    return tex, w / TEXEL_PER_M, h / TEXEL_PER_M
+
+
+def _charuco_poses(n: int = 30, seed: int = 11) -> list[tuple[np.ndarray, np.ndarray]]:
+    """Board at 0.3-0.55 m (the markers need ~3 px per bit), pushed out towards the image edges."""
+    rng = np.random.default_rng(seed)
+    out = [(_rot(0.0, 0.0, 0.0), np.array([0.0, 0.0, 0.4]))]  # one clear frontal view first
+    for _ in range(n - 1):
+        R = _rot(math.radians(rng.uniform(-35.0, 35.0)), math.radians(rng.uniform(-35.0, 35.0)),
+                 math.radians(rng.uniform(-20.0, 20.0)))
+        tz = rng.uniform(0.3, 0.55)
+        out.append((R, np.array([rng.uniform(-0.65, 0.65) * tz, rng.uniform(-0.45, 0.45) * tz, tz])))
+    return out
+
+
+@lru_cache(maxsize=1)
+def _charuco_views() -> tuple[np.ndarray, ...]:
+    return tuple(_render(R, t, _charuco_texture()) for R, t in _charuco_poses())
+
+
+def _charuco_board(squares=CHARUCO_SQUARES, legacy=None) -> ci.CharucoBoard:
+    return ci.CharucoBoard(squares, SQUARE_M, CHARUCO_MARKER_M, "DICT_4X4_50", legacy)
+
+
+def test_charuco_layout_is_identified_from_either_orientation():
+    for squares in ((7, 10), (10, 7)):
+        board = _charuco_board(squares)
+        assert board.layout is None
+        hit = board.detect(_charuco_views()[0])
+        assert hit is not None, squares
+        assert board.layout == ((7, 10), False)
+        assert board.grid == (6, 9)
+        img, obj = hit
+        assert img.shape[0] == obj.shape[0] == 54
+    with pytest.raises(ValueError):
+        ci.CharucoBoard((7, 10), SQUARE_M, 0.03, "DICT_4X4_50")  # marker larger than the square
+    with pytest.raises(ValueError):
+        ci.CharucoBoard((7, 10), SQUARE_M, CHARUCO_MARKER_M, "DICT_9X9_1")
+
+
+def test_charuco_partial_views_are_used():
+    board = _charuco_board()
+    assert board.detect(_charuco_views()[0]) is not None
+    counts = [h[0].shape[0] for h in map(board.detect, _charuco_views()) if h is not None]
+    assert len(counts) >= 20
+    assert min(counts) < 54, "views with the board partly out of frame must still be accepted"
+
+
+def test_charuco_calibration_recovers_the_true_fisheye_model():
+    board = _charuco_board()
+    sel = ci.ViewSelector(board, (IMG_W, IMG_H))
+    for img in _charuco_views():
+        sel.offer(img)
+    assert len(sel.accepted) >= 15
+    result = ci.calibrate_views(sel.accepted, board.grid, SQUARE_M, (IMG_W, IMG_H), "fisheye",
+                                object_points=sel.objects)
+    K = np.asarray(result["K"], dtype=np.float64)
+    assert result["rms_px"] < 0.3
+    assert abs(K[0, 0] - TRUE_K[0, 0]) / TRUE_K[0, 0] < 0.01
+    assert abs(K[0, 2] - TRUE_K[0, 2]) < 2.0
+    assert abs(K[1, 2] - TRUE_K[1, 2]) < 2.0
+
+
+def test_cli_charuco_from_dir(tmp_path):
+    img_dir = tmp_path / "views"
+    img_dir.mkdir()
+    for i, img in enumerate(_charuco_views()):
+        cv2.imwrite(str(img_dir / f"v{i:02d}.png"), img)
+    rc = ci.main(["--from-dir", str(img_dir), "--calib-dir", str(tmp_path), "--charuco", "10x7",
+                  "--marker-mm", "18", "--square-mm", "25"])
+    assert rc == 0
+    doc = json.loads((tmp_path / "intrinsics.json").read_text())
+    assert doc["charuco"] == {"squares": [7, 10], "legacy": False, "marker_mm": 18.0, "dict": "DICT_4X4_50"}
+    assert doc["pattern"] == [6, 9]
+    assert abs(doc["K"][0][0] - TRUE_K[0, 0]) / TRUE_K[0, 0] < 0.01
+    with pytest.raises(SystemExit):
+        ci.main(["--from-dir", str(img_dir), "--calib-dir", str(tmp_path), "--charuco", "7x10"])  # no marker size
 
 
 # ------------------------------------------------------------------------------ calib_boresight
