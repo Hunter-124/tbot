@@ -276,7 +276,17 @@ translation (camera 54 mm below the bore, ~279 mm behind the muzzle) comes from 
 - the gun aimed at a small, unambiguous point of aim at a measured range (10–50 m; longer is better, the
   correction scales with range).
 
-Capture a frame and read off the pixel the bore target lands on (the stream snapshot
+**With a bore laser, let the tool find the dot** (headless; step by step in [RANGE_DAY.md](RANGE_DAY.md)):
+
+```bash
+tbot calib-boresight --laser --laser-turns 4 --range-m 15          # turn the laser in the bore when asked
+tbot calib-boresight --laser --laser-turns 4 --range-m 8 --check   # second distance: reports the error, writes nothing
+```
+
+`--laser-bg` takes a beam-blocked background first (lit rooms, reflections). Every solve keeps the previous
+file as `boresight.prev.json`, and `calib/boresight_laser.png` shows what was measured.
+
+Otherwise capture a frame and read off the pixel the bore target lands on (the stream snapshot
 `http://<pi>:8080/snapshot.jpg` is the easy way), or click it:
 
 ```bash

@@ -94,7 +94,7 @@ init_still_s = 0.3            # gravity initialisation window
 auto_bias = true              # re-zero the gyro whenever the gun is at rest (bias drifts ~1 deg/s as the pod warms up)
 bias_still_s = 1.0            # at rest = every gyro axis within bias_still_dps peak-to-peak for this long
 bias_still_dps = 0.6          # MPU6050 noise at dlpf 98 Hz is ~0.05 deg/s rms; a held gun moves by degrees per second
-bias_max_dps = 2.0            # never take more than this as bias (a slow steady turn is motion, not bias)
+bias_max_dps = 4.0            # never take more than this as bias (rig: 2.4 deg/s of drift from 24 to 63 C)
 
 [gun]                         # Weatherby Element 12 ga, inertia operated
 lock_time_ms = 6.0            # sear release -> primer [INFERENCE]

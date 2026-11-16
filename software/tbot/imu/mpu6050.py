@@ -70,6 +70,7 @@ RESET_WAIT_S = 0.1
 WAKE_WAIT_S = 0.01
 TEMP_INTERVAL_S = 1.0
 MAX_QUEUED_SAMPLES = 20000  # ~40 s at 500 Hz; oldest are dropped if nobody calls read()
+SETTLE_S = 0.05  # samples discarded after configuring the chip (filter start-up transient)
 
 GYRO_LSB_PER_DPS = {250: 131.0, 500: 65.5, 1000: 32.8, 2000: 16.4}
 ACCEL_LSB_PER_G = {2: 16384.0, 4: 8192.0, 8: 4096.0, 16: 2048.0}
@@ -428,6 +429,9 @@ class Mpu6050:
         self._next_temp_ns = 0
         self._regressor.reset(1e9 / self.sample_rate_hz)
         self._reset_fifo()
+        # The digital low-pass filter rings after the device reset: on the rig the first 6-7 samples read up
+        # to 70 deg/s and 0.8 g on a gun at rest. Never publish them.
+        self._settle_left = int(SETTLE_S * self.sample_rate_hz)
 
     def _reset_fifo(self) -> None:
         self._write(REG_USER_CTRL, 0x00)  # FIFO_RESET only acts while FIFO_EN is clear
@@ -487,6 +491,12 @@ class Mpu6050:
             last = t
             fresh.append(ImuSample(t_ns=t, gyro=gyro[i], accel=accel[i], temp_c=temp))
         self._last_t_ns = last
+        skip = getattr(self, "_settle_left", 0)
+        if skip > 0:
+            self._settle_left = max(0, skip - len(fresh))
+            fresh = fresh[skip:]
+            if not fresh:
+                return
         with self._lock:
             self._queue.extend(fresh)
             excess = len(self._queue) - MAX_QUEUED_SAMPLES

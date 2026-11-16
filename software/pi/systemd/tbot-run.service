@@ -1,0 +1,21 @@
+# TBOT live pipeline as a service (installed by scripts/tbotctl install; NOT enabled at boot by default,
+# because the calibration tools need the camera to themselves).
+[Unit]
+Description=TBOT pipeline (camera -> detect -> track -> fire solver)
+After=multi-user.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/TBOT/software
+ExecStart=/home/pi/TBOT/software/scripts/tbot-run.sh
+Restart=on-failure
+RestartSec=3
+# SIGTERM -> the pipeline aborts the actuator and goes limp before exiting
+KillSignal=SIGTERM
+TimeoutStopSec=10
+RuntimeDirectory=tbot
+RuntimeDirectoryPreserve=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -57,6 +57,25 @@ below are a record, not something a checkout restores.
   and local-contrast tests. Solver: extrapolates the gun swing with its angular acceleration.
 - Servo: limp when idle, short bursts, refuses to fire outside calibrated travel.
 
+## Added 2026-11-16 (range preparation; walk-through in [RANGE_DAY.md](RANGE_DAY.md))
+
+- `calib-boresight --laser [--laser-turns N] [--laser-bg] [--check]`: headless bore-laser boresight. Tested on
+  synthetic images and, on the rig, only for the no-dot case (dark room: refuses, writes nothing). **Not yet
+  run with a real laser.**
+- Recoil timing: `tbot run --live` logs `recoil` / `no_recoil` events per fire command from the IMU
+  (`fire.recoil_detect_g = 3`, held for 3 samples); `tbot latency-recoil [--write]` turns them into
+  `actuator.servo.cmd_to_break`. **Thresholds are untested on real recoil** (first live shots will show).
+- Gyro: the attitude filter re-zeroes the gyro whenever the gun rests for 1 s (`attitude.auto_bias`). Measured
+  on the rig at 63 C: 2.2 / 0.0 / -0.9 deg/s left over from the 24 C calibration, removed within 1 s.
+  The MPU-6050 start-up transient (first ~7 samples up to 70 deg/s) is now discarded.
+- `scripts/tbotctl` + `pi/systemd/tbot-run.service` (installed on the Pi, **not** enabled at boot):
+  `tbotctl start [dry|live] | stop | status | log | boot on|off | preflight`. Live mode is kept in `/run`, so
+  a reboot always returns to dry run.
+- Real-footage check: `sessions/sync1` (15 s indoor hand-held swing) replayed armed in dry run: 0 fire
+  decisions out of 749 frames (max P(hit) 0.05) despite ~8 clutter detections per frame.
+- Live dry run on the rig after these changes: 50 fps, 18.3 ms p50 / 25.9 ms p95 per frame, 3 drops in 400.
+- Range access: the Pi is on Ethernet only (wlan0 is not configured). At the range use a direct cable.
+
 ## Frame rate and CPU
 
 - Camera/driver: capture-only 50-200 fps with zero drops; the limit is processing.
@@ -90,7 +109,7 @@ below are a record, not something a checkout restores.
    then re-check the static/barrel mask. These depend on the lens; the IMU, latency and servo values do not.
 2. Secure and strain-relieve the camera ribbon at both ends; prove it with a 60 s hard-swing recording.
 3. Heatsink + airflow/shade for the Pi in the pod.
-4. At the range: `calib-imu bias` with the gun still (temperature), then record sky + clay footage
+4. At the range: rest the gun still for a few seconds after start (the gyro re-zeroes itself), then record sky + clay footage
    (`tbot record`) before trying live shots: detector thresholds, mask and `psf_px` need real footage
    (`calib-detector`). Exposure may need raising with the IR filter fitted.
 5. Optional, with the user present and agreeing: measure the servo return time so doubles can be faster than

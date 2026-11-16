@@ -120,7 +120,7 @@ class AttitudeConfig:
     auto_bias: bool = True
     bias_still_s: float = 1.0
     bias_still_dps: float = 0.6
-    bias_max_dps: float = 2.0
+    bias_max_dps: float = 4.0
 
 
 @dataclass

@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+# Range-day control of the TBOT pipeline on the Pi.
+#   tbotctl install        install the systemd unit (once; needs sudo)
+#   tbotctl start [dry]    start in DRY RUN: decisions are logged and recorded, the servo is never driven
+#   tbotctl start live     start LIVE: the servo pulls the trigger while the arming button is held
+#   tbotctl stop           stop (frees the camera for calibration tools)
+#   tbotctl status         mode, health, last lines of the log
+#   tbotctl log            follow the log
+#   tbotctl boot on|off    start (always in dry run) at power-up, or not
+#   tbotctl preflight      go / no-go checks (tbot doctor + hardware check when the camera is free)
+set -euo pipefail
+unit=tbot-run.service
+here="$(cd -- "$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")/.." && pwd)"
+tbot="${TBOT_BIN:-$HOME/tbot-venv/bin/tbot}"
+cmd=${1:-status}
+case "$cmd" in
+    install)
+        sudo install -m 644 "$here/pi/systemd/$unit" /etc/systemd/system/$unit
+        sudo systemctl daemon-reload
+        chmod +x "$here/scripts/tbot-run.sh" "$here/scripts/tbotctl"
+        sudo ln -sf "$here/scripts/tbotctl" /usr/local/bin/tbotctl
+        echo "installed $unit (not enabled at boot: tbotctl boot on)"
+        ;;
+    start)
+        mode=${2:-dry}
+        [[ $mode == dry || $mode == live ]] || { echo "usage: tbotctl start [dry|live]" >&2; exit 2; }
+        if [[ $mode == live ]]; then
+            echo "LIVE: the servo will pull the trigger whenever the arming button is held and the solver fires."
+            echo "Muzzle downrange, range hot, everyone behind the line."
+            if [[ ${TBOT_YES:-} != 1 ]]; then
+                read -r -p "Type LIVE to continue: " answer
+                [[ $answer == LIVE ]] || { echo "not started"; exit 1; }
+            fi
+        fi
+        sudo mkdir -p /run/tbot
+        echo "$mode" | sudo tee /run/tbot/mode > /dev/null
+        sudo systemctl restart $unit
+        sleep 4
+        "$0" status
+        ;;
+    stop)
+        sudo systemctl stop $unit
+        echo dry | sudo tee /run/tbot/mode > /dev/null 2>&1 || true
+        echo "stopped (camera free; next start defaults to dry run)"
+        ;;
+    status)
+        mode=$(cat /run/tbot/mode 2>/dev/null || echo dry)
+        state=$(systemctl is-active $unit 2>/dev/null || true)
+        echo "service: $state   mode: $mode   boot: $(systemctl is-enabled $unit 2>/dev/null | head -1)"
+        echo "pi: $(vcgencmd measure_temp 2>/dev/null)  $(vcgencmd get_throttled 2>/dev/null)   disk free: $(df -h --output=avail "$here" | tail -1 | tr -d ' ')"
+        echo "sessions: $(find "$here/sessions" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l)   stream: http://$(hostname -I | awk '{print $1}'):8080/"
+        [[ $state == active ]] && journalctl -u $unit -n 8 --no-pager -o cat
+        ;;
+    log) exec journalctl -u $unit -f -o cat ;;
+    boot)
+        case ${2:-} in
+            on) sudo systemctl enable $unit; echo "starts at power-up, always in DRY RUN" ;;
+            off) sudo systemctl disable $unit ;;
+            *) echo "usage: tbotctl boot on|off" >&2; exit 2 ;;
+        esac
+        ;;
+    preflight)
+        cd "$here"
+        "$tbot" doctor || true
+        if systemctl is-active -q $unit; then
+            echo; echo "hardware check skipped: the service holds the camera (tbotctl stop first)"
+        else
+            echo; "$tbot" hwcheck --help > /dev/null 2>&1 && "$tbot" hwcheck || true
+        fi
+        ;;
+    *) sed -n '2,11p' "$0"; exit 2 ;;
+esac
