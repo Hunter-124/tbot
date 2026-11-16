@@ -22,6 +22,7 @@ COMMANDS: dict[str, tuple[str, str]] = {
     "latency-report": ("tbot.tools.latency_report", "print the latency budget (defaults vs measured)"),
     "bench": ("tbot.tools.bench", "per-stage processing time at the configured resolution"),
     "hwcheck": ("tbot.tools.hwcheck", "check every fitted device: camera, IMU, arming switch, PWM/actuator, power, temperature"),
+    "csi-lanes": ("tbot.tools.csi_lanes", "live per-wire view of the camera's MIPI lanes while you handle the ribbon (sudo)"),
     "jog": ("tbot.tools.jog", "bench setup of the trigger actuator (servo pulse widths / PQ12 pulses); arming button held"),
     "hitl": ("tbot.tools.hitl", "hardware-in-the-loop bench: camera films a monitor, every delay photon -> trigger break"),
     "doctor": ("tbot.tools.doctor", "offline config, calibration and layout consistency checks (no hardware)"),

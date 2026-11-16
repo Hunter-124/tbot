@@ -6,8 +6,10 @@ them is fixable by restarting software:
   sensor  - the OV9281 is not streaming (register 0x0100 != 1) although a stream was requested:
             driver / power state; a camera restart or reboot can fix it.
   link    - the sensor IS streaming but the Pi's CSI receiver (unicam) sees no packets at all
-            (its interrupt counter does not move): the MIPI lanes are not reaching the Pi —
-            ribbon contact, connector or the camera board. Restarts cannot fix it.
+            (its interrupt counter does not move). That does NOT mean every lane is dead: one bad
+            conductor of the clock pair is enough, because no packet is received until the clock
+            lane completes its LP->HS handshake. `sudo tbot csi-lanes` shows each wire live.
+            Restarts cannot fix it.
   frames  - unicam interrupts arrive but no frame completes: packets are corrupted on the way
             (marginal contact, interference) or the format does not match.
 
@@ -116,9 +118,10 @@ def verdict(streaming: bool | None, interrupts: int | None, frames: int, window_
         head = ("the sensor reports it is streaming, but" if streaming else
                 "the sensor state could not be read (no sudo i2ctransfer), and")
         return LinkDiagnosis("link", streaming, 0, window_s,
-                             f"{head} the Pi's CSI receiver got 0 packets in {window_s:.1f} s: the MIPI lanes are "
-                             "not reaching the Pi (ribbon contact at either end, the connector latch, or the camera "
-                             "board). Restarts and reboots cannot fix this")
+                             f"{head} the Pi's CSI receiver got 0 packets in {window_s:.1f} s: at least one MIPI "
+                             "conductor is not getting through (one bad wire of the clock pair is enough). Restarts "
+                             "and reboots cannot fix this; stop this tool and run `sudo tbot csi-lanes` to see which "
+                             "wire, live, while you handle the ribbon")
     return LinkDiagnosis("frames", streaming, interrupts, window_s,
                          f"the CSI receiver saw {interrupts} interrupts in {window_s:.1f} s but no frame completed: "
                          "packets are arriving corrupted (marginal contact or interference) or the format does not match")
