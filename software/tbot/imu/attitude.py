@@ -133,6 +133,12 @@ class AttitudeEstimator:
     (the gun must be still); after that the gyro integrates and the accelerometer pulls the estimated
     up-vector toward the measured one (tilt only, never heading) whenever the specific force magnitude
     is within cfg.attitude.accel_gate_g of g.
+
+    Gyro bias (cfg.attitude.auto_bias): the stored bias is from one temperature and an MPU6050 drifts by
+    ~1 deg/s over a warm-up. Whenever every gyro axis stays within bias_still_dps (peak to peak) for
+    bias_still_s - a gun on a rack or a table; a held gun never is that quiet - the mean rate of that
+    window is the remaining bias and is removed from then on (never more than bias_max_dps in total, so
+    a slow steady rotation on a turntable cannot be mistaken for bias beyond that).
     """
 
     def __init__(self, cfg: "Config"):
@@ -154,6 +160,18 @@ class AttitudeEstimator:
         self._ts: list[int] = []
         self._Rs: list[tuple] = []  # row-major 9-tuples
         self._ws: list[tuple] = []  # (wx, wy, wz) rad/s
+        # zero-rate gyro bias update (see the class docstring)
+        self.auto_bias = bool(getattr(att, "auto_bias", False))
+        self._zb_window_ns = int(float(getattr(att, "bias_still_s", 1.0)) * 1e9)
+        self._zb_range = math.radians(float(getattr(att, "bias_still_dps", 0.5)))
+        self._zb_max = math.radians(float(getattr(att, "bias_max_dps", 2.0)))
+        self.gyro_bias_resid = (0.0, 0.0, 0.0)  # rad/s, gun frame: subtracted from every sample
+        self.bias_updates = 0
+        self._zb_t0: int | None = None
+        self._zb_n = 0
+        self._zb_sum = [0.0, 0.0, 0.0]
+        self._zb_lo = [0.0, 0.0, 0.0]
+        self._zb_hi = [0.0, 0.0, 0.0]
 
     @property
     def _R(self) -> np.ndarray:
@@ -185,10 +203,14 @@ class AttitudeEstimator:
                 dt = MAX_GAP_S
             g = s.gyro
             gx, gy, gz = float(g[0]), float(g[1]), float(g[2])
-            R = _mul9(R, _exp9(gx * dt, gy * dt, gz * dt))
             a = s.accel
             ax, ay, az = float(a[0]), float(a[1]), float(a[2])
             norm = math.sqrt(ax * ax + ay * ay + az * az)
+            if self.auto_bias:
+                self._zero_rate(t, gx, gy, gz, abs(norm - G_MPS2) <= gate)
+                b = self.gyro_bias_resid
+                gx, gy, gz = gx - b[0], gy - b[1], gz - b[2]
+            R = _mul9(R, _exp9(gx * dt, gy * dt, gz * dt))
             if norm >= MIN_ACCEL_NORM and abs(norm - G_MPS2) <= gate:
                 # Rotating the body by gain * (up_meas x up_pred) tilts the estimate toward the measurement;
                 # the axis is perpendicular to the up-vector, so heading is untouched.
@@ -206,6 +228,36 @@ class AttitudeEstimator:
             self._R9 = R
             if self._Rs:
                 self._Rs[-1] = R
+
+    def _zero_rate(self, t_ns: int, gx: float, gy: float, gz: float, accel_ok: bool) -> None:
+        """Track a window of RAW rates; when it is long and quiet enough its mean becomes the bias."""
+        lo, hi, acc = self._zb_lo, self._zb_hi, self._zb_sum
+        if self._zb_t0 is not None and accel_ok:
+            if gx < lo[0]: lo[0] = gx
+            elif gx > hi[0]: hi[0] = gx
+            if gy < lo[1]: lo[1] = gy
+            elif gy > hi[1]: hi[1] = gy
+            if gz < lo[2]: lo[2] = gz
+            elif gz > hi[2]: hi[2] = gz
+            rng = self._zb_range
+            if hi[0] - lo[0] <= rng and hi[1] - lo[1] <= rng and hi[2] - lo[2] <= rng:
+                acc[0] += gx
+                acc[1] += gy
+                acc[2] += gz
+                self._zb_n += 1
+                if t_ns - self._zb_t0 < self._zb_window_ns or self._zb_n < 20:
+                    return
+                n = self._zb_n
+                mx, my, mz = acc[0] / n, acc[1] / n, acc[2] / n
+                if math.sqrt(mx * mx + my * my + mz * mz) <= self._zb_max:
+                    self.gyro_bias_resid = (mx, my, mz)
+                    self.bias_updates += 1
+        # (re)start the window at this sample
+        self._zb_t0 = t_ns if accel_ok else None
+        self._zb_n = 1
+        acc[0], acc[1], acc[2] = gx, gy, gz
+        lo[0], lo[1], lo[2] = gx, gy, gz
+        hi[0], hi[1], hi[2] = gx, gy, gz
 
     def _init_step(self, t_ns: int, accel: np.ndarray, gyro: np.ndarray) -> None:
         self._init_t.append(t_ns)

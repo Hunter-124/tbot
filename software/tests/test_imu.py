@@ -573,3 +573,46 @@ def test_is_still_pose_needs_a_held_new_pose():
     # moving (gyro) or shaking (accel) is not held
     assert not is_still_pose(gyro + np.radians([0.0, 0.0, 10.0]), accel, bias, [])
     assert not is_still_pose(gyro, accel + rng.normal(0.0, 1.0, (200, 3)), bias, [])
+
+
+# ------------------------------------------------------------------------------ zero-rate gyro bias update
+def _bias_samples(rate_fn, seconds: float, noise_dps: float = 0.05, hz: int = 500, seed: int = 3, t0_ns: int = 0):
+    rng = np.random.default_rng(seed)
+    out = []
+    for k in range(int(seconds * hz)):
+        t = k / hz
+        gyro = np.radians(np.asarray(rate_fn(t), dtype=np.float64) + rng.normal(0.0, noise_dps, 3))
+        out.append(ImuSample(t_ns=t0_ns + int(t * 1e9), accel=np.array([0.0, 0.0, G_MPS2]), gyro=gyro))
+    return out
+
+
+def test_auto_bias_removes_a_warm_up_drift_while_the_gun_rests():
+    cfg = load_config()
+    est = AttitudeEstimator(cfg)
+    bias = np.array([0.4, -1.1, 0.7])  # deg/s left over after the stored calibration
+    est.update(_bias_samples(lambda t: bias, 4.0))
+    assert est.bias_updates >= 2
+    assert np.degrees(est.gyro_bias_resid) == pytest.approx(bias, abs=0.02)
+    # the rate handed to the solver is clean, and the heading stopped drifting
+    assert np.degrees(est.omega_g(int(4e9))) == pytest.approx(np.zeros(3), abs=0.25)
+    yaw0 = math.atan2(est._R[1, 0], est._R[0, 0])
+    est.update(_bias_samples(lambda t: bias, 4.0, seed=4, t0_ns=int(4e9)))
+    yaw1 = math.atan2(est._R[1, 0], est._R[0, 0])
+    assert abs(math.degrees(yaw1 - yaw0)) < 0.1  # uncorrected it would be 2.8 deg
+
+
+def test_auto_bias_ignores_motion():
+    cfg = load_config()
+    # a held gun: slow tremor of a few deg/s
+    est = AttitudeEstimator(cfg)
+    est.update(_bias_samples(lambda t: [1.0 + 2.0 * math.sin(6.0 * t), 1.5 * math.cos(4.0 * t), 0.5], 5.0))
+    assert est.bias_updates == 0 and est.gyro_bias_resid == (0.0, 0.0, 0.0)
+    # a steady slow turn (turntable) faster than bias_max_dps is motion, not bias
+    est = AttitudeEstimator(cfg)
+    est.update(_bias_samples(lambda t: [0.0, 0.0, 5.0], 5.0))
+    assert est.bias_updates == 0
+    # switched off
+    cfg.attitude.auto_bias = False
+    est = AttitudeEstimator(cfg)
+    est.update(_bias_samples(lambda t: [0.4, 0.0, 0.0], 4.0))
+    assert est.bias_updates == 0

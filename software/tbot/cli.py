@@ -18,6 +18,7 @@ COMMANDS: dict[str, tuple[str, str]] = {
     "latency-camera": ("tbot.tools.latency_camera", "LED test: exposure -> userspace latency, timestamp offset"),
     "latency-actuator": ("tbot.tools.latency_actuator", "fire command -> trigger break latency (arming held)"),
     "latency-mic": ("tbot.tools.latency_mic", "fire command -> dry-fire click on a microphone, one trial per recock"),
+    "latency-recoil": ("tbot.tools.latency_recoil", "trigger delay from the recoil of recorded live shots -> calib/latency.json"),
     "latency-report": ("tbot.tools.latency_report", "print the latency budget (defaults vs measured)"),
     "bench": ("tbot.tools.bench", "per-stage processing time at the configured resolution"),
     "hwcheck": ("tbot.tools.hwcheck", "check every fitted device: camera, IMU, arming switch, PWM/actuator, power, temperature"),

@@ -117,6 +117,10 @@ class AttitudeConfig:
     accel_gate_g: float
     history_s: float
     init_still_s: float
+    auto_bias: bool = True
+    bias_still_s: float = 1.0
+    bias_still_dps: float = 0.6
+    bias_max_dps: float = 2.0
 
 
 @dataclass
@@ -158,6 +162,8 @@ class FireConfig:
     debris_window_ms: float = 1500.0
     debris_birth_margin_ms: float = 50.0
     recoil_settle_ms: float = 100.0
+    recoil_detect_g: float = 3.0
+    recoil_window_ms: float = 500.0
 
 
 @dataclass

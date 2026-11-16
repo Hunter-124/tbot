@@ -91,6 +91,10 @@ accel_gain = 0.02             # complementary-filter gain per sample when the ac
 accel_gate_g = 0.15           # trust accel only when | |a| - g | < gate
 history_s = 2.0
 init_still_s = 0.3            # gravity initialisation window
+auto_bias = true              # re-zero the gyro whenever the gun is at rest (bias drifts ~1 deg/s as the pod warms up)
+bias_still_s = 1.0            # at rest = every gyro axis within bias_still_dps peak-to-peak for this long
+bias_still_dps = 0.6          # MPU6050 noise at dlpf 98 Hz is ~0.05 deg/s rms; a held gun moves by degrees per second
+bias_max_dps = 2.0            # never take more than this as bias (a slow steady turn is motion, not bias)
 
 [gun]                         # Weatherby Element 12 ga, inertia operated
 lock_time_ms = 6.0            # sear release -> primer [INFERENCE]
@@ -121,6 +125,8 @@ debris_spread_deg_s = 15.0    # predicted path, widening at this rate (fragments
 debris_window_ms = 1500.0     # for this long after the predicted break,
 debris_birth_margin_ms = 50.0 # counting tracks born from this long before the break, are fragments
 recoil_settle_ms = 100.0      # after a shot's exit, a new target needs min_track_hits detections later than this
+recoil_detect_g = 3.0         # live fire: |accel| this far from 1 g (held for several samples) after a command = the shot.
+recoil_window_ms = 500.0      # Logged as recoil/no_recoil events; `tbot latency-recoil` calibrates the trigger delay from them
 min_range_m = 8.0
 max_range_m = 40.0
 min_elevation_deg = -5.0

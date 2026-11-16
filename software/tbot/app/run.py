@@ -30,6 +30,7 @@ from tbot.config import (
 )
 from tbot.fire.ballistics import ShotModel
 from tbot.fire.engagement import Engagement
+from tbot.fire.recoil import RecoilDetector, summarise
 from tbot.fire.solver import FireSolver
 from tbot.hw.actuator import make_actuator
 from tbot.hw.arming import ArmingSwitch
@@ -81,6 +82,9 @@ class Pipeline:
         self.budget: LatencyBudget = calib.budget or LatencyBudget.from_config(cfg, calib.latency)
         self.solver = FireSolver(cfg, self.shot, self.mount, self.budget)
         self.engagement = Engagement(cfg, self.tracker)
+        self.recoil = RecoilDetector.from_config(cfg)
+        self.recoil_delays_ms: list[float] = []
+        self.no_recoil = 0
 
         self._own_imu = imu is None
         self.imu = imu if imu is not None else open_imu(cfg, calib, source)
@@ -274,6 +278,21 @@ class Pipeline:
             if samples:
                 rec.push_imu(samples)
 
+    def _on_recoil(self, rec) -> None:
+        """A live fire command resolved: the IMU saw the shot (and when), or it did not."""
+        expected = self.budget.cmd_to_break_ms[str(self.cfg.actuator.type)] + self.budget.lock_time_ms
+        if rec.detected:
+            self.recoil_delays_ms.append(float(rec.delay_ms))
+            log.info("shot %d: recoil %.1f ms after the command (budget %.1f ms, %+.1f)  peak %.1f g",
+                     rec.shot, rec.delay_ms, expected, rec.delay_ms - expected, rec.peak_g)
+        else:
+            self.no_recoil += 1
+            log.warning("shot %d: NO RECOIL within %.0f ms of the command - the gun did not fire (lever slipped, "
+                        "safety on, empty chamber or a dud)", rec.shot, self.recoil.window_ns / 1e6)
+        ev = rec.as_event()
+        ev["expected_ms"] = expected
+        self._event(ev)
+
     def _event(self, ev: dict) -> None:
         self.events.append(ev)
         if self.recorder is not None:
@@ -366,6 +385,9 @@ class Pipeline:
         t_imu = time.perf_counter_ns()
         if samples:
             self.attitude.update(samples)
+            if self.recoil.waiting:
+                for rec in self.recoil.feed(samples):
+                    self._on_recoil(rec)
         R_wg = np.asarray(self.attitude.R_wg(int(frame.t_exposure_ns)), dtype=np.float64)
         t_att = time.perf_counter_ns()
 
@@ -415,6 +437,8 @@ class Pipeline:
                     fired = bool(self.actuator.fire(cmd_t_ns))
                     if not fired:
                         log.warning("actuator refused the fire command (interlock open?)")
+                    elif not isinstance(self.imu, NullImu) and str(cfg.actuator.type) in ("servo", "pq12"):
+                        self.recoil.expect(cmd_t_ns, self.shots + 1)  # a real trigger: watch for the shot
                 else:
                     log.warning("actuator command skipped: source clock did not advance")
             else:
@@ -640,6 +664,15 @@ class Pipeline:
             self.shots,
             int(getattr(self.source, "dropped", 0)),
         )
+        stats = summarise(self.recoil_delays_ms)
+        if stats or self.no_recoil:
+            expected = self.budget.cmd_to_break_ms[str(self.cfg.actuator.type)] + self.budget.lock_time_ms
+            if stats:
+                log.info("recoil: %d shot(s) detected, command -> ignition median %.1f ms (sigma %.1f); the budget "
+                         "assumes %.1f ms. `tbot latency-recoil` turns the recorded shots into calib/latency.json",
+                         stats["n"], stats["median"], stats["std"], expected)
+            if self.no_recoil:
+                log.warning("recoil: %d fire command(s) with no shot", self.no_recoil)
         return rc
 
 
