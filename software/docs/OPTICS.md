@@ -13,7 +13,8 @@ quoted from a source (innomaker CAM-MIPIOV9281 V2 user manual V1.4, `design/layo
 | Modes | 1280×800, 1280×720, 640×400 (2×2 binned) | innomaker manual V1.4 §2 |
 | Frame rate | up to ~144 fps at 1280×800, 210–309 fps at 640×400 (vendor; Pi 3B achieved rate unverified) | innomaker manual V1.4 |
 | Interface | 2-lane MIPI CSI-2, RAW8/RAW10, `dtoverlay=ov9281`, libcamera/Picamera2 | innomaker manual V1.4 |
-| Lens | M12, f = 2.8 mm, F2.2, vendor "FOV D148 / H118", TV distortion < −17 % | innomaker manual V1.4 §3.1 |
+| Lens (fitted 2026-11) | JETSECAM M12 **f = 12 mm**, 1/1.8" format, IR-cut filter, sold as "no distortion"; aperture not stated | lens barrel marking, Amazon listing |
+| Lens (kit, replaced) | M12, f = 2.8 mm, F2.2, vendor "FOV D148 / H118", TV distortion < −17 % | innomaker manual V1.4 §3.1 |
 | Mount | nose module, lens axis gun (Y 0, Z 8), lens tip X 546.2, board not rotated | layout.md "As-built camera" |
 
 Runtime default is **640 × 400 @ 120 fps, 500 µs exposure, gain 1.0** (`config/default.toml [camera]`): the binned
@@ -45,6 +46,18 @@ To rehearse the mono path on a colour webcam, set `camera.emulate_mono`:
 orange long-pass filter, §5).
 
 ## 3. Field of view: the vendor number is for a different image circle
+
+**Fitted 12 mm lens.** Pinhole, f = 12 mm: fx = fy = 4000 px at 1280 × 800, **2000 px at 640 × 400**;
+HFOV 18.2°, VFOV 11.4°, DFOV 21.4°; 0.5 mrad per binned pixel, so a 108 mm clay is 14 px at 15 m and 7 px at 30 m.
+The 1/1.8" image circle (≈ 9 mm) is twice the sensor diagonal (4.5 mm): only its centre is used, so distortion is
+negligible `[INFERENCE: "no distortion" listing, < 1 % at the 1/1.8" corner -> well under 1 px here]` and the prior
+is `model = "pinhole"`, D = 0, set in the rig's `config/local.toml` `[optics]` (`default.toml` keeps the 2.8 mm kit lens because the simulator and tests are built on its geometry). The marked focal length of hobby M12 lenses is typically within a few percent
+`[INFERENCE]`: refine fx with a far target of known angular size (two marks a measured distance apart at a
+measured range) before trusting size-based range; the principal point is absorbed by the boresight calibration.
+A ChArUco board cannot be used at focus: hyperfocal H = f²/(N·c) ≈ 12–15 m (N 1.6–2.0, c = 6 µm), so the board
+is only sharp beyond ~7 m, where 25 mm squares are ~7 px.
+
+The rest of this section is about the kit 2.8 mm lens.
 
 A 2.8 mm lens over a 3.84 mm-wide sensor cannot give 118° horizontally:
 

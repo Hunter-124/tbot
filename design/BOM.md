@@ -57,6 +57,7 @@ fitting: [lens_lock_nut.md](lens_lock_nut.md).
 |---|---|---|
 | 1 | Raspberry Pi 3 Model B v1.2 | carrier_L, right side up: solder side to the inner wall on 4 rooted standoff blocks, components toward cover_L |
 | 1 | innomaker CAM-MIPIOV9281 V2 (OV9281 mono global shutter) | nose, under `camera_cover`, 4 × M2 × 8 |
+| 1 | JETSECAM 12 mm M12 lens, 1/1.8", IR-cut filter, "no distortion" (Amazon, ordered 2026-10-25) | replaces the camera kit's 2.8 mm lens; focus at ~15 m and lock with `lens_lock_nut`. Optics: software/docs/OPTICS.md §3 |
 | 1 | Camera FFC 15-pin, **200 mm** (the 150 mm kit cable still does not reach) | route ≈ 165 mm (rev U, sideways from the camera into the Pi lobe); Z-fold the ~35 mm excess flat behind the Pi |
 | 1 | GY-521 (MPU-6050) | nose_clamp_R floor pocket, 2 × M3 × 6 SHCS |
 | 2 | XL4015 HW-083 buck module | screw terminals removed on both, leads soldered to the IN/OUT pads. #1 → Pi, **5.1 V**, crosswise in the belly. #2 → servo, **7.0 V**, standing (long axis vertical) in the carrier_R buck bay behind the pack, solder side to the inner wall, components outboard, IN pads at the bottom and OUT pads at the top. Set each voltage on a bench supply before anything is connected |
