@@ -1,11 +1,15 @@
 """Picamera2 frame source for the innomaker CAM-MIPIOV9281 (OV9281 mono global shutter).
 
 picamera2 is imported lazily (inside the class) so laptop runs never touch it.
-The main stream is YUV420; only the Y plane is used, which is the sensor's mono image.
+The main stream is YUV420; only the Y plane is used, which is the sensor's mono image. It is requested FULL
+RANGE (sYCC: black 0, white 255). picamera2's default for a small video stream is video range (SMPTE 170M:
+black 16, white 235 - measured on the rig), which wastes 14 % of the 8 bits and means nothing ever reaches the
+"saturated" levels (250, 255) the tools test for.
 """
 
 from __future__ import annotations
 
+import dataclasses
 import sys
 import threading
 from concurrent import futures
@@ -18,7 +22,8 @@ import numpy as np
 from tbot.camera.base import SourceBase
 from tbot.types import Frame, ImuSource, MonotonicClock
 
-__all__ = ["PicamSource", "select_sensor_mode", "extract_y_plane", "exposure_mid_ns"]
+__all__ = ["PicamSource", "select_sensor_mode", "extract_y_plane", "exposure_mid_ns", "tone_curve_for",
+           "ae_limits"]
 
 _NO_PICAMERA2 = (
     "picamera2 is not available: this source only runs on a Raspberry Pi with libcamera.\n"
@@ -101,6 +106,49 @@ def extract_y_plane(array: np.ndarray, width: int, height: int) -> np.ndarray:
     return y.copy()
 
 
+def tone_curve_for(picamera2_cls: Any, properties: dict):
+    """The ISP tone curve libcamera applies for this sensor: rpi.contrast gamma_curve of its tuning file
+    (<model>_mono.json for a mono sensor), as a full-range ToneCurve. Falls back to the built-in OV9281 curve:
+    the auto-exposure is closed loop, so a wrong curve costs it an extra correction, not its accuracy."""
+    from tbot.camera.autoexposure import ToneCurve  # noqa: PLC0415
+
+    model = str(properties.get("Model", "")).lower()
+    names = ([f"{model}_mono.json"] if properties.get("ColorFilterArrangement") == 5 else []) + [f"{model}.json"]
+    for name in names if model else []:
+        try:
+            tuning = picamera2_cls.load_tuning_file(name)
+            contrast = picamera2_cls.find_tuning_algo(tuning, "rpi.contrast")
+            if contrast.get("ce_enable"):
+                break  # adaptive contrast: the curve moves with the scene, the file's is only its starting point
+            return ToneCurve(contrast["gamma_curve"])
+        except Exception:  # noqa: BLE001 - missing file / other layout: try the next name, then the default
+            continue
+    return ToneCurve()
+
+
+def ae_limits(settings: Any, controls: dict, frame_us: float) -> Any:
+    """AeSettings narrowed to what the configured camera can do: its ExposureTime / AnalogueGain control
+    ranges, and an exposure that fits in the frame period."""
+    lo_e, hi_e = settings.min_exposure_us, max(settings.dim_exposure_us, settings.max_exposure_us)
+    lo_g, hi_g = settings.min_gain, settings.max_gain
+    try:
+        e = controls["ExposureTime"]
+        lo_e, hi_e = max(lo_e, float(e[0])), min(hi_e, float(e[1]))
+    except (KeyError, TypeError, IndexError, ValueError):
+        pass
+    try:
+        g = controls["AnalogueGain"]
+        lo_g, hi_g = max(lo_g, float(g[0])), min(hi_g, float(g[1]))
+    except (KeyError, TypeError, IndexError, ValueError):
+        pass
+    hi_e = max(lo_e, min(hi_e, float(frame_us) - 300.0))  # the sensor needs a few lines of blanking
+    hi_g = max(lo_g, hi_g)
+    return dataclasses.replace(
+        settings, min_exposure_us=lo_e, max_exposure_us=min(max(settings.max_exposure_us, lo_e), hi_e),
+        dim_exposure_us=min(max(settings.dim_exposure_us, lo_e), hi_e), min_gain=lo_g, max_gain=hi_g,
+        knee_gain=min(max(settings.knee_gain, lo_g), hi_g))
+
+
 def exposure_mid_ns(sensor_timestamp_ns: int, exposure_us: float, offset_ns: int = 0) -> int:
     """Mid-exposure time from the kernel start-of-frame timestamp, plus the calibrated offset."""
     return int(sensor_timestamp_ns) - int(round(float(exposure_us) * 1000.0 / 2.0)) + int(offset_ns)
@@ -149,8 +197,10 @@ class PicamSource(SourceBase):
         self._clock_warned = False
         self._camera_closed = False
         self.start_probe = None  # linkcheck.LinkDiagnosis of the last start (Pi only), see _probe_link
+        self.black_level_state = "unknown"  # ok | fixed | failed | unknown, see _fix_black_level
 
         try:
+            from libcamera import ColorSpace  # noqa: PLC0415
             from picamera2 import Picamera2  # noqa: PLC0415 - Pi-only, imported lazily by contract
         except ImportError as exc:
             raise RuntimeError(_NO_PICAMERA2) from exc
@@ -160,13 +210,10 @@ class PicamSource(SourceBase):
         self.sensor_mode = select_sensor_mode(self._picam2.sensor_modes, self.width, self.height)
 
         frame_us = int(round(1e6 / max(self.nominal_fps, 1e-3)))
-        # libcamera's AE stays off: tbot's controller (camera/autoexposure.py) caps the exposure time for motion
-        # blur, which libcamera's would not. auto_exposure=false means the fixed exposure_us / analogue_gain.
+        # libcamera's AE stays off: tbot's controller (camera/autoexposure.py) meters for the detector and knows
+        # the motion-blur budget. auto_exposure=false means the fixed exposure_us / analogue_gain.
         self._ae = None
-        if cam.auto_exposure:
-            from tbot.camera.autoexposure import AeSettings, AutoExposure  # noqa: PLC0415
-            self._ae = AutoExposure(AeSettings.from_camera(cam), self._exposure_us, self._gain)
-            self._exposure_us, self._gain = self._ae.exposure_us, self._ae.gain
+        self._digital_gain = 1.0
         controls: dict[str, Any] = {
             "FrameDurationLimits": (frame_us, frame_us),
             "AeEnable": False,
@@ -178,8 +225,22 @@ class PicamSource(SourceBase):
             raw={"size": _mode_size(self.sensor_mode)},
             buffer_count=int(cam.buffer_count),
             controls=controls,
+            colour_space=ColorSpace.Sycc(),  # full range: Y 0..255 (see the module docstring)
         )
         self._picam2.configure(config)
+        if cam.auto_exposure:
+            from tbot.camera.autoexposure import AeSettings, AutoExposure  # noqa: PLC0415
+            settings = ae_limits(AeSettings.from_camera(cam), dict(self._picam2.camera_controls), frame_us)
+            self._ae = AutoExposure(settings, self._exposure_us, self._gain,
+                                    tone_curve_for(Picamera2, dict(self._picam2.camera_properties)))
+            if (self._ae.exposure_us, self._ae.gain) != (self._exposure_us, self._gain):
+                self._exposure_us, self._gain = self._ae.exposure_us, self._ae.gain
+                self._picam2.set_controls({"ExposureTime": int(round(self._exposure_us)), "AnalogueGain": self._gain})
+
+    @property
+    def ae_status(self):
+        """autoexposure.AeStatus of the last metered frame, or None with auto-exposure off."""
+        return None if self._ae is None else self._ae.status
 
     @property
     def applied_timestamp_offset_ns(self) -> int:
@@ -196,9 +257,23 @@ class PicamSource(SourceBase):
         self._stop.clear()
         self.start_probe = None
         self._picam2.start()
+        self._fix_black_level()
         self._thread = threading.Thread(target=self._capture_loop, name="picam-capture", daemon=True)
         self._thread.start()
         threading.Thread(target=self._probe_link, name="picam-probe", daemon=True).start()
+
+    def _fix_black_level(self) -> None:
+        """The sensor's black level must be the one the ISP subtracts (linkcheck.ensure_black_level has the
+        measurement). Done at every start: a power cycle resets it and the 640x400 mode does not set it."""
+        from tbot.camera import linkcheck  # noqa: PLC0415
+
+        self.black_level_state, found = linkcheck.ensure_black_level()
+        if self.black_level_state == "fixed":
+            print(f"tbot: camera black level was {found} (sensor power-on value), set to {linkcheck.BLC_TARGET} "
+                  "to match the ISP: shadows are no longer cut off", file=sys.stderr)
+        elif self.black_level_state == "failed":
+            print(f"tbot: camera black level is {found}, the ISP assumes {linkcheck.BLC_TARGET}, and it could not "
+                  "be set: dark parts of the image read 0", file=sys.stderr)
 
     PROBE_WINDOW_S = 0.7
 
@@ -278,7 +353,9 @@ class PicamSource(SourceBase):
         ae = self._ae
         if ae is None:
             return
-        new = ae.update(frame.image, frame.exposure_us, frame.gain)
+        # the image reflects exposure x analogue gain x the ISP's digital gain (libcamera makes up the exposure
+        # time's line quantisation with it), so that product is what the controller is told
+        new = ae.update(frame.image, frame.exposure_us, frame.gain * self._digital_gain, frame.t_capture_ns / 1e9)
         if new is not None:
             self._exposure_us, self._gain = new
             self._picam2.set_controls({"AeEnable": False, "ExposureTime": int(round(new[0])),
@@ -318,6 +395,7 @@ class PicamSource(SourceBase):
             image = cv2.rotate(image, cv2.ROTATE_180)
         exposure_us = float(metadata.get("ExposureTime", self._exposure_us))
         gain = float(metadata.get("AnalogueGain", self._gain))
+        self._digital_gain = float(metadata.get("DigitalGain", 1.0) or 1.0)
         sensor_ts = metadata.get("SensorTimestamp")
         if sensor_ts is None:
             t_exposure_ns = t_capture_ns - int(round(exposure_us * 1000.0 / 2.0)) + self._offset_ns

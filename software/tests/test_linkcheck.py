@@ -53,6 +53,36 @@ def test_sensor_streaming_parses_i2ctransfer(monkeypatch):
     assert lc.sensor_streaming(run) is None
 
 
+def test_black_level_is_set_to_what_the_isp_subtracts(monkeypatch):
+    monkeypatch.setattr(lc, "_sensor_bus_addr", lambda: (10, 0x60))
+
+    class Sensor:
+        """i2ctransfer against a two-byte register at 0x4002; `stuck` = writes are ignored."""
+
+        def __init__(self, value, stuck=False, rc=0):
+            self.value, self.stuck, self.rc, self.writes = value, stuck, rc, 0
+
+        def __call__(self, cmd, **kw):
+            args = cmd[cmd.index("-y") + 2:]
+            assert args[0] in ("w2@0x60", "w4@0x60") and args[1:3] == ["0x40", "0x02"]
+            if self.rc:
+                return subprocess.CompletedProcess(cmd, self.rc, "", "sudo: a password is required")
+            if args[0] == "w4@0x60":
+                self.writes += 1
+                if not self.stuck:
+                    self.value = (int(args[3], 16) << 8) | int(args[4], 16)
+                return subprocess.CompletedProcess(cmd, 0, "", "")
+            return subprocess.CompletedProcess(cmd, 0, f"0x{self.value >> 8:02x} 0x{self.value & 255:02x}\n", "")
+
+    power_on = Sensor(0x0010)                      # 640x400 straight after power-on
+    assert lc.ensure_black_level(power_on) == ("fixed", 16) and power_on.value == 0x0040
+    assert lc.ensure_black_level(power_on) == ("ok", 64) and power_on.writes == 1     # nothing written twice
+    assert lc.ensure_black_level(Sensor(0x0010, stuck=True)) == ("failed", 16)
+    assert lc.ensure_black_level(Sensor(0x0010, rc=1)) == ("unknown", None)           # no passwordless sudo
+    monkeypatch.setattr(lc, "_sensor_bus_addr", lambda: None)
+    assert lc.ensure_black_level(power_on) == ("unknown", None)                       # not a Pi
+
+
 def test_diagnose_measures_the_interrupt_delta(monkeypatch):
     counts = iter([1000, 1000])
     monkeypatch.setattr(lc, "unicam_interrupts", lambda: next(counts))

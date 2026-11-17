@@ -87,6 +87,7 @@ def main(argv: list[str] | None = None) -> int:
     if cfg.camera.auto_exposure:  # nothing moves while focusing: long exposure, low gain = a clean sharpness number
         cfg.camera.ae_max_exposure_us = min(float(args.max_exposure_us), 0.9e6 / max(float(cfg.camera.fps), 1.0))
         cfg.camera.ae_max_gain = min(float(cfg.camera.ae_max_gain), 4.0)
+        cfg.camera.ae_hold_s, cfg.camera.ae_up_stops_per_s = 0.0, 8.0  # static scene: brighten as fast as it darkens
     # live camera: a CSI stall reopens the camera instead of ending the session (RecoveringSource)
     source = open_live_source(cfg.camera.source, cfg, calib)
     live = bool(getattr(source, "endless", False))

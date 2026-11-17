@@ -142,12 +142,16 @@ def run_checks(cfg):
         if not math.isfinite(f):
             raise ValueError("non-finite focal length")
         r.add("Camera", "projection", "PASS", f"on-axis fx={f:.1f} px ({'calibrated' if intr else 'nominal'})", "calibrate intrinsics for this camera")
+        ae = bool(cfg.camera.auto_exposure)  # then the exposure is whatever the light asks for, within these two
+        exposure_us = float(cfg.camera.ae_max_exposure_us) if ae else float(cfg.camera.exposure_us)
+        dim_us = max(float(cfg.camera.ae_dim_exposure_us), exposure_us)
         for distance in (10, 20, 40):
-            blur = f * 20 * cfg.camera.exposure_us / 1e6 / distance
+            blur = f * 20 * exposure_us / 1e6 / distance
+            dim = f" (dim light: up to {f * 20 * dim_us / 1e6 / distance:.1f} px)" if ae and dim_us > exposure_us else ""
             diameter = f * cfg.mount.clay_diameter_m / distance
             area = math.pi * (diameter / 2) ** 2
             r.check("Camera", f"clay {distance} m", cfg.detector.min_area_px <= area <= cfg.detector.max_area_px,
-                    f"20 m/s transverse blur ~{blur:.2f} px; face-on clay ~{diameter:.2f} px diameter, ~{area:.1f} px² vs detector {cfg.detector.min_area_px}–{cfg.detector.max_area_px} px² [INFERENCE, on-axis]",
+                    f"20 m/s transverse blur ~{blur:.2f} px{dim}; face-on clay ~{diameter:.2f} px diameter, ~{area:.1f} px² vs detector {cfg.detector.min_area_px}–{cfg.detector.max_area_px} px² [INFERENCE, on-axis]",
                     "measure detector thresholds on real clays; edge-on clays and segmentation reduce area", "WARN")
     except (ValueError, TypeError, KeyError, IndexError, ZeroDivisionError) as exc:
         r.add("Camera", "projection", "FAIL", str(exc), "fix camera dimensions, optics or intrinsics calibration")

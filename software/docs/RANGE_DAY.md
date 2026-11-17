@@ -24,8 +24,9 @@ The camera must be free: stop anything using it (`tbotctl stop`, Ctrl-C a `tbot 
    It finds the dot by itself. Between measurements it asks you to turn the laser a quarter turn in the bore:
    a bore laser is never exactly on the bore axis, and the centre of the circle the dot traces is the bore.
    The printed "dot circle radius" is how wrong a single reading would have been.
-   - "no laser dot": the room is too bright or the exposure too short — add
-     `--set camera.exposure_us=4000 --set camera.analogue_gain=4`, dim the lights.
+   - "no laser dot": the room is too bright or the exposure too short — dim the lights, or fix a longer
+     exposure with `--set camera.auto_exposure=false --set camera.exposure_us=4000 --set camera.analogue_gain=4`
+     (auto-exposure sets it for the room, not for the dot).
    - "ambiguous" / "glare": add `--laser-bg` (it asks you to block the beam for a background frame).
    - A lens with an IR-pass filter cannot see a red or green laser: boresight before fitting such a filter,
      or use an IR laser.
@@ -60,7 +61,9 @@ Bring: laptop + Ethernet cable, charged pack + spare, the mic is not needed. Len
    re-zeroes itself whenever the gun rests (the log does not mention it; `calib-imu bias` is no longer
    needed per session).
 2. Open `http://tbot.local:8080/` on the laptop: the bore marker, detections and tracks are drawn on the
-   stream. Check exposure against the real sky (`camera.exposure_us` in `config/local.toml`).
+   stream. Exposure sets itself (nothing to adjust between stands or as the light changes); the status line
+   in `tbotctl log` shows what it chose (`exp 38us x1.0`). Only `!BRIGHT` there needs action: the sky clips at
+   the shortest exposure, so fit an ND filter. `!DARK` means there is not enough light left to shoot by.
 3. **Dry passes first** — unloaded gun, real clays. Hold the arming button, swing through the clay, release.
    Each press is saved under `sessions/`. The log (`tbotctl log`) prints `FIRE (dry run)` with the miss angle
    and P(hit) when it would have shot. Do a dozen. If it never says FIRE, `tbot explain --source

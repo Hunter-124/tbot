@@ -222,6 +222,30 @@ def test_telemetry_shape_from_a_live_step(tmp_path):
     assert set(tele["stage_ms"]) >= {"read", "imu", "detect", "track", "solve", "total"}
     assert tele["decision"]["fire"] is False and tele["decision"]["reason"]
     assert json.loads(json.dumps(tele))  # no numpy objects may leak into the telemetry
+    assert tele["ae"] is None            # this source has no auto-exposure
+
+
+def test_exposure_out_of_range_is_in_the_telemetry_and_warned_once(tmp_path, caplog):
+    from tbot.camera.autoexposure import AeStatus
+
+    cfg, calib = base_cfg(tmp_path)
+    source = StallingSource(n_frames=2)
+    pipe = Pipeline(cfg, calib, source)
+    try:
+        source.ae_status = AeStatus("ok", 160.0, 0.0, 0.0, 120.0, 1.0)
+        assert pipe._check_exposure(0)["state"] == "ok"
+        source.ae_status = AeStatus("too_bright", 255.0, 60.0, -1.6, 9.0, 1.0)   # sky clipped at the shortest exposure
+        with caplog.at_level("WARNING"):
+            first = pipe._check_exposure(int(1e9))
+            pipe._check_exposure(int(2e9))               # 1 s of it: could be a glance at the sun
+            assert not caplog.records
+            pipe._check_exposure(int(3.1e9))             # still there after 2 s: say so ...
+            pipe._check_exposure(int(9e9))               # ... once
+        assert first == {"state": "too_bright", "level_dn": 255.0, "clip_pct": 60.0, "error_stops": -1.6}
+        assert len(caplog.records) == 1 and "ND filter" in caplog.records[0].getMessage()
+        assert json.loads(json.dumps(first))
+    finally:
+        pipe.close()
 
 
 # --------------------------------------------------------------------------------------------- stream

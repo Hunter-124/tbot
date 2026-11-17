@@ -489,6 +489,7 @@ def check_camera(cfg: Config, calib: Calibration | None = None, env: CheckEnv | 
         elapsed = time.monotonic() - t0
         dropped = int(getattr(source, "dropped", 0))
         mode = getattr(source, "sensor_mode", None)
+        ae = getattr(source, "ae_status", None)  # auto-exposure verdict on the last frame (None: fixed exposure)
         link = None
         if frames == 0 and env.camera_factory is None:  # real camera, stream still requested: which layer?
             from tbot.camera import linkcheck  # noqa: PLC0415
@@ -530,7 +531,21 @@ def check_camera(cfg: Config, calib: Calibration | None = None, env: CheckEnv | 
         return CheckResult("camera", WARN, summary,
                            f"below {RATE_WARN_FRACTION:.0%} of camera.fps: lower camera.fps or the "
                            "resolution, or check for a throttled SoC (tbot hwcheck --only power)", data)
-    if levels and (mean_level < LEVEL_WARN_LO or mean_level > LEVEL_WARN_HI):
+    black = getattr(source, "black_level_state", None)  # ok | fixed | failed | unknown (linkcheck.ensure_black_level)
+    if black is not None:
+        data["black_level"] = black
+    if black == "failed":
+        return CheckResult("camera", WARN, summary,
+                           "the sensor's black level differs from the one the ISP subtracts and could not be set "
+                           "(sudo i2ctransfer): dark parts of the image read 0. Run a 1280x800 capture once "
+                           "(tbot snap) or check i2c-tools / passwordless sudo", data)
+    if ae is not None:
+        data["auto_exposure"] = {"state": ae.state, "exposure_us": ae.exposure_us, "gain": ae.gain,
+                                 "level_dn": ae.level_dn, "clip_pct": ae.clip_pct, "error_stops": ae.error_stops}
+        summary += f" | auto-exposure {ae.exposure_us:.0f} us x{ae.gain:.1f} ({ae.state})"
+        if ae.state in ("too_bright", "too_dark"):
+            return CheckResult("camera", WARN, summary, ae.message(), data)
+    elif levels and (mean_level < LEVEL_WARN_LO or mean_level > LEVEL_WARN_HI):
         return CheckResult("camera", WARN, summary,
                            f"exposure out of band: set camera.exposure_us (now {cfg.camera.exposure_us:g}) "
                            "/ camera.analogue_gain for a mid-grey sky", data)

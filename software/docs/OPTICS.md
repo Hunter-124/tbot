@@ -17,7 +17,7 @@ quoted from a source (innomaker CAM-MIPIOV9281 V2 user manual V1.4, `design/layo
 | Lens (kit, replaced) | M12, f = 2.8 mm, F2.2, vendor "FOV D148 / H118", TV distortion < −17 % | innomaker manual V1.4 §3.1 |
 | Mount | nose module, lens axis gun (Y 0, Z 8), lens tip X 546.2, board not rotated | layout.md "As-built camera" |
 
-Runtime default is **640 × 400 @ 120 fps, 500 µs exposure, gain 1.0** (`config/default.toml [camera]`): the binned
+Runtime default is **640 × 400 @ 120 fps, automatic exposure (§6)** (`config/default.toml [camera]`): the binned
 mode halves the data rate and doubles the per-pixel light at the cost of angular resolution. 1280 × 800 is a
 `--set camera.width=1280 --set camera.height=800` away, but check `tbot bench` first — the Pi 3B is the budget.
 
@@ -175,8 +175,8 @@ bright sky" (weak, and the wrong sign) to "bright blob on a dark sky" — a larg
 
 Costs and caveats:
 
-- It is a 1.5–2 stop light loss. At 500 µs / F2.2 / gain 1.0 in daylight there is headroom; on an overcast evening
-  there is not. Raise `camera.analogue_gain` before `camera.exposure_us` (§6: exposure buys motion blur).
+- It is a 1.5–2 stop light loss. In daylight there is headroom; on an overcast evening there is not. The
+  auto-exposure (§6) makes it up by itself, with gain and then blur.
 - Foliage and ground clutter are *bright* in red/IR, so a long-pass filter also brightens the treeline. Adding an
   **IR-cut (short-pass ~650–700 nm)** on top keeps the orange band and kills the near-IR that makes leaves glow —
   i.e. a 580–650 nm bandpass. Whether the supplied M12 lens already contains an IR-cut filter is **not stated in
@@ -204,18 +204,73 @@ which must stay outside the ~80° cone and out of the hose-clamp/barrel zone. **
 
 ## 6. Exposure and focus
 
-**Exposure — 500 µs default.** Motion blur in pixels is `blur = ω · t_exp · f_px`:
+**Exposure — automatic** (`camera.auto_exposure`, `tbot/camera/autoexposure.py`; nothing to calibrate per site or
+per day). The lens has a fixed aperture, so exposure time and sensor gain are the only two controls, and each has a
+price. Motion blur in pixels is `blur = ω · t_exp · f_px`:
 
 ```
-ω = 1 rad/s (20 m/s clay at 20 m), t_exp = 500 µs:
-  640 × 400:   1 × 500e-6 × 466.7 = 0.23 px
-  1280 × 800:  1 × 500e-6 × 933.3 = 0.47 px
+ω = 1 rad/s (20 m/s clay crossing at 20 m, gun not yet swinging with it), 12 mm lens, 640 × 400 (f_px = 2009):
+  500 µs  -> 1.0 px        (camera.ae_max_exposure_us, the blur budget)
+  4000 µs -> 8.0 px        (camera.ae_dim_exposure_us, the dim-light limit; the clay itself is 10.8 px at 20 m)
 ```
 
-Under a quarter of a pixel at the running resolution — blur stays below the centroid noise
-(`meas_sigma_px = 0.7`) and below `psf_px`, so it does not corrupt size-based ranging. The global shutter means
-there is no rolling-shutter skew to correct during a swing, which is the whole reason for this sensor. If you need
-light, raise `analogue_gain` first; every doubling of `exposure_us` doubles the blur and inflates `psf_px`.
+Gain costs noise in DN (measured: 1 DN at gain 1, 3 DN at gain 4, 6 DN at gain 16) but never signal-to-noise: at the
+same light, gain 16 has a better S/N ratio than gain 1 because the image no longer drowns in the 8-bit steps.
+The global shutter means there is no rolling-shutter skew to correct during a swing.
+
+*What it holds constant.* The bright end of the frame — its 98th percentile, which is the sky whenever any sky is
+in view — sits at `ae_target_dn` = 160 DN. That is 26 % of the sensor's range, two stops below clipping. The image
+is tone-curved by the camera's ISP (shadows stretched, highlights compressed; DN 128 is 18 %), and 160 DN is where
+a clay's contrast against the sky comes out largest in DN. Highlights, not the average, because a clipped sky hides a
+clay completely while a dark tree line still shows one. Things smaller than 2 % of the frame (the sun's disc, a
+glint) are allowed to clip.
+
+*How light is bought*, in this order as the scene gets darker:
+
+| Scene (rough) | Exposure | Gain | Cost |
+|---|---|---|---|
+| open field, sun | 9 µs … 500 µs | 1 | none |
+| overcast, open shade | 500 µs | 1 … 4 | a little noise |
+| woods, heavy overcast | 500 µs … 4 ms | 4 | blur, up to 8 px on an untracked crossing clay |
+| woods at dawn / dusk | 4 ms | 4 … 15.9 | noise |
+
+13 stops in all. Past either end the status line says `!BRIGHT` or `!DARK` (docs/CALIBRATION.md §1). The 4 ms
+limit is where a longer exposure stops helping: a 20 m/s clay moves its own width in 5.4 ms, so past that its
+streak only gets longer, not brighter. Size-based ranging reads a streak as a bigger (closer) clay — worst case
+about +30 % at 4 ms on a clay the gun is not following, a few percent at 1 ms — so dim-light ranging is the thing to
+validate on real recordings [INFERENCE].
+
+*How it moves.* An exposure command takes **7 frames (140 ms at 50 fps)** to show in the image (measured:
+`buffer_count + 3` frames), and a swinging gun changes the whole view in that time. So the controller never
+"steps and looks": each frame is converted, through the tone curve and the settings that frame was really taken
+with, into the exposure the scene wants, and one command goes straight there.
+
+- Brighter is corrected at once. A frame that clipped (gun up from the trees into the sky) is blind for those 7
+  frames whatever is done; the step down is sized by how much of the frame clipped (÷3 … ÷16) and corrected exactly
+  when it lands.
+- Darker is followed slowly: nothing for `ae_hold_s` (0.5 s), then `ae_up_stops_per_s` (1.5 stops/s). A gun that
+  passes over trees and comes back to the sky within a second finds the sky's exposure still set. A black frame
+  (lens covered) is not waited on.
+- A steady scene gets no commands at all (12 % deadband), and room-light flicker is ignored.
+
+`camera.buffer_count` sets the delay: 2 buffers would make it 5 frames (100 ms), untested for dropped frames
+under load. When the exposure does move, the detector re-measures its noise on that frame instead of up to
+`noise_every` frames later.
+
+**Image levels: full range, and a black level that is checked at every start** (both found 2026-11-16).
+
+- The stream is requested full range (black 0, white 255). picamera2's default for a small video stream is video
+  range (16 … 235): nothing ever reached the 250 / 255 the tools call "saturated", and 14 % of the 8 bits were
+  unused. Recordings made before this date are video range.
+- The sensor powers up with a black-level target of **16** (register 0x4003 = 0x10). The kernel driver sets it to
+  64 in its 1280 × 800 and 1280 × 720 mode tables but not in the 640 × 400 one, and libcamera always subtracts 64.
+  After a power-on that goes straight to 640 × 400 — every range day — 48 counts too many came off: everything
+  darker than **4.5 % of full scale read exactly 0** (a tree line under a bright sky, most of a frame at dusk), until
+  some 1280-wide capture happened to run, after which it stayed right until the next power-off. `PicamSource` now
+  reads the register at every start and writes 64 if it is anything else (`linkcheck.ensure_black_level`, one
+  `sudo -n i2ctransfer`, 45 ms; it prints a line when it had to). `tbot hwcheck --only camera` warns if that write is
+  not possible. Stills taken with `rpicam-still` are not covered: take them at 1280 × 800 (as all the calibration
+  pictures were), never at 640 × 400.
 
 **Focus — set it at infinity.** Hyperfocal distance for the binned sensor:
 

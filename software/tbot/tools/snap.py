@@ -136,6 +136,7 @@ def main(argv: list[str] | None = None) -> int:
         cfg.camera.fps = min(float(cfg.camera.fps), 15.0)  # stills: 15 fps is plenty and keeps the Pi cool for hours
     if cfg.camera.auto_exposure:
         cfg.camera.ae_max_exposure_us = float(args.max_exposure_us)
+        cfg.camera.ae_hold_s, cfg.camera.ae_up_stops_per_s = 0.0, 8.0  # stills: brighten as fast as it darkens
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     log_path = out / "snaps.jsonl"

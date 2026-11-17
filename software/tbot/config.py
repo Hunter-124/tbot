@@ -36,13 +36,17 @@ class CameraConfig:
     buffer_count: int
     stall_s: float = 0.5
     reopen_timeout_s: float = 5.0
-    ae_target_dn: float = 110.0
-    ae_highlight_dn: float = 235.0
-    ae_min_exposure_us: float = 20.0
+    ae_target_dn: float = 160.0
+    ae_highlight_pct: float = 98.0
+    ae_min_exposure_us: float = 9.0
     ae_max_exposure_us: float = 500.0
+    ae_knee_gain: float = 4.0
+    ae_dim_exposure_us: float = 4000.0
     ae_min_gain: float = 1.0
-    ae_max_gain: float = 8.0
-    ae_every: int = 3
+    ae_max_gain: float = 16.0
+    ae_every: int = 1
+    ae_hold_s: float = 0.5
+    ae_up_stops_per_s: float = 1.5
 
 
 @dataclass

@@ -113,7 +113,7 @@ predicts (522.51, 497.45); the bore is **0.042° left and 0.051° above, 0.067°
 | IMU (`imu.json`), servo endpoints + command-to-break delay (95 ms, `latency.json`) | done 2026-11-15; the doctor now trusts measured servo endpoints |
 | Mask | not needed: with the 12 mm lens the barrel is outside the frame (muzzle ~11° above the axis, frame top 5.7°) |
 | Shot model | Modified / 26" / #8 values in `config/local.toml` from research, [PATTERN.md](PATTERN.md); confirm on paper at the range |
-| Exposure | on the day, against real sky (stream at `http://169.254.20.20:8080/`) |
+| Exposure | automatic since 2026-11-16 (OPTICS.md §6), nothing to set. Not yet seen daylight: on the first sunny day check the status line for `!BRIGHT` (the lens aperture is unknown; an ND filter is the fix if the sky clips at 9 µs) |
 | Detector thresholds | tuned from the first backyard recordings (`tbot calib-detector`, CALIBRATION.md §3) |
 
 `config/local.toml` as set on the Pi is copied in `calib_data/pi_calib_2026-11-16/local.toml`.

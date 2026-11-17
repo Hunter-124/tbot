@@ -144,7 +144,9 @@ camera; replay/synthetic data is stored upright).
 
 ### tbot/camera/picam.py, cv_source.py, replay.py; tbot/app/record.py [io]
 - `PicamSource(cfg, calib)`: Picamera2, sensor mode closest to camera.width x height (640x400 binned by
-  default), fps, manual exposure/gain (or AE), YUV420 main stream -> Y plane as mono uint8, cv2.rotate 180
+  default), fps, tbot's auto-exposure (camera/autoexposure.py: `AutoExposure.update(image, applied_exposure_us,
+  applied_gain, t_s) -> (exposure_us, gain) | None`, run in the capture thread; `ae_status` -> AeStatus) or a
+  fixed exposure/gain, full-range (sYCC) YUV420 main stream -> Y plane as mono uint8 0..255, cv2.rotate 180
   when cfg.camera.rotate_180. Capture thread keeps only the newest request (`dropped` counts the rest).
   `t_exposure_ns = SensorTimestamp - ExposureTime*1000/2 + calib latency camera timestamp offset`;
   `t_capture_ns = monotonic_ns()` when the request is dequeued; exposure_us/gain from metadata.

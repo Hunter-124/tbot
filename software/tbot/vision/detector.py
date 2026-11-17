@@ -34,6 +34,10 @@ NOISE_TARGET_SAMPLES = 20000
 # Below this many usable samples the mask is ignored for the noise estimate (the image is then almost
 # entirely masked and the few remaining pixels cannot support a robust estimate).
 NOISE_MIN_SAMPLES = 64
+# The noise sigma is re-estimated at once (not after noise_every frames) when a frame's exposure x gain differs
+# from the estimate's by more than this factor: the auto-exposure has moved, and with it the noise in DN (gain
+# 1 -> 8 is 1 -> 4.5 DN on the OV9281). A stale sigma is a threshold that is wrong for up to noise_every frames.
+NOISE_EXPOSURE_STEP = 1.2
 # Absolute deviations are histogrammed up to this many DN (the quantile of interest sits at ~1 sigma).
 DEV_MAX = 64
 # Safety valve for pathological frames (e.g. colour OR-mode on a scene full of orange): measure at most
@@ -118,6 +122,7 @@ class ClayDetector:
         self.match_sigma: float = float("nan")  # noise sigma of the matched-filter image, in DN
         self.frames_seen: int = 0
         self._since_noise: int = 0
+        self._noise_total: float = 0.0  # exposure_us x gain of the frame the noise sigma was estimated on
         self._key: tuple | None = None
         self._mask_src: np.ndarray | None = None
         self._mask: np.ndarray | None = None  # bool, runtime size
@@ -228,8 +233,12 @@ class ClayDetector:
             stat = contrast
             unit = 1.0
         mask = self._mask_for(h, w)
-        if self._since_noise <= 0 or not np.isfinite(self.noise_sigma):
+        total = float(frame.exposure_us) * float(frame.gain)  # 0 for sources that do not report exposure
+        moved = total > 0.0 and self._noise_total > 0.0 and not (
+            1.0 / NOISE_EXPOSURE_STEP < total / self._noise_total < NOISE_EXPOSURE_STEP)
+        if self._since_noise <= 0 or moved or not np.isfinite(self.noise_sigma):
             # (both estimates on one frame: ~3.4 ms on a Pi 3B every noise_every frames)
+            self._noise_total = total
             self.noise_sigma = self._estimate_sigma(contrast, mask)
             self.match_sigma = self._estimate_sigma(stat, mask) / unit if ms > 0.0 else self.noise_sigma
             self._since_noise = max(1, int(det.noise_every))

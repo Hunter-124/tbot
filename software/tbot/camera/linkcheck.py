@@ -27,11 +27,13 @@ import subprocess
 import time
 from typing import Callable
 
-__all__ = ["LinkDiagnosis", "diagnose", "unicam_interrupts", "sensor_streaming", "verdict"]
+__all__ = ["LinkDiagnosis", "diagnose", "unicam_interrupts", "sensor_streaming", "verdict", "ensure_black_level"]
 
 _PROC_INTERRUPTS = "/proc/interrupts"
 _SENSOR_GLOB = "/sys/bus/i2c/devices/*-0060"  # OV9281 at 0x60
 MODE_SELECT_REG = 0x0100  # 1 = streaming
+BLC_TARGET_REG = 0x4002   # black-level target, 16 bit big-endian (0x4002, 0x4003), in 10-bit counts
+BLC_TARGET = 0x0040       # 64: what libcamera's ov9281 tuning subtracts (rpi.black_level 4096 of 65536)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -101,6 +103,50 @@ def sensor_streaming(run: Callable[..., subprocess.CompletedProcess] = subproces
         return int(out.stdout.strip().split()[0], 16) & 0x01 == 1
     except (ValueError, IndexError):
         return None
+
+
+def _sensor_i2c(args: list[str], run: Callable[..., subprocess.CompletedProcess]) -> list[int] | None:
+    """One `sudo -n i2ctransfer` on the sensor; the bytes read, [] for a pure write, None when it failed."""
+    loc = _sensor_bus_addr()
+    if loc is None:
+        return None
+    bus, addr = loc
+    n_write = sum(1 for a in args if not a.startswith("r"))  # a trailing "rN" is the read, not a byte to send
+    cmd = ["sudo", "-n", "i2ctransfer", "-f", "-y", str(bus), f"w{n_write}@0x{addr:02x}", *args]
+    try:
+        out = run(cmd, capture_output=True, text=True, timeout=3.0)
+        if out.returncode != 0:
+            return None
+        return [int(tok, 16) for tok in out.stdout.split()]
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return None
+
+
+def ensure_black_level(run: Callable[..., subprocess.CompletedProcess] = subprocess.run) -> tuple[str, int | None]:
+    """Make the OV9281's black level the one libcamera subtracts. Call while streaming.
+
+    Measured 2026-11-16: the sensor powers up with a black-level target of 16 (register 0x4003 = 0x10). The
+    kernel driver's 1280x800 and 1280x720 mode tables set it to 64; its 640x400 table does not touch it.
+    libcamera always subtracts 64. So after a power-on that goes straight to 640x400 (every range day), the
+    ISP removes 48 counts too many: everything darker than 4.5 % of full scale is exactly 0 (the tree line,
+    the whole frame at dusk) and the rest is offset. The register keeps its value until the next power-off
+    (the module's supply is not switched), which is why a single 1280-wide capture after boot used to hide it.
+
+    Returns (state, value found): "ok" already right, "fixed" written and read back, "failed" the write did
+    not take, "unknown" the register could not be read (no sensor here, no passwordless sudo, no i2c-tools).
+    """
+    hi, lo = f"0x{BLC_TARGET_REG >> 8:02x}", f"0x{BLC_TARGET_REG & 0xFF:02x}"
+    got = _sensor_i2c([hi, lo, "r2"], run)
+    if got is None or len(got) != 2:
+        return "unknown", None
+    found = (got[0] << 8) | got[1]
+    if found == BLC_TARGET:
+        return "ok", found
+    wrote = _sensor_i2c([hi, lo, f"0x{BLC_TARGET >> 8:02x}", f"0x{BLC_TARGET & 0xFF:02x}"], run)
+    back = _sensor_i2c([hi, lo, "r2"], run) if wrote is not None else None
+    if back is not None and len(back) == 2 and ((back[0] << 8) | back[1]) == BLC_TARGET:
+        return "fixed", found
+    return "failed", found
 
 
 def verdict(streaming: bool | None, interrupts: int | None, frames: int, window_s: float) -> LinkDiagnosis:

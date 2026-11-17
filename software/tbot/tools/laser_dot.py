@@ -92,8 +92,8 @@ def find_dot(image: np.ndarray, background: np.ndarray | None = None, mask: np.n
     if peak < need:
         raise LaserDotError(
             f"no laser dot: the brightest compact spot is only {peak:.0f} DN above its background (need "
-            f"{need:.0f}). Is the beam on the target and in view? Raise camera.exposure_us / analogue_gain, "
-            "dim the room, or use a filter-free lens (an IR-pass filter blocks a red or green laser)")
+            f"{need:.0f}). Is the beam on the target and in view? Dim the room, set a longer fixed exposure "
+            "(--set camera.auto_exposure=false --set camera.exposure_us=4000 --set camera.analogue_gain=4), or use a filter-free lens (an IR-pass filter blocks a red or green laser)")
 
     # the dot = the connected half-maximum region around the peak
     _, labels = cv2.connectedComponents((smooth >= 0.5 * peak).astype(np.uint8), connectivity=8)
@@ -103,7 +103,8 @@ def find_dot(image: np.ndarray, background: np.ndarray | None = None, mask: np.n
     if diameter > MAX_DOT_FRACTION * w:
         raise LaserDotError(
             f"the brightest region is {diameter:.0f} px wide: that is glare or a lamp, not a laser dot. "
-            "Lower camera.exposure_us, or take a background with the beam blocked (--laser-bg)")
+            "Set a shorter fixed exposure (--set camera.auto_exposure=false --set camera.exposure_us=...), or take "
+            "a background with the beam blocked (--laser-bg)")
 
     # anything comparably bright elsewhere makes the choice a guess
     grown = cv2.dilate(region.astype(np.uint8), np.ones((3, 3), np.uint8),
@@ -153,8 +154,8 @@ def measure_dot(frames: list[np.ndarray], background: np.ndarray | None = None,
     if scatter > MAX_SCATTER_PX:
         m.warnings.append(f"dot moved {scatter:.1f} px rms between frames: the gun or the laser is not still")
     if m.saturated and m.diameter_px > 6.0:
-        m.warnings.append(f"dot is saturated and {m.diameter_px:.0f} px wide: lower camera.exposure_us for a "
-                          "tighter centre")
+        m.warnings.append(f"dot is saturated and {m.diameter_px:.0f} px wide: a shorter fixed exposure (--set "
+                          "camera.auto_exposure=false --set camera.exposure_us=...) gives a tighter centre")
     if len(dots) < len(frames):
         m.warnings.append(f"dot found in {len(dots)} of {len(frames)} frames")
     return m

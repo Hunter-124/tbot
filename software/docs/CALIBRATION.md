@@ -76,21 +76,26 @@ be soft, and `tbot focus` excludes the barrel mask), turn the ring slowly throug
 peaking at a different ring position means a tilted lens or board. `tbot focus` also prints the saturated-pixel
 percentage, mean/median DN, frame rate and the `exposure_us`/gain from the frame metadata; `--roi 0.3` narrows
 the central window, `--json` prints a final summary. The score is relative (mean squared gradient, DN²): compare it
-only within one session and scene. `exposure_us` should be the configured 500 µs and the image
-should not be clipping. In open daylight with no filter, raise `camera.analogue_gain` before `exposure_us`
-(exposure buys motion blur, see docs/OPTICS.md §6):
+only within one session and scene.
 
-```bash
-tbot run --stream --set camera.analogue_gain=2.0
-tbot run --stream --set camera.auto_exposure=true      # diagnostic only — never run the pipeline on AE
-```
+**Exposure needs no calibration.** The pipeline sets it itself, frame by frame (`camera.auto_exposure = true`,
+docs/OPTICS.md §6): the bright end of the scene is held at `camera.ae_target_dn`, from woods at dusk to an open
+field at noon. There is nothing to set per site or per day. What to look at instead:
+
+- `tbot run` prints the exposure it chose on every status line (`exp 38us x1.0`). `!BRIGHT` or `!DARK` after it,
+  and an `exposure:` warning in the log, mean the scene is outside what the camera can do: `!BRIGHT` = the sky
+  clips even at the shortest exposure (fit an ND filter; it says by how many stops), `!DARK` = still dark at the
+  longest exposure and full gain.
+- `tbot hwcheck --only camera` reports the same verdict.
+- `tbot focus` deliberately lets the exposure run long (20 ms, gain ≤ 4): nothing moves while focusing.
+
+A fixed exposure is still available for bench work that needs one (`--set camera.auto_exposure=false
+--set camera.exposure_us=... --set camera.analogue_gain=...`); `tbot hitl` does this by itself.
 
 **Pass criteria.**
 - Distant edges are crisp; the barrel at the top of the frame is the only soft thing.
-- No large saturated (255 DN) region in the sky.
+- No large saturated (255 DN) region in the sky, and no `!BRIGHT` / `!DARK` on the status line.
 - Frame rate at the status line is within ~10 % of `camera.fps`.
-- Record the gain/exposure you settled on into your own override TOML (`--config mine.toml`) — do not hand-edit
-  `config/default.toml`.
 
 ---
 

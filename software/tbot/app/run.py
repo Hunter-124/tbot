@@ -49,6 +49,7 @@ log = logging.getLogger("tbot.run")
 LEAD_PREVIEW_S = overlay_mod.LEAD_PREVIEW_S  # overlay velocity arrow horizon
 FPS_EMA_ALPHA = 0.1
 SOLVE_EMA_ALPHA = 0.1
+EXPOSURE_WARN_S = 2.0  # the scene must be out of the camera's exposure range this long before it is reported
 HOT_TEMP_C = 75.0  # warn before the Pi 3B firmware throttles at 80 C
 
 
@@ -122,6 +123,9 @@ class Pipeline:
         self.health: dict = {}
         self._health_flags = {"under_voltage_now": False, "throttled_now": False, "soft_temp_limit_now": False,
                               "hot": False}
+        self._ae_state = ""
+        self._ae_since_ns = 0
+        self._ae_warned = False
 
         self.server: DebugServer | None = None
         self.recorder = None
@@ -144,6 +148,23 @@ class Pipeline:
         self.watchdog_aborts = 0
         self._status_wall = 0.0
         self._sig_prev: list = []
+
+    # ------------------------------------------------------------------ exposure
+    def _check_exposure(self, t_ns: int) -> dict | None:
+        """Auto-exposure state for the telemetry; warns once each time the scene stays brighter or darker than
+        the camera can expose for (shortest exposure still clipped / longest exposure and full gain still dark)."""
+        st = getattr(self.source, "ae_status", None)
+        if st is None:
+            return None
+        out_of_range = st.state in ("too_bright", "too_dark")
+        if not out_of_range or st.state != self._ae_state:
+            self._ae_since_ns, self._ae_warned = t_ns, False
+        elif not self._ae_warned and t_ns - self._ae_since_ns >= EXPOSURE_WARN_S * 1e9:
+            self._ae_warned = True
+            log.warning("exposure: %s", st.message())
+        self._ae_state = st.state
+        return {"state": st.state, "level_dn": round(float(st.level_dn), 1), "clip_pct": round(float(st.clip_pct), 2),
+                "error_stops": round(float(st.error_stops), 2)}
 
     # ------------------------------------------------------------------ Pi health
     _HEALTH_WARNINGS = (
@@ -465,6 +486,7 @@ class Pipeline:
 
         self.health = read_health()  # cheap: the reader caches for 1 s and never raises
         self._check_health(self.health)
+        ae = self._check_exposure(int(frame.t_capture_ns))
 
         tele = {
             "seq": int(frame.seq),
@@ -484,6 +506,7 @@ class Pipeline:
             "n_detections": len(self.detections),
             "exposure_us": float(frame.exposure_us),
             "gain": float(frame.gain),
+            "ae": ae,
             "health": self.health,
             "stage_ms": {
                 "read": _ms(t_begin, t_read),
@@ -600,6 +623,10 @@ class Pipeline:
             hstr += f"  {float(temp):4.1f}C"
         if warn:
             hstr += f"  !{warn}"
+        ae = tele.get("ae")
+        if ae is not None:  # exposure the light asked for; flagged when the scene is outside the camera's range
+            flag = {"too_bright": " !BRIGHT", "too_dark": " !DARK"}.get(ae["state"], "")
+            hstr += f"  exp {tele['exposure_us']:.0f}us x{tele['gain']:.1f}{flag}"
         print(
             f"[{self.frames:6d}] {tele['fps']:5.1f} fps  age {tele['age_ms']:5.1f} ms  "
             f"cpu {tele['stage_ms']['total']:5.1f} ms  det {tele['n_detections']}  trk {len(tele['tracks'])}  "
