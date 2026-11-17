@@ -191,8 +191,15 @@ class FireSolver:
                                                 alpha, dw)
                             if gs["p_hit"] > g["p_hit"]:
                                 g, fire_ns = gs, at_ns
-            if g["p_hit"] < fc.min_hit_probability:
-                reason = f"p_hit {g['p_hit']:.2f} < {fc.min_hit_probability:.2f}"
+            # The bar: min_hit_probability while the track is fresh (its uncertainty is understated for the
+            # first frames, so its P(hit) reads high), the lower settled bar once it has been followed for
+            # settled_ms. One shot a press: waiting for 0.4 on a clay that only ever offers 0.3 is a clay lost.
+            bar = float(fc.min_hit_probability)
+            settled_bar = float(getattr(fc, "min_hit_probability_settled", 0.0) or 0.0)
+            if 0.0 < settled_bar < bar and track.first_t_ns and                     (now_ns - int(track.first_t_ns)) >= float(getattr(fc, "settled_ms", 0.0)) * 1e6:
+                bar = settled_bar
+            if g["p_hit"] < bar:
+                reason = f"p_hit {g['p_hit']:.2f} < {bar:.2f}"
             else:
                 better_k = 0
                 for k in range(1, horizon + 1):

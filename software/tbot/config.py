@@ -184,6 +184,8 @@ class FireConfig:
     gun_rate_change_sigma_frac: float = 0.18
     gun_rate_change_window_ms: float = 100.0
     subframe: bool = True
+    min_hit_probability_settled: float = 0.0
+    settled_ms: float = 150.0
     min_shot_interval_ms: float = 250.0
     min_clay_speed_mps: float = 6.0
     duplicate_deg: float = 1.0

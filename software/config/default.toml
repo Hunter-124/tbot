@@ -170,6 +170,12 @@ min_hit_probability = 0.4    # fire at the best moment only if P(hit) >= this (m
                               # virtual clays through recorded gun motion, clays hit at 0.5 -> 0.3: slow 45 -> 48 %,
                               # fast 40 -> 45 %, very fast 30 -> 44 %. But 0.3 fires before a going-away track has
                               # settled (tbot sim, outgoing: 6/6 -> 2/6 broken); 0.4 gave 21/30 against 18/30 at 0.5
+min_hit_probability_settled = 0.30  # the bar once a track has been followed for settled_ms without a shot: one shot a
+settled_ms = 700.0            # press, and a target that never offers 0.40 (hawk, 2026-11-17: 2.5 s at 0.27-0.38) is
+                              # otherwise never shot at. tbot sim, 10 seeds x 9 scenarios, clays broken of 90 (+/-2 is
+                              # noise): flat 0.40 43, flat 0.35 38, flat 0.30 34 (going-away 9/10 -> 4/10: the shot goes
+                              # early and worse when a better moment was coming); 0.40 then 0.30 after 150 ms 34, 300 ms
+                              # 37, 500 ms 38, 700 ms 42, 1000 ms (0.25) 41. 0 = same bar throughout
 subframe = true               # send the command at the instant of closest approach inside the frame period, not only on
                               # a frame (virtual clays, very fast crossings, P >= 0.3: 22 -> 42 % at 30 fps, 44 -> 48 %
                               # at 100 fps): the timing no longer depends on the frame rate
