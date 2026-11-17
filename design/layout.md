@@ -646,17 +646,23 @@ contacts and connector seating remain open.
   The guard taper recess goes from Y 5.5
   to h(X) + 0.85, with floor profiled to the measured guard and approximately
   0.85 measured gap. The L40 region has floor Z -10.4.
-- Four D4 M3 guard-insert bores match U18, U28, L40 and rear screw axes.
-  U28 bore runs Y 5.5..13.5 plus its cone, retaining at least 1.0 under
-  the Y 15.5 outboard face. The rear guard screw stays at (X -10.5,
-  Z -17.0): a pad on the clamp face (X -14.5..-6.5, Z -21.7..-12.8, out to
-  Y 0.5, R1 face edges) carries its insert bore, D4 from Y 0.5 to 6.8 plus
-  a cone to 7.3, with a 0.4 lead-in. Walls round the bore are 2.0 in X,
-  2.7 below and 2.2 above. The web to the rear-inboard ear insert bore is
-  1.7 (1.2 at the cone tip). The pad's +X wall runs 0.6 past the block face
-  at X -7.1 into the servo-end gap, so `feature_attachment` flags it; this
-  is intentional. Four M3 × 10 countersunk screws hold the servo ears, one
-  in each ear hole.
+- Rev AA guard-clamp joints are through-bolted, no inserts: D3.5 holes on the
+  U18, U28 and L40 axes run from the clamp face to trapped M3 hex nuts (5.7 AF
+  pockets, flats horizontal). U18: nut seat Y 12.9, side slot open to −X into
+  the arm relief, exit channel cut through the cove (X 13..21.8, Y 15..22.5,
+  above the frame top). U28: seat Y 12.9, drop-in slot open to the top.
+  L40: seat Y 13.3 (0.9 from the front-inboard ear insert), side slot open to
+  +X, slot runs to Y 16.2 so the M3 × 30 tip (Y 16.1) ends inside it. The old
+  insert bores are filled from Y 8 (D4 counterbore remains below the recess
+  floor). The plastic between the guard face and each nut is in compression.
+- Rear joint (X −10.5, Z −17.0): the pad now carries a spacer to Y −1.5, which
+  stops 0.5 short of a matching spacer block on trig_clamp_R_v2 (Y −5.6..−2.0,
+  standing on the bed). M3 × 16 through both into a hex nut in a side slot
+  (seat Y 1.6, open to +X), so tightening compresses the pad instead of pulling
+  it off its layers (the rev Z pad snapped at the insert). Fillets f100, f116,
+  f117 are suppressed: f100/f116 no longer rebuild on this tree.
+- Four M3 × 10 countersunk screws still hold the servo ears into heat-set
+  inserts, one in each ear hole.
 
 ### `servo_lever`
 
@@ -674,11 +680,11 @@ contacts and connector seating remain open.
   extension. Its Y plate faces are -11.5..-8.5; the inboard lip reaches Y -2.
   The front guard land follows the plate slope below its top, through XZ
   (34.10,-1.15) to (41.6,-3.93), then to the front face at Z -7.5.
-- Four countersunk screws pass from the right plate to the bracket: M3 × 25
-  at U18 (X 18.5, Z -7.75), U28 (28.0,-3.0) and L40 (40.0,-11.4), and
-  M3 × 18 at rear (-10.5,-17.0). The rear tip is at Y 6.5, 2.5 from the
-  rear-inboard ear screw. Heads are flush at Y -11.5; insert engagement is
-  at least 5 (rear 6.0).
+- Four countersunk screws pass from the right plate to the bracket nuts:
+  M3 × 30 at U18 (X 18.5, Z -7.75), U28 (28.0,-3.0) and L40 (40.0,-11.4),
+  heads flush with the hole pad at Y -13.9 (rev AA removed the 2.4-deep D6.8
+  head pockets that left ~1.3 of plastic under each head; now ~3.7), and
+  M3 × 16 at rear (-10.5,-17.0), head flush at Y -11.5, tip Y 4.5.
   The U18/U28 countersink-to-countersink web is 4.3; U28 hole edge is 1.62
   above the opening. Rear-head access through the web is D7.0.
 - The bottom-front corner is trimmed by an R25.4 arc centred at XZ
@@ -737,7 +743,7 @@ insert bores in the carriers are horizontal D3.2/D4.0 holes.
 | belly_cover | +Z, floor down | 21.5 / 2.3 | G-code pass; not print_ready: intended 0.3 pilot skin |
 | camera_cover | +X, plate face down | 4.5 / 0.6 (rev W) | G-code warn (5.4 air run, 6.5 bridge); not print_ready: 0.9 corner ligament at the M2 holes |
 
-Trigger build directions: `servo_bracket_L` +Y, `servo_lever` -Z,
+Trigger build directions: `servo_bracket_L` +Z (rev AA), `servo_lever` -Z,
 `trig_clamp_R` +Z. The bracket requires support on the build plate for its
 guard-recess floor, round output-hole crown and insert-bore ends; the clamp's
 round switch-hole and rear-access-hole crowns are short bridges. The trigger

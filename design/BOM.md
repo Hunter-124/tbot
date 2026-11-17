@@ -39,7 +39,7 @@ them from `export/<part>.step` with the settings above.
 | Part | Build (up) | Supports | Model mass |
 |---|---|---|---|
 | servo_lever | −Z, top face on the bed | none | ~3.2 g |
-| servo_bracket_L | +Y, inboard band face on the bed | build plate only (guard-taper pocket on the bed face + the round output-hole top) — remove before ironing the inserts | 11.6 g |
+| servo_bracket_L | +Z, ear-block bottoms (Z −21.7) on the bed (rev AA: was +Y; clamp-screw axis now lies in the layer plane) | build plate only, organic | ~10.8 g |
 | trig_clamp_R | +Z | none (D7.4 switch-hole and D7 access-bore crowns bridge; ream 7.4 if the switch hole sags) | 8.7 g |
 
 ### Lens lock nut
@@ -77,14 +77,15 @@ Pi bores are one feature each in carrier_L (`PiM2Insert_*`).
 
 | Qty | Item | Where |
 |---|---|---|
-| 27 | M3 heat-set insert | nose_clamp_L 2 (cross screws, Y = 0 face); nose clamps 4 (MI-1, rear face X 426.3, 2 per half) + 2 (front carrier screw, 1 per half, in the flank at X 495.5, Z 3.2); nose_clamp_R 2 (IMU); carrier_L 3 (1 belly + 2 cover_L flank posts); carrier_R 8 (2 belly + 3 cover_R: bulkhead top + bottom, bay bottom-rear + 3 battery hold-down A/B/C along +Y from the Y −46.2 boss faces); servo_bracket_L 8 (U18, U28, L40, rear pad, ears RI/RO/FI/FO) |
+| 23 | M3 heat-set insert | nose_clamp_L 2 (cross screws, Y = 0 face); nose clamps 4 (MI-1, rear face X 426.3, 2 per half) + 2 (front carrier screw, 1 per half, in the flank at X 495.5, Z 3.2); nose_clamp_R 2 (IMU); carrier_L 3 (1 belly + 2 cover_L flank posts); carrier_R 8 (2 belly + 3 cover_R: bulkhead top + bottom, bay bottom-rear + 3 battery hold-down A/B/C along +Y from the Y −46.2 boss faces); servo_bracket_L 4 (ears RI/RO/FI/FO only; the guard-clamp screws now use nuts) |
 | 4 | M2 heat-set insert | carrier_L Pi standoff blocks |
 | 2 | M3 × 20 ISO 10642 countersunk | nose-clamp cross screws along Y at (X 456, Z 4.5) and (X 505, Z 2.6), from gun-right |
 | 4 | M3 × 10 ISO 10642 countersunk | carriers → clamp MI-1, driven +X from the carrier blocks' X 422.45 face (rev Z: was M3 × 18; the clamp rear face is now X 426.3 and the insert bore ends at X 432.8) |
 | 13 | M3 × 8 ISO 10642 countersunk | carrier_L / carrier_R → nose_clamp_L / R front screw, 1 per side, along ∓Y at (X 495.5, Z 3.2), head flush in the carrier inner wall (Pi / battery side; remove Pi or pack to reach it), tip 5.0 into the clamp insert; batt_retainer → carrier_R along +Y at A (447.4, Z 35.0), B (447.4, Z −13.0), C (525.55, Z 11.6), heads flush in the plate; belly → carriers from below at (433, ±21.5), (518.9, −21.5); cover_R → carrier_R vertical at (433.4, −43.5) top + bottom and (401.4, −43.75) bottom (bay); cover_L → carrier_L through the flank along −Y at (X 433.4, Z 30.0 / −11.0) |
 | 2 | M3 × 6 SHCS | GY-521 → nose_clamp_R (M3 × 10 does not fit) |
-| 3 | M3 × 25 ISO 10642 countersunk | trig_clamp_R → servo_bracket_L: U18, U28, L40; heads flush at Y −11.5 |
-| 1 | M3 × 18 ISO 10642 countersunk | trig_clamp_R → servo_bracket_L rear (X −10.5, Z −17.0) into the bracket's rear pad; head flush at Y −11.5, tip Y 6.5 (M3 × 20 bottoms in the insert bore) |
+| 3 | M3 × 30 ISO 10642 countersunk | trig_clamp_R_v2 → servo_bracket_L: U18, U28, L40 through D3.5 holes into trapped M3 hex nuts (seats Y 12.9 / 12.9 / 13.3); heads flush with the clamp hole pad at Y −13.9, tips Y 16.1 (rev AA: was M3 × 25 into inserts, heads 2.4 deep in a counterbore) |
+| 1 | M3 × 16 ISO 10642 countersunk | trig_clamp_R_v2 → servo_bracket_L rear (X −10.5, Z −17.0) through the clamp spacer block and the bracket rear spacer into a trapped M3 hex nut (side slot, seat Y 1.6); head flush at Y −11.5, tip Y 4.5 (rev AA: was M3 × 18 into a rear-pad insert, which snapped the pad) |
+| 4 | M3 hex nut (ISO 4032, 5.5 AF × 2.4) | servo_bracket_L: U18 and L40 slide in from the side slots, U28 drops into its top slot, rear slides in from +X; tighten from the clamp side, the slots stop the nut turning |
 | 4 | M3 × 10 ISO 10642 countersunk | servo ears RI / RO / FI / FO, up into the bracket |
 | 1 | M3 × 12 ISO 10642 countersunk | lever + horn → servo output shaft (M3 × 14 bottoms out) |
 | 4 | M2 × 5 machine screw, pan head (ISO 7045) or SHCS | Pi 3B → M2 inserts, from the component side |
