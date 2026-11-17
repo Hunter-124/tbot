@@ -1,0 +1,9 @@
+$ tbot calib-boresight --config config/local.toml --image calib_data/bs20ft/s0.png --pixel 519.53,493.85 --range-m 5.975 --check
+stored : rpy_deg roll +0.0000  pitch -1.8914  yaw -1.6674 puts the bore line at 5.975 m on (522.51, 497.45)
+seen   : (519.53, 493.85)  ->  the bore is 0.042 deg left and 0.051 deg above where the calibration says
+error  : 0.067 deg = 0.7 cm at 5.975 m (2.3 cm at 20 m; the pattern is ~76 cm wide there)
+PASS   : limit 0.15 deg
+
+Distance: 20.5 ft lens front -> sheet (gun bumped from the 20 ft mark) = 6.248 m - 0.273 m = 5.975 m from the muzzle.
+Bore pixel: circle fit to twist20_dots.csv frames 188-292 with SNR > 40 (77 frames, all 30-deg sectors covered),
+r 30.5 px, scatter 7.1 px, bootstrap sd 1.2 / 1.1 px. Video 5 ms / gain 2 (dot still clips at 255, centroid on DoG).

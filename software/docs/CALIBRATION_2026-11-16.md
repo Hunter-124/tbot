@@ -8,7 +8,7 @@ Result of the session that finished [FOCAL_LENGTH_HANDOFF.md](FOCAL_LENGTH_HANDO
 | File (Pi `calib/`) | Value | Uncertainty |
 |---|---|---|
 | `intrinsics.json` | pinhole, **fx = fy = 4018 px at 1280x800** (2009 px at 640x400), centred principal point, D = 0 | ±0.3 % (±12 px) |
-| `boresight.json` | **pitch −1.891°, yaw −1.667°**, roll 0 (bore lands on pixel 522.49, 516.70 at 1280x800, 13.75 m) | ±0.05° yaw, ±0.11° pitch (1 sd of three bore estimates) |
+| `boresight.json` | **pitch −1.891°, yaw −1.667°**, roll 0 (bore lands on pixel 522.49, 516.70 at 1280x800, 13.75 m) | ±0.05° yaw, ±0.11° pitch (1 sd of three bore estimates); **checked at 20.5 ft: 0.067°, PASS** |
 
 `tbot doctor --config config/local.toml`: intrinsics, boresight, projection all PASS (remaining WARNs are the
 detector/mask, servo travel and frame-budget steps, not the camera).
@@ -94,13 +94,22 @@ Video clips (MJPEG, 118–147 MB each) are too big for GitHub and are not commit
 are on the Pi in `~/TBOT/software/calib_data/bs46ft/`. The per-frame dot tracks (`*_dots.csv`) and a 400x300 crop
 around the bore (`twist_crop.mp4`, `twist2_crop.mp4`) are.
 
+## 3. Second-distance check (`calib_data/bs20ft/`)
+
+Gun moved to **20.5 ft** (lens front -> sheet; 5.975 m from the muzzle), fingertip twist video at 5 ms / gain 2
+(`twist20_dots.csv`, `twist20_crop.mp4`, `twist20_fit.png`). Circle through 77 clean frames (the hand blocked the
+dot in the others), every 30° sector covered: bore pixel **(519.53, 493.85)**, r 30.5 px, ±1.2 px.
+
+`tbot calib-boresight --pixel 519.53,493.85 --range-m 5.975 --check` (`check_20p5ft.txt`): the stored calibration
+predicts (522.51, 497.45); the bore is **0.042° left and 0.051° above, 0.067° total -> PASS** (limit 0.15°). That is
+2.3 cm at 20 m against a ~76 cm pattern, and inside the ±0.1° of the 46 ft measurement: the mount geometry
+(camera 54 mm under the bore, 273 mm behind the muzzle) and the boresight agree. Nothing was rewritten.
+
 ## Still to do
 
-1. **Second-distance boresight check** (RANGE_DAY §A step 4): a twist video at ~20 ft, `--check`. `PASS` within
-   0.15° confirms the mount geometry (camera 54 mm under the bore).
-2. Patterning on paper (CALIBRATION.md §5b) for the ballistic offset.
-3. Detector + mask, servo endpoints, `tbot bench` (doctor WARNs).
-4. Redo intrinsics + boresight if the lens is ever touched.
+1. Patterning on paper (CALIBRATION.md §5b) for the ballistic offset.
+2. Detector + mask, servo endpoints, `tbot bench` (doctor WARNs).
+3. Redo intrinsics + boresight if the lens is ever touched.
 
 ## Files
 
@@ -109,3 +118,4 @@ around the bore (`twist_crop.mp4`, `twist2_crop.mp4`) are.
 | `calib_data/pi_calib_2026-11-16/` | copies of the Pi's `intrinsics.json`, `boresight.json` and the superseded solves |
 | `calib_data/fx_2026-11-16b/` | `p45..p20_*.png` paper sets, `d45`/`e45` logo + tissue-box attempts, `log.md`, `tools/` (`fxset.sh` capture, `paper.py` edges, `fit.py`) |
 | `calib_data/bs46ft/` | laser stills, dot tracks, fit overlays, `tools/` (`shot.sh` capture + dot, `vid_dots.py`, `shift.py`) |
+| `calib_data/bs20ft/` | 20.5 ft check: still, dot track, crop video, fit overlay, `check_20p5ft.txt` |
