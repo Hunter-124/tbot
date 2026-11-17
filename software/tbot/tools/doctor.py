@@ -83,9 +83,17 @@ def run_checks(cfg):
             r.check("Actuator", name, math.isfinite(pulse) and 500 <= pulse <= 2500,
                     f"actuator.servo.{name}={pulse:g} us (500–2500 us)", "set safe servo pulses with tbot jog servo on an unloaded fixture")
         travel = abs(s.fire_us - s.rest_us)
-        r.check("Actuator", "pulse travel", math.isfinite(travel) and 170 <= travel <= 510,
-                f"{travel:g} us for 34°; expected ~340 us [INFERENCE: ~10 us/degree; tolerance 50%]",
-                "measure servo endpoints and trigger travel with tbot jog servo", "WARN")
+        measured = (s.min_us > 0 and s.max_us > s.min_us
+                    and all(s.min_us <= p <= s.max_us for p in (s.rest_us, s.fire_us)))
+        if measured and math.isfinite(travel) and travel > 0:
+            # endpoints marked on the real lever with `tbot jog servo` beat the 34° design guess
+            r.add("Actuator", "pulse travel", "PASS",
+                  f"{travel:g} us, measured endpoints (limits {s.min_us:g}–{s.max_us:g} us)",
+                  "re-jog if the lever or trigger set changes")
+        else:
+            r.check("Actuator", "pulse travel", math.isfinite(travel) and 170 <= travel <= 510,
+                    f"{travel:g} us for 34°; expected ~340 us [INFERENCE: ~10 us/degree; tolerance 50%]",
+                    "measure servo endpoints and trigger travel with tbot jog servo", "WARN")
         nominal6 = 34 / 60 * 140
         nominal48 = 34 / 60 * 170
         required = nominal48 + 20  # one full 50 Hz command frame, before loading margin

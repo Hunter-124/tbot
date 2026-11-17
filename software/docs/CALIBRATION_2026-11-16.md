@@ -105,11 +105,18 @@ predicts (522.51, 497.45); the bore is **0.042° left and 0.051° above, 0.067°
 2.3 cm at 20 m against a ~76 cm pattern, and inside the ±0.1° of the 46 ft measurement: the mount geometry
 (camera 54 mm under the bore, 273 mm behind the muzzle) and the boresight agree. Nothing was rewritten.
 
-## Still to do
+## Readiness for backyard dry-fire with hand-thrown clays
 
-1. Patterning on paper (CALIBRATION.md §5b) for the ballistic offset.
-2. Detector + mask, servo endpoints, `tbot bench` (doctor WARNs).
-3. Redo intrinsics + boresight if the lens is ever touched.
+| Item | State |
+|---|---|
+| Focus, focal length, boresight (2 distances) | done (this file) |
+| IMU (`imu.json`), servo endpoints + command-to-break delay (95 ms, `latency.json`) | done 2026-11-15; the doctor now trusts measured servo endpoints |
+| Mask | not needed: with the 12 mm lens the barrel is outside the frame (muzzle ~11° above the axis, frame top 5.7°) |
+| Shot model | Modified / 26" / #8 values in `config/local.toml` from research, [PATTERN.md](PATTERN.md); confirm on paper at the range |
+| Exposure | on the day, against real sky (stream at `http://169.254.20.20:8080/`) |
+| Detector thresholds | tuned from the first backyard recordings (`tbot calib-detector`, CALIBRATION.md §3) |
+
+`config/local.toml` as set on the Pi is copied in `calib_data/pi_calib_2026-11-16/local.toml`.
 
 ## Files
 

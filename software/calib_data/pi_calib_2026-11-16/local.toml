@@ -1,0 +1,20 @@
+# Per-rig overrides of config/default.toml (written by tbot bench tools; edit freely).
+
+[actuator.servo]
+rest_us = 1420.0
+fire_us = 1530.0
+min_us = 1400.0
+max_us = 1540.0
+
+[camera]
+rotate_180 = false
+fps = 50.0
+
+[optics]                      # JETSECAM 12 mm M12, 1/1.8", IR-cut, "no distortion" (fitted 2026-11; docs/OPTICS.md 3)
+model = "pinhole"
+focal_length_mm = 12.0        # lens marking: fx ~2000 px at 640x400. Refine with a far-target measurement
+
+[shot]                        # this gun + load (docs/PATTERN.md): 26" barrel, Modified choke, #8 lead target load
+muzzle_velocity_mps = 360.0   # 1200 fps box velocity (30" test barrel) minus ~20 fps for 26"; chronograph to confirm
+pattern_radius_ref_m = 0.30   # break radius (>= 3 expected #8 hits on a tilted clay) at 25 yd for Modified (~13 mrad)
+pattern_ref_range_m = 22.9
