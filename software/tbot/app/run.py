@@ -651,6 +651,7 @@ class Pipeline:
                 "p_hit": float(decision.p_hit),
                 "range_m": float(decision.range_m),
                 "tof_ms": float(decision.tof_s * 1e3),
+                "t_exit_ns": None if decision.t_exit_ns is None else int(decision.t_exit_ns),
                 "lead_dir_w": None if decision.lead_dir_w is None else [float(x) for x in decision.lead_dir_w],
                 "bore_dir_w": None if decision.bore_dir_w is None else [float(x) for x in decision.bore_dir_w],
             },
@@ -665,6 +666,8 @@ class Pipeline:
                 "miss_deg": tele["decision"]["miss_deg"],
                 "p_hit": tele["decision"]["p_hit"],
                 "range_m": tele["decision"]["range_m"],
+                "t_exit_ns": tele["decision"]["t_exit_ns"],
+                "tof_ms": tele["decision"]["tof_ms"],
                 "shots": self.shots,
             }
             self._event(ev)

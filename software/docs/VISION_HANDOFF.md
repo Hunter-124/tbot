@@ -68,6 +68,15 @@ details are in [ARCHITECTURE.md](ARCHITECTURE.md); keep those signatures and `tb
 - Real footage arrives with every held press: `sessions/<name>/` has the frames, the IMU and what the
   pipeline computed per frame ([PRESS_CLIPS.md](PRESS_CLIPS.md)).
 
+## Changed 2026-11-17, outdoors (details and measurements: INTEGRATION_STATUS.md)
+
+- Attitude: `accel_gain` 0.02 -> 0.001 and a turn-rate gate (`accel_max_rate_dps`); the old filter put 43 px
+  (p90) of error into every world direction while the gun was swung.
+- Detector: noise sigma from the quietest tiles of the frame (was blind with trees in most of it);
+  `clutter_ring_max`, `min_size_frac`, 6 measured candidates a frame.
+- `tbot score` and `tbotctl start test`: shots checked against the frames after them.
+- Open: per-target cost on the Pi (~17 ms a frame for one target), tree-fringe flicker, a fitted `gun_sigma`.
+
 ## Constraints to keep
 - Python >= 3.11, numpy 1.24 and 2.x, OpenCV 4.6 (Raspberry Pi OS apt) and 5.x; no `cv2.aruco`; no scipy at runtime.
 - Pi 3B: the whole pipeline must fit the frame period at the configured fps (`tbot bench` verdict).

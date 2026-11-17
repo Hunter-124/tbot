@@ -95,6 +95,8 @@ class DetectorConfig:
     downscale: int = 0
     bg_mode: str = "auto"
     local_noise_cell: int = 8
+    clutter_ring_max: float = 0.05
+    min_size_frac: float = 0.4
     static_reject: bool = True
     static_tol_px: float = 3.0
     static_lever_m: float = 0.9
@@ -143,6 +145,7 @@ class AttitudeConfig:
     bias_still_s: float = 1.0
     bias_still_dps: float = 0.6
     bias_max_dps: float = 4.0
+    accel_max_rate_dps: float = 10.0
 
 
 @dataclass

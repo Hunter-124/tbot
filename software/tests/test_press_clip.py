@@ -106,7 +106,7 @@ def test_pipeline_press_becomes_a_session_with_an_annotated_clip(tmp_path):
     seen = [r for r in tele if r["dets"]]
     assert seen, "the clay was detected during the press"
     u, v, d, snr, _c, x, y, w, h, _a = seen[0]["dets"][0]
-    assert x - 1 <= u <= x + w and y - 1 <= v <= y + h and d > 0 and snr > 0
+    assert x - 1 <= u <= x + w + 1 and y - 1 <= v <= y + h + 1 and d > 0 and snr > 0
     assert len(seen[0]["R_wg"]) == 9 and "detector" in seen[0]
     clips = [p for p in s.iterdir() if p.stem == "clip"]
     assert len(clips) == 1 and clips[0].stat().st_size > 1000

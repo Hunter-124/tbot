@@ -45,6 +45,14 @@ DEV_MAX = 64
 # more of the frame is texture than sky: trees and roofs filling 60 % of the picture must not double the
 # threshold over the sky.
 NOISE_QUANTILE = 0.35
+# ...and it is taken per tile of the frame, the frame's sigma being this quantile of the tiles' (the quietest
+# part of the picture: sky when there is any). One estimate over the whole frame went blind as soon as trees
+# filled more than ~60 % of it: sigma 1.2 -> 27-37 DN, a threshold no bird or clay can pass, for as long as the
+# gun pointed that way (5 s of an 8 s press outdoors, 2026-11-17). Busy regions are handled where they are, by
+# the local threshold (detector.local_noise_cell), not by deafening the whole frame.
+NOISE_TILES = (4, 6)          # rows, columns
+NOISE_TILE_QUANTILE = 0.25
+NOISE_TILE_MIN_SAMPLES = 48   # a tile with fewer unmasked samples is left out
 # Safety valve for pathological frames (e.g. colour OR-mode on a scene full of orange): measure at most
 # this many components per frame, largest first. A real sky yields a handful.
 CANDIDATE_LIMIT = 64
@@ -58,8 +66,15 @@ LOCAL_GAIN = 8
 LOCAL_NEIGHBOURHOOD = 5
 LOCAL_MIN_BIAS = 1.5
 # With a candidate_filter the survivors arrive in priority order and at most this many are measured: bounded
-# frame time in a cluttered scene (each measurement is 0.6-3 ms on a Pi 3B).
-FILTERED_CANDIDATE_LIMIT = 24
+# frame time in a cluttered scene (each measurement is 2-4.5 ms on a Pi 3B: 24 of them in front of trees were
+# 100-150 ms a frame, measured outdoors 2026-11-17).
+FILTERED_CANDIDATE_LIMIT = 6
+# Clutter screen (detector.clutter_ring_max): from this many candidates a frame is "cluttered", and a candidate
+# must stand alone. The ring looked at is this many detection pixels wide around its bounding box, scaled with
+# the blob between the two limits.
+CLUTTER_MIN_CANDIDATES = 8
+CLUTTER_RING_MIN_PX = 4
+CLUTTER_RING_MAX_PX = 12
 # With the matched filter on, a blob is MEASURED on the raw residual above this many raw sigmas (the
 # smoothed, grown detection footprint is fatter than the object and would bias the size up ~12 %).
 MEAS_SEED_SIGMAS = 2.5
@@ -162,8 +177,10 @@ class ClayDetector:
         self._mask: np.ndarray | None = None  # bool, runtime size
         self._mask_key: tuple | None = None
         self.scale: int = 1  # detection runs on the frame reduced by this factor (detector.downscale)
+        self.far_clay_px: float = 0.0  # a clay at fire.max_range_m, in full-resolution pixels (nominal optics)
         self._img_scale: int = 1  # the reduction of the image _detect is working on right now
         self._morph_bg = False
+        self._min_diameter_px = 0.0
         self._scale_key: tuple | None = None
         self._down: np.ndarray | None = None
         self.set_mask(mask)
@@ -224,14 +241,18 @@ class ClayDetector:
         key = (want, w)
         if self._scale_key == key:
             return self.scale
-        if want >= 1:
-            scale = want
-        else:
-            cfg = self.cfg
+        cfg = self.cfg
+        try:
             pitch_mm = float(cfg.optics.pixel_pitch_um) * 1e-3 * float(cfg.optics.sensor_width_px) / max(w, 1)
             far_px = (float(cfg.optics.focal_length_mm) / pitch_mm * float(cfg.mount.clay_diameter_m)
                       / max(float(cfg.fire.max_range_m), 1e-3))
-            scale = next((f for f in AUTO_DOWNSCALES if far_px / f >= AUTO_MIN_CLAY_PX), 1)
+        except (AttributeError, TypeError, ValueError, ZeroDivisionError):
+            far_px = 0.0
+        self.far_clay_px = far_px if math.isfinite(far_px) and far_px > 0.0 else 0.0
+        if want >= 1:
+            scale = want
+        else:
+            scale = next((f for f in AUTO_DOWNSCALES if self.far_clay_px / f >= AUTO_MIN_CLAY_PX), 1)
         self._scale_key, self.scale = key, max(1, int(scale))
         return self.scale
 
@@ -246,6 +267,10 @@ class ClayDetector:
         subtracts it) keeps meaning the system blur at full resolution."""
         img = frame.image
         s = self._scale_for(int(img.shape[1])) if getattr(img, "ndim", 0) in (2, 3) else 1
+        # Size floor: a blob much smaller than a clay at the far end of the fire window is not one this gun
+        # can engage (specks in a tree line: half of all detections outdoors, each a track that is born and
+        # dies). In full-resolution pixels, from the optics and fire.max_range_m; 0 = off.
+        self._min_diameter_px = float(getattr(self.cfg.detector, "min_size_frac", 0.0) or 0.0) * self.far_clay_px
         if s <= 1 or img.dtype != np.uint8 or img.shape[0] < 2 * s or img.shape[1] < 2 * s:
             self._img_scale = 1
             return self._detect(frame, img)
@@ -437,6 +462,10 @@ class ClayDetector:
                              grow_low if matched_on else None)
         t_cc = time.perf_counter()
 
+        min_d = self._min_diameter_px / max(1, self._img_scale)
+        if min_d > 0.0 and dets:
+            dets = [d for d in dets if d.diameter_px >= min_d]
+        self.stats["measured"] = len(dets)
         dets.sort(key=lambda d: d.score, reverse=True)
         if len(dets) > int(det.max_detections):
             dets = dets[: int(det.max_detections)]
@@ -535,7 +564,8 @@ class ClayDetector:
             vals = sub.reshape(-1)
         if vals.size == 0:
             return NOISE_SIGMA_FLOOR
-        return _robust_sigma(vals)
+        tiled = _tiled_sigma(sub, mask[::step, ::step] if mask is not None else None)
+        return tiled if tiled is not None else _robust_sigma(vals)
 
     # ------------------------------------------------------------ components
     def _measure(self, binary: np.ndarray, contrast: np.ndarray, sigma: float,
@@ -591,6 +621,29 @@ class ClayDetector:
             )
         idx = np.nonzero(keep)[0]
         self.stats["candidates"] = int(idx.size)
+        ring_max = float(getattr(det, "clutter_ring_max", 0.0) or 0.0)
+        if ring_max > 0.0 and idx.size >= CLUTTER_MIN_CANDIDATES:
+            # A clay in the open has nothing next to it. The fringe of a tree against the sky is hundreds of
+            # leaf gaps and twig ends side by side (daylight, 12 mm lens, pines behind a deck: 100-150
+            # candidates a frame, 4 ms each to measure on a Pi 3B = 5-10 frames a second). So in a frame with
+            # many candidates each must stand alone: of the ring around its bounding box, at most
+            # clutter_ring_max may be thresholded pixels of OTHER blobs. One integral image, no loop.
+            ii = cv2.integral(b8[ry:ry + rh, rx:rx + rw])
+            unit = int(ii[-1, -1]) // max(1, int(stats[1:, cv2.CC_STAT_AREA].sum()))  # 1 or 255 per set pixel
+            bx = stats[idx + 1, cv2.CC_STAT_LEFT].astype(np.int64) - rx
+            by = stats[idx + 1, cv2.CC_STAT_TOP].astype(np.int64) - ry
+            bw_ = ws[idx].astype(np.int64)
+            bh_ = hs[idx].astype(np.int64)
+            m = np.clip(np.maximum(bw_, bh_), CLUTTER_RING_MIN_PX, CLUTTER_RING_MAX_PX)
+            x0 = np.maximum(bx - m, 0)
+            y0 = np.maximum(by - m, 0)
+            x1 = np.minimum(bx + bw_ + m, rw)
+            y1 = np.minimum(by + bh_ + m, rh)
+            inside = (ii[y1, x1] - ii[y0, x1] - ii[y1, x0] + ii[y0, x0]) // max(1, unit)
+            ring = (x1 - x0) * (y1 - y0) - bw_ * bh_
+            alone = (inside - areas[idx]) <= ring_max * np.maximum(ring, 1)
+            idx = idx[alone]
+            self.stats["alone"] = int(idx.size)
         ordered = False
         if self.candidate_filter is not None and idx.size:
             # e.g. the scenery filter (vision/clutter.py): drops candidates before they cost a measurement and
@@ -1007,6 +1060,54 @@ def _erfinv(y: float) -> float:
         else:
             hi = mid
     return 0.5 * (lo + hi)
+
+
+@lru_cache(maxsize=4)
+def _tile_index(h: int, w: int) -> np.ndarray:
+    rows, cols = NOISE_TILES
+    ty = np.minimum(np.arange(h) * rows // max(h, 1), rows - 1)
+    tx = np.minimum(np.arange(w) * cols // max(w, 1), cols - 1)
+    return (ty[:, None] * cols + tx[None, :]).astype(np.int64)
+
+
+def _tiled_sigma(sub: np.ndarray, mask: np.ndarray | None) -> float | None:
+    """Noise sigma of the quietest part of the frame: `_robust_sigma` of every tile (about its own median), then
+    the NOISE_TILE_QUANTILE of those. None when the frame is too small or too masked to tile.
+
+    All tiles at once from one 2-D histogram (tile x value); a Python loop over 24 tiles would cost a
+    millisecond a tile on a Pi 3B."""
+    h, w = sub.shape
+    rows, cols = NOISE_TILES
+    n_tiles = rows * cols
+    if h < 4 * rows or w < 4 * cols:
+        return None
+    width = 2 * DEV_MAX + 1
+    v = np.clip(sub, -DEV_MAX, DEV_MAX).astype(np.int64) + DEV_MAX
+    key = _tile_index(h, w) * width + v
+    if mask is not None:
+        key = key[mask]
+    hist = np.bincount(key.reshape(-1), minlength=n_tiles * width).reshape(n_tiles, width)
+    n = hist.sum(axis=1)
+    ok = n >= NOISE_TILE_MIN_SAMPLES
+    if int(ok.sum()) < max(2, n_tiles // 4):
+        return None
+    hist, n = hist[ok], n[ok].astype(np.float64)
+    cum = np.cumsum(hist, axis=1)
+    med = (cum >= (0.5 * n)[:, None]).argmax(axis=1)                      # each tile's median bin
+    cum0 = np.concatenate((np.zeros((cum.shape[0], 1), cum.dtype), cum), axis=1)
+    ks = np.arange(DEV_MAX + 1)
+    hi = np.minimum(med[:, None] + ks[None, :], width - 1) + 1            # F(k) = P(|x - med| <= k)
+    lo = np.maximum(med[:, None] - ks[None, :], 0)
+    r = np.arange(cum.shape[0])[:, None]
+    frac = (cum0[r, hi] - cum0[r, lo]) / n[:, None]
+    k = np.abs(frac - NOISE_QUANTILE).argmin(axis=1)
+    f = np.clip(frac[np.arange(len(k)), k], 0.05, 0.98)
+    sig = np.array([(float(kk) + 0.5) / (math.sqrt(2.0) * _erfinv(float(ff))) for kk, ff in zip(k, f)])
+    sig.sort()
+    q = float(sig[min(len(sig) - 1, int(NOISE_TILE_QUANTILE * len(sig)))])
+    # a low quantile of noisy estimates sits below the truth: 0.67 standard errors of one tile's estimate
+    q *= 1.0 + 0.674 * 1.3 / math.sqrt(float(np.median(n)))
+    return max(q, NOISE_SIGMA_FLOOR)
 
 
 def _robust_sigma(vals: np.ndarray) -> float:

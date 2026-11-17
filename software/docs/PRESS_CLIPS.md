@@ -40,6 +40,20 @@ flight, lead and bore directions).
   `tbot clip --missing` for every session without a clip (e.g. the service was stopped mid-render).
 - Replay through the pipeline: `tbot run --source replay:sessions/<name> --sim-armed --set gpio.backend=sim`.
 
+## Did the shot hit? (`tbot score`)
+
+`tbot score sessions/<name> --image` checks every shot of a press (dry or live) against the frames recorded
+after it: where the bore really pointed when the shot left (the recorded IMU samples replayed through the
+attitude filter) against where the target really was when the shot arrived (its detections in the frames
+around that moment). It prints the miss against the pattern, splits it into the error in extrapolating the
+swing over the trigger delay and the error in extrapolating the target, and writes `shot_<n>.png`: the arrival
+frame with the pattern circle where the shot went and a cross on the target. The press must last (or the
+post-roll run) until the shot would have arrived, about 0.2 s after the fire decision.
+
+To get shots without clays: `tbotctl start test` is a dry run that fires on paper at ANY tracked target (a
+bird, a still clay the bore is swept past), up to 6 times a press. `tbotctl start` goes back to the normal dry
+run. Test mode can never drive the servo.
+
 ## Limits
 
 - Frames wait in RAM until the release: `record.max_ram_mb` (150) is about 6 s at 100 fps including the

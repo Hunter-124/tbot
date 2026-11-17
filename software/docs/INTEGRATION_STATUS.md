@@ -131,6 +131,64 @@ the test, and every one of them is recorded ([PRESS_CLIPS.md](PRESS_CLIPS.md)).
 - Closed-loop simulator, rig lens, 3 seeds x 8 scenarios: 14 shots / 6 hits after, 14 / 7 before (run-to-run
   noise is +-2, see "Simulator notes").
 
+## Added 2026-11-17, outdoors (first daylight session, backyard: trees, sky, birds, a jet)
+
+Everything here was found on presses recorded that morning and is checked against them. Photos:
+[field/2026-11-17](field/2026-11-17/README.md).
+
+**Attitude filter was dragged by the gun's own motion (fixed).** `attitude.accel_gain` was 0.02 per sample: the
+tilt re-levelled itself from the accelerometer with a 0.1 s time constant, and a swung gun's acceleration (the
+pod is ~0.9 m from the shoulder; the magnitude gate lets 0.5 g sideways through) was read as tilt. Test: predict
+how far the picture shifts between two frames from the attitude, compare with the shift measured in the picture
+(phase correlation, press `074450`, 169 frame pairs): gyro alone 1 px off (p50), the filter as it was **43 px**
+at the 90th percentile, now **6 px** (the same as the gyro alone). Now `accel_gain = 0.001` (2 s) and the
+accelerometer is only used while the gun turns slower than `attitude.accel_max_rate_dps` (10). This fed the
+tracker (world-frame clay motion), the scenery filter and the fire solution.
+
+**Detector went blind with trees in most of the frame (fixed).** The noise sigma was one estimate over the whole
+frame (a low quantile, right until texture covers ~65 % of it): 1.2 DN over sky, 26-37 DN with trees filling
+the frame, i.e. a threshold nothing can pass, for 5 s of an 8 s press. Now the sigma is the 25th percentile of
+24 tiles' own estimates (`NOISE_TILES`): the quietest part of the picture. Same frames: 1.7-3.0 DN. Busy
+regions are still raised locally (`local_noise_cell`).
+
+**Tree fringe against sky: 100-150 candidates a frame, 5-10 fps (improved, not solved).**
+- `detector.clutter_ring_max` (0.05): in a frame with 8+ candidates a candidate must stand alone (at most that
+  share of the ring around its box may be other blobs). 130 -> ~15 on the recorded frames.
+- At most 6 candidates are measured per frame when a candidate filter is set (was 24; each costs 4-7 ms on the
+  Pi 3B), solid and sizeable ones first.
+- `detector.min_size_frac` (0.4): detections narrower than that fraction of a clay at `fire.max_range_m` are
+  dropped (2.2 px with the 12 mm lens). They were half of all detections and each started a track.
+- Scenery filter: same result, one stacked pass (5.7 -> 2.6 ms for one candidate on the Pi).
+- Measured on the gun after the first three: open sky ~100 fps, a tree edge in view 16-25 fps (was 5-10).
+  **Still open:** the scenery filter drops only ~2 of ~10 fringe blobs a frame even with the corrected attitude
+  (they flicker from frame to frame); one target in clear sky still costs ~10 ms detect + 4 ms track + 2.6 ms
+  solve on top of the 8 ms base (~37 fps with a bird in view).
+
+**Auto-exposure** needed no change: highlights held at the target, nothing clipped, settles within a few frames
+of a swing from trees to sky. Against open blue sky it sits at the sensor's shortest exposure (9 us, gain 1)
+with the 98th percentile at the target: anything brighter (white cloud, haze near the sun) will clip, and only
+a darker lens / ND filter would change that.
+
+**Why a still clay on the deck rail got no dry-fire:** 0.5 m from the lens (150 px, out of focus: not a small
+blob), not moving (`fire.min_clay_speed_mps`, and the scenery filter drops what is fixed in the world), inside
+`fire.min_range_m`. By design.
+
+**Test mode and shot scoring (new).** `tbotctl start test` = dry run that fires on paper at anything it tracks
+(no speed floor, minimum range 0.5 m, 6 shots a press, scenery filter off). `tbot score sessions/<name>
+--image` checks each shot against the frames after it: bore at the exit time (IMU replayed) against the target
+at the arrival time (its detections), split into gun-extrapolation and target-extrapolation error, and writes
+`shot_<n>.png`. First real target (a hawk, hand-held, press `080902`, ordinary dry mode): miss 0.78 deg against
+a 0.75 deg pattern, gun error 1.01 deg, target error 0.49 deg.
+
+**How well the gun predicts its own bore over the trigger delay** (6 presses of loose hand-held sweeping, 3578
+moments, 104 ms): error p50 0.32 deg, p90 1.04 deg, p99 2.0 deg against a 0.75 deg pattern. The solver's method
+(latest rate + acceleration from a 30 ms slope) was the best of those tried; longer windows and a jerk term
+were worse (p90 1.3-2.0 deg). The error is predictable from the motion itself: the smoothest 30 % of moments
+(small acceleration and little change of rate over the last 100 ms) have p50 0.14 / p90 0.36 deg, the roughest
+30 % p50 0.68 / p90 1.49 deg. **Not done yet:** the solver's `gun_sigma` (0.3 x the acceleration term, no
+floor) should be replaced by a model fitted to this, so P(hit) is honest about rough moments and the shot is
+taken in smooth ones.
+
 ## Frame rate and CPU
 
 *(2026-11-15 numbers, before the sensor process and the half-resolution detector; kept for the record.)*

@@ -84,6 +84,10 @@ downscale = 0                 # run the detector on the frame averaged down by t
 local_noise_cell = 8          # busy regions (trees, roofs) raise their own threshold: k_sigma x the local noise of
                               # blocks this many detection pixels wide (smallest of the 5x5 around, so a clay beside
                               # them is judged by the sky). Never below the frame-wide threshold. 0 = off
+clutter_ring_max = 0.05       # cluttered frame (8+ candidates): a candidate must stand alone - at most this share of the
+                              # ring around it may be other blobs (tree fringe against sky: 130 -> ~15). 0 = off
+min_size_frac = 0.4           # drop detections narrower than this x a clay at fire.max_range_m (from the optics: 2.2 px
+                              # with the 12 mm lens = a clay 100 m away). 0 = off
 static_reject = true          # scenery filter (vision/clutter.py; needs the IMU): drop candidates that keep their WORLD
                               # direction while the gun turns, before they are measured. They show as grey crosses
 static_tol_px = 3.0           # ... within this many pixels (centroid jitter, IMU timing),
@@ -122,8 +126,13 @@ poll_hz = 100
 R_gun_imu = [[0.0, -1.0, 0.0], [-1.0, 0.0, 0.0], [0.0, 0.0, -1.0]]   # measured 2026-11-15 (calib-imu axes, 3 hand-held poses, fit within 0.8 deg): gun +X = chip -Y, +Y = chip -X, +Z = chip -Z
 
 [attitude]
-accel_gain = 0.02             # complementary-filter gain per sample when the accel is trusted
-accel_gate_g = 0.15           # trust accel only when | |a| - g | < gate
+accel_gain = 0.001            # complementary-filter gain per sample when the accel is trusted: 2 s time constant at
+                              # 500 Hz. Was 0.02 (0.1 s): a swung gun's own acceleration then dragged "up" around by
+                              # degrees (outdoors 2026-11-17: picture shift predicted from the attitude was off by
+                              # 43 px at the 90th percentile, 6 px with this - the same as the gyro alone)
+accel_gate_g = 0.15           # trust accel only when | |a| - g | < gate (0.5 g sideways still passes: hence the next)
+accel_max_rate_dps = 10.0     # ...and only while the gun turns slower than this: the pod sits ~0.9 m from the
+                              # shoulder, so turning IS accelerating. 0 = no rate gate
 history_s = 2.0
 init_still_s = 0.3            # gravity initialisation window
 auto_bias = true              # re-zero the gyro whenever the gun is at rest (bias drifts ~1 deg/s as the pod warms up)

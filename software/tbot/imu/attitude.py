@@ -132,7 +132,10 @@ class AttitudeEstimator:
     Gravity initialises the tilt from the mean specific force over the first cfg.attitude.init_still_s
     (the gun must be still); after that the gyro integrates and the accelerometer pulls the estimated
     up-vector toward the measured one (tilt only, never heading) whenever the specific force magnitude
-    is within cfg.attitude.accel_gate_g of g.
+    is within cfg.attitude.accel_gate_g of g and the gun turns slower than cfg.attitude.accel_max_rate_dps.
+    The correction has to be slow (seconds): the gyro is good to a fraction of a degree over a swing, while a
+    hand-held gun's accelerometer reads its own motion, and a magnitude gate alone lets half a g sideways
+    through (28 degrees of false tilt).
 
     Gyro bias (cfg.attitude.auto_bias): the stored bias is from one temperature and an MPU6050 drifts by
     ~1 deg/s over a warm-up. Whenever every gyro axis stays within bias_still_dps (peak to peak) for
@@ -145,6 +148,9 @@ class AttitudeEstimator:
         att = cfg.attitude
         self.accel_gain = float(att.accel_gain)
         self.accel_gate_m_s2 = float(att.accel_gate_g) * G_MPS2
+        # the accelerometer only says where "up" is while the gun is not being turned (see update)
+        rate = float(getattr(att, "accel_max_rate_dps", 0.0) or 0.0)
+        self.accel_max_rate2 = math.radians(rate) ** 2 if rate > 0.0 else float("inf")
         self.history_ns = int(float(att.history_s) * 1e9)
         self.init_still_ns = int(float(att.init_still_s) * 1e9)
         rate = float(max(1.0, cfg.imu.sample_rate_hz))
@@ -187,6 +193,7 @@ class AttitudeEstimator:
         R = self._R9
         gain = self.accel_gain
         gate = self.accel_gate_m_s2
+        rate2 = self.accel_max_rate2
         for s in samples:
             t = int(s.t_ns)
             if not self.ready:
@@ -211,7 +218,7 @@ class AttitudeEstimator:
                 b = self.gyro_bias_resid
                 gx, gy, gz = gx - b[0], gy - b[1], gz - b[2]
             R = _mul9(R, _exp9(gx * dt, gy * dt, gz * dt))
-            if norm >= MIN_ACCEL_NORM and abs(norm - G_MPS2) <= gate:
+            if norm >= MIN_ACCEL_NORM and abs(norm - G_MPS2) <= gate and gx * gx + gy * gy + gz * gz <= rate2:
                 # Rotating the body by gain * (up_meas x up_pred) tilts the estimate toward the measurement;
                 # the axis is perpendicular to the up-vector, so heading is untouched.
                 mx, my, mz = ax / norm, ay / norm, az / norm

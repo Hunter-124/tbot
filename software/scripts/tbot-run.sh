@@ -12,5 +12,11 @@ mkdir -p logs sessions
 # cost a millisecond a frame and 350 MB an hour for data the press recordings already hold.
 args=(run --stream --record armed)
 [[ $mode == live ]] && args+=(--live)
+# test: DRY RUN that fires (on paper) at anything it tracks, clay or not: birds, a plane, a still clay swept past.
+# No speed floor, any range the tracker believes, several shots a press, scenery filter off so a still target
+# counts. `tbot score sessions/<name> --image` then says whether each shot would have hit. Never with --live.
+[[ $mode == test ]] && args+=(--set fire.min_clay_speed_mps=0 --set fire.min_range_m=0.5
+                              --set fire.min_elevation_deg=-90 --set fire.max_shots_per_arm=6
+                              --set detector.static_reject=false)
 echo "tbot-run: mode=$mode"
 exec "${TBOT_BIN:-$HOME/tbot-venv/bin/tbot}" "${args[@]}"

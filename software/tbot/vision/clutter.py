@@ -64,6 +64,12 @@ class StaticFilter:
         self.n_new = 0
         ifov = np.asarray(cam.ifov(np.array([[0.5 * cam.width, 0.5 * cam.height]], dtype=np.float64))).ravel()
         self.ifov = float(ifov[0]) if ifov.size and math.isfinite(float(ifov[0])) and ifov[0] > 0 else 1e-3
+        # the frame's edges (NEW_MARGIN_PX inside) on the tangent plane x/z, y/z of the camera frame
+        m, w, h = NEW_MARGIN_PX, float(cam.width), float(cam.height)
+        edge = np.asarray(cam.pixel_to_ray(np.array([[m, 0.5 * h], [w - 1 - m, 0.5 * h], [0.5 * w, m],
+                                                     [0.5 * w, h - 1 - m]], dtype=np.float64))).reshape(4, 3)
+        self._view = (float(edge[0, 0] / edge[0, 2]), float(edge[1, 0] / edge[1, 2]),
+                      float(edge[2, 1] / edge[2, 2]), float(edge[3, 1] / edge[3, 2]))
 
     def reset(self) -> None:
         self._hist.clear()
@@ -88,11 +94,16 @@ class StaticFilter:
 
     def _old_frames(self, t: int, min_age: float) -> list:
         """Up to COMPARE_FRAMES history entries at least min_age old, spread from the newest such to the oldest."""
-        old = [h for h in self._hist if t - h[0] >= min_age]
-        if len(old) <= COMPARE_FRAMES:
-            return old
-        pick = np.unique(np.round(np.linspace(0, len(old) - 1, COMPARE_FRAMES)).astype(int))
-        return [old[i] for i in pick]
+        hist = self._hist
+        n_old = 0
+        for h in hist:  # oldest first
+            if t - h[0] < min_age:
+                break
+            n_old += 1
+        if n_old <= COMPARE_FRAMES:
+            return [hist[i] for i in range(n_old)]
+        pick = sorted({int(round(k * (n_old - 1) / (COMPARE_FRAMES - 1))) for k in range(COMPARE_FRAMES)})
+        return [hist[i] for i in pick]
 
     def filter(self, uv: np.ndarray, areas: np.ndarray | None = None, widths: np.ndarray | None = None,
                heights: np.ndarray | None = None) -> np.ndarray:
@@ -100,14 +111,17 @@ class StaticFilter:
         out of view `static_min_age_ms` ago (nothing is known about them yet), the most compact first within
         each (a clay fills its bounding box, a tangle of branches does not); scenery is left out.
         uv: (N,2) full-resolution pixel centroids; areas / widths / heights: the components' pixel counts and
-        bounding boxes. Also records the candidates for the frames to come."""
+        bounding boxes. Also records the candidates for the frames to come.
+
+        Runs on every frame that has a candidate, so it is written for few NumPy calls (each costs 20-50 us
+        on a Pi 3B whatever the array size): the old frames are compared in one stacked pass and the per-frame
+        geometry is plain float arithmetic. Measured there for one candidate: 5.7 ms -> 2.6 ms."""
         det = self.cfg.detector
         n = int(len(uv))
         if n == 0 or self._R_wc is None:
             return np.arange(n)
         uv = np.asarray(uv, dtype=np.float64).reshape(n, 2)
         rays = np.asarray(self.cam.pixel_to_ray(uv), dtype=np.float64).reshape(n, 3)
-        rays /= np.maximum(np.linalg.norm(rays, axis=1, keepdims=True), 1e-12)
         R_now = self._R_wc
         dirs = rays @ R_now.T
         t = self._t_ns
@@ -119,44 +133,58 @@ class StaticFilter:
         while hist and t - hist[0][0] > max_age:
             hist.popleft()
 
-        static = np.zeros(n, dtype=bool)
-        new = np.ones(n, dtype=bool)  # no history yet (start-up, after a reset): nothing is known
-        if widths is not None and heights is not None:
-            extent = np.maximum(np.asarray(widths, dtype=np.float64), np.asarray(heights, dtype=np.float64))
-        else:
-            extent = np.zeros(n)
-        size_tol = SIZE_TOL * extent * self.ifov
-        old = self._old_frames(t, min_age)
+        static = None
+        new = None  # no history yet (start-up, after a reset): nothing is known
+        old = [h for h in self._old_frames(t, min_age) if len(h[2])]
         if old:
             tol0 = float(det.static_tol_px) * self.ifov
             lever = float(det.static_lever_m)
             lam_max = 1.0 / max(float(det.static_min_range_m), 0.5)
-            z_now = R_now[:, 2]  # optical axis in the world
+            r = R_now.ravel().tolist()
+            zx, zy, zz = r[2], r[5], r[8]  # optical axis in the world
+            tols, gs, counts = [], [], []
             for _t, R_f, d_f in old:
-                if len(d_f) == 0:
-                    continue
-                turn = math.acos(min(1.0, max(-1.0, 0.5 * (float(np.trace(R_f.T @ R_now)) - 1.0))))
-                tol = tol0 + TURN_TOL * turn
+                f = R_f.ravel().tolist()
+                tr = sum(a * b for a, b in zip(f, r))  # trace(R_f^T R_now)
+                turn = math.acos(min(1.0, max(-1.0, 0.5 * (tr - 1.0))))
                 # sideways move of the camera since that frame, and the direction shift per (1/range) it causes
-                dp = lever * (z_now - R_f[:, 2])
-                g = -(dp - float(dp @ z_now) * z_now)
-                gg = float(g @ g)
-                cd = dirs @ d_f.T                              # (n, m) cosines
-                e2 = np.maximum(2.0 - 2.0 * cd, 0.0)           # |c - d|^2 for unit vectors
-                if gg > 1e-12:
-                    eg = (dirs @ g)[:, None] - (d_f @ g)[None, :]   # (c - d) . g
-                    lam = np.clip(eg / gg, 0.0, lam_max)
-                    e2 = e2 - 2.0 * lam * eg + lam * lam * gg  # |c - d - lam g|^2
+                dx, dy, dz = lever * (zx - f[2]), lever * (zy - f[5]), lever * (zz - f[8])
+                along = dx * zx + dy * zy + dz * zz
+                gs.append((-(dx - along * zx), -(dy - along * zy), -(dz - along * zz)))
+                tols.append(tol0 + TURN_TOL * turn)
+                counts.append(len(d_f))
+            D = old[0][2] if len(old) == 1 else np.concatenate([h[2] for h in old])   # (M, 3)
+            G = np.repeat(np.array(gs, dtype=np.float64), counts, axis=0)               # (M, 3)
+            tol = np.repeat(np.array(tols, dtype=np.float64), counts)                   # (M,)
+            gg = np.einsum("ij,ij->i", G, G)
+            e2 = 2.0 - 2.0 * (dirs @ D.T)                       # |c - d|^2 for unit vectors, (n, M)
+            np.maximum(e2, 0.0, out=e2)
+            eg = dirs @ G.T
+            eg -= np.einsum("ij,ij->i", D, G)                    # (c - d) . g
+            lam = eg / np.maximum(gg, 1e-12)
+            np.clip(lam, 0.0, lam_max, out=lam)
+            e2 += lam * (lam * gg - 2.0 * eg)                    # |c - d - lam g|^2
+            if widths is not None and heights is not None:
                 # a big ragged blob's centroid wanders with the threshold: allow it a share of its own size
-                static |= (e2 <= (tol + size_tol)[:, None] ** 2).any(axis=1)
+                size_tol = (SIZE_TOL * self.ifov) * np.maximum(np.asarray(widths, dtype=np.float64),
+                                                              np.asarray(heights, dtype=np.float64))
+                lim = tol[None, :] + size_tol[:, None]
+            else:
+                lim = tol[None, :]
+            static = (e2 <= lim * lim).any(axis=1)
             # was this direction in view in the newest comparison frame? If not, nothing is known about it yet.
-            R_first = old[-1][1]
-            uv_then = np.asarray(self.cam.ray_to_pixel(dirs @ R_first), dtype=np.float64).reshape(n, 2)
-            m = NEW_MARGIN_PX
-            with np.errstate(invalid="ignore"):
-                inside = ((uv_then[:, 0] >= m) & (uv_then[:, 0] <= self.cam.width - 1 - m)
-                          & (uv_then[:, 1] >= m) & (uv_then[:, 1] <= self.cam.height - 1 - m))
-            new = ~inside
+            # (tangent-plane test against the frame's edges: exact for the pinhole lenses this is used with,
+            # a pixel or two out at the corners of a distorted one - NEW_MARGIN_PX covers it)
+            then = dirs @ old[-1][1]
+            x0, x1, y0, y1 = self._view
+            with np.errstate(invalid="ignore", divide="ignore"):
+                tx = then[:, 0] / then[:, 2]
+                ty = then[:, 1] / then[:, 2]
+                new = ~((then[:, 2] > 1e-6) & (tx >= x0) & (tx <= x1) & (ty >= y0) & (ty <= y1))
+        if static is None:
+            static = np.zeros(n, dtype=bool)
+        if new is None:
+            new = np.ones(n, dtype=bool)
         if self._protect is not None and static.any():
             near = ((dirs @ self._protect.T) >= self._protect_cos).any(axis=1)
             static &= ~near
@@ -170,8 +198,10 @@ class StaticFilter:
         if keep.size > 1:
             if areas is not None and widths is not None and heights is not None:
                 box = np.maximum(np.asarray(widths, dtype=np.float64) * np.asarray(heights, dtype=np.float64), 1.0)
-                fill = np.asarray(areas, dtype=np.float64) / box
+                # solid AND with some size: a one-pixel speck fills its box perfectly and is the last thing
+                # worth one of the few measurements a cluttered frame gets
+                fill = np.asarray(areas, dtype=np.float64) / box * np.sqrt(np.asarray(areas, dtype=np.float64))
             else:
                 fill = np.ones(n)
-            keep = keep[np.lexsort((-fill[keep], new[keep]))]  # movers before unknowns, compact first
+            keep = keep[np.lexsort((-fill[keep], new[keep]))]  # movers before unknowns, solid and sizeable first
         return keep
