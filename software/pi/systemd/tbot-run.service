@@ -3,14 +3,22 @@
 [Unit]
 Description=TBOT pipeline (camera -> detect -> track -> fire solver)
 After=multi-user.target
+# never give up restarting (the default stops after 5 starts in 10 s)
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple
 User=pi
 WorkingDirectory=/home/pi/TBOT/software
 ExecStart=/home/pi/TBOT/software/scripts/tbot-run.sh
-Restart=on-failure
+# Whatever ends it (a crash, the camera gone for good, a clean exit), it is started again; only
+# `tbotctl stop` (systemctl stop) keeps it stopped.
+Restart=always
 RestartSec=3
+# A frame loop that stops turning without exiting (a hang) is killed and restarted: the pipeline reports in
+# every 2 s (app/run.py _sd_notify). Long enough for a cold start on a Pi 3B (imports ~12 s, camera, IMU).
+WatchdogSec=60
+NotifyAccess=all
 # SIGTERM -> the pipeline aborts the actuator and goes limp before exiting
 KillSignal=SIGTERM
 TimeoutStopSec=10

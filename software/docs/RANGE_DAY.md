@@ -80,8 +80,20 @@ Bring: laptop + Ethernet cable, charged pack + spare, the mic is not needed. Len
    ```
 
    10 ms of delay error is 20 cm on a crossing clay, so do this early.
-6. `tbotctl stop` before powering off (lets the last session finish writing). A power cycle always comes
-   back in dry run; live mode never survives a reboot.
+6. `tbotctl stop` before powering off (lets the last session finish writing). A power cycle comes back in
+   dry run, unless the gun was put in field mode (below).
+
+### Without a laptop: field mode
+
+`tbotctl boot live` (asks you to type LIVE) makes the gun come up **live at every power-up**: switch it on,
+leave it still for ~5 s, shoot. It stays that way until `tbotctl boot dry` - do that when you are home.
+- Hold the arming button only with the muzzle downrange and a clay called. While it is held the gun fires
+  by itself at anything that looks and moves like a clay (a bird close enough does); one shot per press.
+- If it stops responding: switch the power off and on. It restarts by itself after a crash or a hang (up
+  to ~1.5 minutes for a hang) and needs ~30 s after power-up before the first press.
+- Every press is recorded (no clip is rendered on the gun in live mode). The card holds about 150 presses;
+  when less than 1.5 GB is free presses stop being saved but the gun keeps shooting.
+- Keep the Pi's pod out of the sun: at 80 C it slows its clock and the gun gets slow with it.
 
 Watch the status line for heat (`!THR`, warning at 75 C) and `UV` (pack sagging under the servo).
 

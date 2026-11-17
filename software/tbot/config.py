@@ -97,6 +97,7 @@ class DetectorConfig:
     local_noise_cell: int = 8
     clutter_ring_max: float = 0.05
     min_size_frac: float = 0.4
+    followed_others_max: int = 0
     static_reject: bool = True
     static_tol_px: float = 3.0
     static_lever_m: float = 0.9
@@ -279,6 +280,7 @@ class RecordConfig:
     decimate: int
     clip: str = "process"
     clip_fps: float = 30.0
+    min_free_mb: float = 1500.0
 
 
 @dataclass

@@ -218,6 +218,99 @@ Firing as soon as P clears the bar instead of at the peak was worse everywhere (
 Shot travel time (it is in the solution, with drag: #8 at 366 m/s): 40 ft 39.8 ms, 60 ft 64.0 ms, 75 ft
 83.9 ms, 100 ft 120.9 ms; at constant box speed those would read 33, 50, 63 and 83 ms.
 
+## Added 2026-11-17, outdoors, second round (frame time around trees; every frame scored)
+
+**Presses of 09:00 (a hawk past a tree line, a jet).** No dry shot in either.
+- Hawk (`090017`): followed for 2 s at 10-11 m apparent range, bore 0.5-1.2 deg off it throughout; P(hit)
+  peaked at 0.38 against the bar of 0.40. Scored frame by frame (`tbot score --every`, below): of 33 frames
+  with a solution 4 would have hit, the longest unbroken chance 129 ms; real miss p50 0.87 deg against the
+  0.75 deg pattern. The gun was right not to fire most of the time, and marginal for one eighth of a second.
+- Jet (`090035`, and the first half of `090013`): no track. It crosses the sky at well under the 1.7 deg/s
+  below which the scenery filter calls a thing fixed in the world; the jet that was "hit" at 08:21 was fired
+  on while test mode had that filter switched off. Test mode is for things that move across the sky.
+- Loop time in that press: 40-100 ms a frame with the tree line in view (10-25 fps), and two frames of
+  340 ms. That is what the rest of this section is about.
+
+**Every frame scored: `tbot score --every`.** Each frame in which the solver had a solution for a settled
+track is scored as if the command had gone out on it (same method as for a real shot). Over the six presses
+of today that have a target (192 frames):
+
+| P(hit) the solver gave | frames | really would have hit |
+|---|---|---|
+| 0.0 - 0.1 | 145 | 5 % |
+| 0.1 - 0.2 | 15 | 13 % |
+| 0.2 - 0.3 | 9 | 22 % |
+| 0.3 - 0.4 | 8 | 62 % |
+| 0.4 - 0.5 | 13 | 100 % |
+| 0.5 - 0.7 | 2 | 50 % |
+
+Small numbers, and the frames of one press are not independent (the 13 at 0.4-0.5 are all the jet), but the
+ordering is right and nothing says the probability is optimistic. Gun extrapolation error p50 0.57 deg, target
+extrapolation error p50 0.77 deg (birds: wings, turns, and 15-25 fps): the target half is the larger one.
+
+**Where the frame time went (Pi 3B, the hawk press replayed through the live loop, `tbot run --source
+replay:<press>`; ms per frame):**
+
+| | detect | track | solve | all work |
+|---|---|---|---|---|
+| before | 34-35 | 13-14 | 6.0 | 56-58 |
+| after | 35 | 4.7 | 3.8 | 47 |
+
+The same replay, old code against new, run alternately with the gun's own service running beside it (the Pi
+was hot and partly frequency-capped during these runs, so read the ratios, not the milliseconds): hawk near
+trees 55.8 -> 46.8 ms (-16 %), tree fringe (`075514`) 66.5 -> 54.7 (-18 %), bird in open sky with trees below
+(`082831`) 47.0 -> 38.0 (-19 %), hawk in open sky (`080902`) 26.4 -> 23.7 (-10 %). What changed:
+- **Per-detection and per-track arithmetic in plain floats** (`optics.CameraModel.ray_xyz` / `ifov1`,
+  `tracker._measure_few`, `tracker3d`: gating, EKF update on the 3 position columns, new track, views,
+  prediction). Every NumPy call on a 3-vector or a 3x3 costs 15-50 us on the Pi whatever it computes and one
+  detection used to cost ~150 of them. Tracker update with 4 tracks and 4 detections: 13.8 -> 3.9 ms; measuring
+  4 detections 3.9 -> 0.24 ms; one prediction 0.54 -> 0.08 ms. Same numbers: tracks agree to 1e-10 deg on
+  replays, `tests/test_fast_paths.py` compares each piece with the matrix form.
+- **Solver**: the look one frame ahead is the aim only (no uncertainty, no probability), and the full
+  solution at the instant of closest approach is worked out only when that approach can come within 4 sigma
+  of the pattern. 7.4 -> 4.4 ms. Checked against the full computation on identical inputs: 4724 solved
+  frames (6 presses x 4 look-ahead periods), largest difference in P(hit) 4e-7, no decision changed.
+- **Established targets are measured first** (`StaticFilter.begin(focus_dirs_w=...)`): the candidates where
+  tracks with `fire.min_track_hits` hits should be (a zone as wide as the tracker's own gate, at least 25 px)
+  go to the head of the list, so the target always gets one of the six measurements a cluttered frame is
+  allowed.
+- **`detector.followed_others_max` (off, 0)**: with N = 2, a frame in which the main target was found where
+  expected measures only two candidates besides the established targets. A swing past trees keeps bringing
+  new specks into view and each measurement costs ~6 ms. Measured: another 6-8 % of the frame time on the bird
+  presses, and 5-11 % fewer detections of the followed bird (one that leaves its zone is skipped until it is
+  searched for again). Not worth it as it stands; the switch is there for when the tracker holds a target better.
+- **A press being saved no longer stalls the next one.** The two 340 ms frames came 0.4 and 1.6 s into a
+  press started right after the previous one was released: the dump (IMU rows, one JSON line per frame) is
+  pure-Python work in a thread of the same process, and the frame loop waited for the interpreter lock at
+  every OpenCV call. The dump now goes out in small pieces with a pause between them and the switch interval
+  is 0.5 ms instead of 5. Not yet seen on the gun (it needs two presses back to back).
+
+**What is left, measured** (same replay): detection is now three quarters of the work. Per frame: background
+1.7 ms, threshold 4.3 (of which the local threshold 1.4 and the noise estimate 0.9: 12 ms once every ~13
+frames), connected components 1.2, scenery filter 2.5, and **6.1 ms per measured candidate** (4.3 ms of window
+arithmetic, 1.8 ms adaptive moments), three candidates a frame on average. One firing solution 2.5 ms, of which
+the hit probability quadrature 0.9. The tracker also refuses a jinking bird at 15 fps now and then (its gate
+is sized for something that flies like a clay): 3 of ~35 detections of the small birds.
+
+## Field mode (2026-11-17: first range day without a laptop)
+
+Set up with `tbotctl boot live`: the gun comes up **LIVE at every power-up** until `tbotctl boot dry`.
+- Mode: `/run/tbot/mode` (RAM, set by `tbotctl start <mode>`) wins over `/etc/tbot/boot-mode` (set by
+  `tbotctl boot live|dry|test`), which wins over dry. `tbotctl status` shows both.
+- The unit restarts on anything (`Restart=always`, no start limit) and has `WatchdogSec=60`: the frame loop
+  reports in every 2 s, a hang is killed and restarted. Tested on the gun: see the commit message.
+- Presses are still recorded in live mode; their clips are not rendered on the gun (`record.clip=off` in
+  live: a render is a second Python + OpenCV process for 10-20 s after every press). `tbot clip sessions/<name>`
+  renders one later.
+- `record.min_free_mb = 1500`: a press is not saved when the disk has less than that free; the pipeline keeps
+  running. A 29 GB card with 22 GB free holds ~150 presses of 4 s.
+- A press cut off by a power loss is lost or incomplete (no fsync per frame); everything before it is intact.
+  The root file system is ext4 with `fsck.repair=yes`. Session names stay unique when the clock jumps back
+  (no RTC).
+- Heat is the limit to watch: with the service alone the Pi sat at 68-71 C on a cool morning; with an hour of
+  benchmarks on top it reached 81 C and capped its clock, which roughly doubles the frame time. Shade and air
+  for the pod.
+
 ## Frame rate and CPU
 
 *(2026-11-15 numbers, before the sensor process and the half-resolution detector; kept for the record.)*

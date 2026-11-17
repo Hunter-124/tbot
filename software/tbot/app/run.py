@@ -11,7 +11,10 @@ import argparse
 import gc
 import json
 import logging
+import math
+import os
 import signal
+import socket
 import subprocess
 import sys
 import threading
@@ -56,6 +59,22 @@ SOLVE_EMA_ALPHA = 0.1
 EXPOSURE_WARN_S = 2.0  # the scene must be out of the camera's exposure range this long before it is reported
 HOT_TEMP_C = 75.0  # warn before the Pi 3B firmware throttles at 80 C
 HEALTH_PERIOD_S = 2.0
+
+
+def _sd_notify(message: str) -> None:
+    """Tell systemd something about this service ("WATCHDOG=1": the frame loop is alive). The unit has
+    WatchdogSec: a loop that stops turning (a hang, not a crash - a crash is restarted anyway) is killed and
+    started again. Does nothing when not run by systemd."""
+    addr = os.environ.get("NOTIFY_SOCKET")
+    if not addr:
+        return
+    try:
+        if addr[0] == "@":
+            addr = "\0" + addr[1:]
+        with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as sock:
+            sock.sendto(message.encode(), addr)
+    except OSError:
+        pass
 
 
 def _ms(t0_ns: int, t1_ns: int) -> float:
@@ -470,6 +489,21 @@ class Pipeline:
         # whatever is detected near them even if they slow to a crawl (going away, or at the top of an arc).
         rate_of = getattr(self.tracker, "angular_rate", None)
         protect = []
+        # Established targets (as many hits as the firing rule asks for): the detector looks where they
+        # should be first and then at only a few other candidates (see StaticFilter.begin). Not for a track
+        # that is merely confirmed: in a cluttered scene short-lived tracks on scenery are confirmed all the
+        # time, and a small far clay that has yet to be picked up would have to compete for those few places
+        # (synthetic skeet crossing against a tree line: target error at the shot 0.16 -> 0.40 deg).
+        focus, focus_radius = [], []
+        gate = float(getattr(self.tracker, "_gate", 0.0))
+        gate_min = float(getattr(self.tracker, "_gate_min", 0.0))
+        established = int(self.cfg.fire.min_track_hits)
+        # the main target first: the one the solver works on (the most hits)
+        for t in sorted(self.tracks, key=lambda t: (-t.hits, -t.first_t_ns, -t.track_id)):
+            if t.confirmed and t.hits >= established:
+                focus.append(self.tracker.predict_dir(t, t_ns))
+                # as wide as the tracker's own association gate for this track in this frame
+                focus_radius.append(math.hypot(gate * float(self.tracker.predict(t, t_ns)[2]), gate_min))
         if rate_of is not None:
             det = self.cfg.detector
             floor = 4.0 * float(det.static_tol_px) * clutter.ifov / max(float(det.static_min_age_ms) * 1e-3, 1e-3)
@@ -481,7 +515,8 @@ class Pipeline:
                 if t.track_id in self._movers:
                     protect.append(self.tracker.predict_dir(t, t_ns))
             self._movers &= alive
-        clutter.begin(t_ns, R_wg, protect_dirs_w=protect)
+        clutter.begin(t_ns, R_wg, protect_dirs_w=protect, focus_dirs_w=focus, focus_radius_rad=focus_radius,
+                      others_max=int(getattr(self.cfg.detector, "followed_others_max", 0)))
         self.detector.candidate_filter = clutter.filter
 
     # ------------------------------------------------------------------ one frame
@@ -778,6 +813,10 @@ class Pipeline:
         rc = 0
         try:
             self.start()
+            # Background threads of this process (press dumps, telemetry stream, health) share the interpreter
+            # lock with the frame loop, which gives it up at every OpenCV call and then waits up to the switch
+            # interval to get it back from a busy thread: 5 ms by default, a few dozen times a frame.
+            sys.setswitchinterval(0.0005)
             # Everything alive now (modules, calibration, buffers) lives as long as the run: take it out of the
             # garbage collector's sight, or every full collection walks ~10^5 objects (tens of ms on a Pi 3B,
             # i.e. dropped frames about once a second).
@@ -790,10 +829,14 @@ class Pipeline:
             idle_fps = float(getattr(self.cfg.camera, "idle_fps", 0.0) or 0.0)
             # only a source on the real clock is paced: a simulated or replayed one has no heat to save
             idle_period = 1.0 / idle_fps if idle_fps > 0.0 and isinstance(self.source.clock, MonotonicClock) else 0.0
+            sd_wall = 0.0
             while not self._stop.is_set():
                 t_loop = time.monotonic()
                 tele = self.step()
                 now = time.monotonic()
+                if now - sd_wall >= 2.0:
+                    sd_wall = now
+                    _sd_notify("WATCHDOG=1")
                 if tele is not None and idle_period and not tele["armed"] and not self.arming.armed:
                     # button up: rest until the idle period is over (a press is noticed within one period, and
                     # the tracks are already there because tracking never stopped)

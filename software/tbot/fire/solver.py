@@ -19,6 +19,9 @@ from .ballistics import G_MPS2, ShotModel
 _UP_W = np.array([0.0, 0.0, 1.0], dtype=np.float64)
 _TOF_ITERS = 3  # fixed-point passes on time of flight (converges in 2 at skeet ranges)
 _DTOF_STEP_M = 0.5  # finite-difference step for d(ToF)/d(range)
+# A closest approach this many sigma outside the pattern is not worth a full solution: P(hit) there is below
+# 4e-5 whatever the threshold (the sigma is scaled up for the later exit time before it is compared).
+_SUBFRAME_NSIG = 4.0
 
 # Polar quadrature of the aim-error Gaussian over the pattern disc (no scipy, no Bessel overflow).
 _QUAD_R_X, _QUAD_R_W = np.polynomial.legendre.leggauss(16)
@@ -162,22 +165,27 @@ class FireSolver:
         else:
             period_ns = int(round(float(frame_period_s) * 1e9))
             horizon = int(fc.horizon_frames) if period_ns > 0 else 0
-            g1 = None
-            if horizon >= 1:
-                g1 = self._geometry(now_ns, now_ns + period_ns, track, tracker, rot_now, omega, delay_s, jitter_s,
-                                    alpha, dw)
-                if bool(getattr(fc, "subframe", True)):
-                    # The command need not go out on a frame. Bore and clay close on each other almost
-                    # linearly over one frame period, so the instant of closest approach follows from the
-                    # solution for a command now and the one for a command a frame later; a third solution
-                    # at that instant says what it is worth. A fast crossing passes through the pattern in
-                    # 20-40 ms: on frames alone a 30 fps loop (trees in view) steps right over it.
-                    e0 = g["shot_dir_w"] - g["lead_dir_w"]
-                    de = (g1["shot_dir_w"] - g1["lead_dir_w"]) - e0
-                    dd = float(de @ de)
-                    if dd > 0.0:
-                        frac = -float(e0 @ de) / dd
-                        if 0.02 < frac < 0.98:
+            if horizon >= 1 and bool(getattr(fc, "subframe", True)):
+                # The command need not go out on a frame. Bore and clay close on each other almost
+                # linearly over one frame period, so the instant of closest approach follows from where
+                # shot and clay will be for a command now and for one a frame later; a full solution
+                # at that instant says what it is worth. A fast crossing passes through the pattern in
+                # 20-40 ms: on frames alone a 30 fps loop (trees in view) steps right over it.
+                # (This runs on every frame with a target, so the look ahead is the aim only - no
+                # uncertainty, no probability - and the full solution is only worked out when the closest
+                # approach can come near the pattern: 7.4 -> 3.6 ms a frame on a Pi 3B.)
+                a1 = self._geometry(now_ns, now_ns + period_ns, track, tracker, rot_now, omega, delay_s, jitter_s,
+                                    alpha, dw, aim_only=True)
+                e0 = g["shot_dir_w"] - g["lead_dir_w"]
+                de = (a1["shot_dir_w"] - a1["lead_dir_w"]) - e0
+                dd = float(de @ de)
+                if dd > 0.0:
+                    frac = -float(e0 @ de) / dd
+                    if 0.02 < frac < 0.98:
+                        closest = _norm3(e0 + frac * de)
+                        # the uncertainty grows with the time to exit (at most with its square)
+                        grow = ((delay_s + frac * period_ns * 1e-9) / delay_s) ** 2 if delay_s > 0.0 else 1.0
+                        if closest < g["pattern"] + _SUBFRAME_NSIG * grow * g["sigma"]:
                             at_ns = now_ns + int(round(frac * period_ns))
                             gs = self._geometry(now_ns, at_ns, track, tracker, rot_now, omega, delay_s, jitter_s,
                                                 alpha, dw)
@@ -188,7 +196,7 @@ class FireSolver:
             else:
                 better_k = 0
                 for k in range(1, horizon + 1):
-                    gk = g1 if k == 1 else self._geometry(
+                    gk = self._geometry(
                         now_ns, now_ns + k * period_ns, track, tracker, rot_now, omega, delay_s, jitter_s, alpha, dw
                     )
                     future.append(gk["p_hit"])
@@ -250,8 +258,10 @@ class FireSolver:
         jitter_s: float,
         alpha: np.ndarray | None = None,
         rate_change: float = 0.0,
+        aim_only: bool = False,
     ) -> dict:
-        """Miss angle, uncertainty and hit probability for a trigger command issued at decide_ns."""
+        """Miss angle, uncertainty and hit probability for a trigger command issued at decide_ns.
+        aim_only: just where the shot and the clay will be ("shot_dir_w", "lead_dir_w")."""
         t_exit_ns = int(decide_ns) + int(round(delay_s * 1e9))
         dt_exit = (t_exit_ns - now_ns) * 1e-9
         if alpha is None:
@@ -294,6 +304,8 @@ class FireSolver:
         drop = (float(0.5 * G_MPS2 * tof * tof * np.cos(elevation)) if tabulated
                 else float(shot.drop(dist, elevation)))
         to_shot = bore_w * dist - drop * _UP_W
+        if aim_only:
+            return {"lead_dir_w": lead_dir, "shot_dir_w": _unit(to_shot)}
         miss = _angle_between(to_clay, to_shot)
 
         _, _, track_sigma = tracker.predict(track, t_arr_ns)

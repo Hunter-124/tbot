@@ -19,6 +19,11 @@ be held (or the post-roll must last) until the shot would have arrived.
 
 `--image` writes shot_<n>.png next to the clip: the frame at the arrival time with the pattern drawn where
 the shot went.
+
+`--every` asks the same question of every frame in which the solver had a firing solution for a settled track,
+fired or not: "had the command gone out on this frame, would it have hit?". A press with no shot in it then
+still says two things: whether there were chances the gun let go (frames that would have hit), and whether
+P(hit) means what it says (of the frames it called 0.4, did four in ten hit?).
 """
 
 from __future__ import annotations
@@ -166,7 +171,12 @@ class Session:
         return np.frombuffer(buf, dtype=np.uint8).reshape((h, w) if ch == 1 else (h, w, ch))
 
 
-def score(session: str | Path, image: bool = False) -> list[dict]:
+GATED = ("p_hit ", "better in", "would fire", "FIRE")   # reasons of a frame that passed every gate but confidence
+
+
+def score(session: str | Path, image: bool = False, every: bool = False) -> list[dict]:
+    """One result per shot of the press; with `every`, one per frame that had a firing solution for a settled
+    track (see the module docstring), each scored as if the command had gone out on that frame."""
     s = Session(session)
     atype = str(s.cfg.actuator.type)
     delay_ns = int(round(s.budget.fire_delay_s(atype) * 1e9))
@@ -174,15 +184,25 @@ def score(session: str | Path, image: bool = False) -> list[dict]:
     muzzle_g = np.asarray(s.mount.muzzle_pos_g, dtype=np.float64) - np.asarray(s.mount.cam_pos_g, dtype=np.float64)
     up = np.array([0.0, 0.0, 1.0])
     out = []
-    shots = [(i, r) for i, r in enumerate(s.tel) if r.get("fired")]
+    if every:
+        def solved(r):
+            d = r.get("decision") or {}
+            return (d.get("track_id") is not None and d.get("tof_ms") is not None and d.get("miss_deg") is not None
+                    and math.isfinite(float(d["miss_deg"])) and str(d.get("reason", "")).startswith(GATED))
+        shots = [(i, r) for i, r in enumerate(s.tel) if solved(r)]
+    else:
+        shots = [(i, r) for i, r in enumerate(s.tel) if r.get("fired")]
     for n, (i, rec) in enumerate(shots, 1):
         dec = rec["decision"]
         res = {"shot": n, "frame": i, "t_ns": int(rec["t_ns"]), "track_id": dec.get("track_id"),
+               "fired": bool(rec.get("fired")), "sigma_deg": dec.get("sigma_deg"),
                "live": bool(rec.get("live")), "predicted_miss_deg": dec.get("miss_deg"),
                "pattern_deg": dec.get("pattern_deg"), "p_hit": dec.get("p_hit"), "range_m": dec.get("range_m"),
                "tof_ms": dec.get("tof_ms")}
         out.append(res)
         t_cmd = int(rec["cmd_t_ns"]) if rec.get("cmd_t_ns") else int(rec["t_ns"])
+        if every and not rec.get("fired"):
+            t_cmd = int(dec["fire_at_ns"]) if dec.get("fire_at_ns") else int(rec["t_ns"])
         t_exit = int(dec["t_exit_ns"]) if dec.get("t_exit_ns") else t_cmd + delay_ns
         t_arr = t_exit + int(round(float(dec["tof_ms"]) * 1e6))
         res.update(delay_ms=(t_exit - t_cmd) / 1e6, arrive_after_ms=(t_arr - int(rec["t_ns"])) / 1e6)
@@ -228,7 +248,7 @@ def score(session: str | Path, image: bool = False) -> list[dict]:
                    swing_during_delay_deg=math.degrees(swing),
                    miss_cm_at_range=100.0 * dist * math.tan(miss), pattern_cm_at_range=100.0 * dist * math.tan(pattern),
                    verdict="HIT" if miss <= pattern else "MISS")
-        if image:
+        if image and not every:
             img = s.frame(j_show)
             if img is not None:
                 res["image"] = str(_draw(s, img, j_show, to_shot, tdir, pattern, res, n))
@@ -281,29 +301,98 @@ def format_shot(r: dict) -> str:
             f"error {r['target_error_deg']:.2f} deg (target from its {r['target_from']})")
 
 
+P_BINS = (0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.7, 1.01)
+
+
+def summarize_every(rows: list[dict]) -> dict:
+    """Frames scored as if fired (score(..., every=True)): how often they would have hit, by the P(hit) the
+    solver gave them, and how far off the two halves of the prediction were."""
+    rows = [r for r in rows if "hit" in r and r.get("p_hit") is not None]
+    out = {"frames": len(rows), "would_hit": int(sum(r["hit"] for r in rows)), "bins": []}
+    if not rows:
+        return out
+    p = np.array([float(r["p_hit"]) for r in rows])
+    hit = np.array([bool(r["hit"]) for r in rows])
+    for lo, hi in zip(P_BINS, P_BINS[1:]):
+        m = (p >= lo) & (p < hi)
+        if m.any():
+            out["bins"].append({"p_lo": lo, "p_hi": min(hi, 1.0), "frames": int(m.sum()),
+                                "p_mean": float(p[m].mean()), "hit_frac": float(hit[m].mean())})
+    for key in ("gun_error_deg", "target_error_deg", "miss_deg"):
+        v = np.array([r[key] for r in rows], dtype=np.float64)
+        v = v[np.isfinite(v)]
+        if v.size:
+            out[key] = {"p50": float(np.median(v)), "p90": float(np.quantile(v, 0.9))}
+    # the longest run of consecutive frames that would have hit: a chance the gun had, in seconds
+    best = cur = 0.0
+    start = None
+    last = None
+    for r in rows:
+        if r["hit"] and start is not None and last is not None and r["frame"] == last + 1:
+            cur = (r["t_ns"] - start) / 1e9
+        elif r["hit"]:
+            start, cur = r["t_ns"], 0.0
+        else:
+            start = None
+        last = r["frame"]
+        best = max(best, cur)
+    out["longest_hit_window_s"] = best
+    return out
+
+
+def format_every(summary: dict) -> str:
+    n = summary["frames"]
+    if not n:
+        return "  no frame had a firing solution for a settled track with frames after it"
+    lines = [f"  {n} frames with a solution, scored as if fired: {summary['would_hit']} would have hit "
+             f"({100.0 * summary['would_hit'] / n:.0f} %), longest unbroken chance "
+             f"{summary['longest_hit_window_s'] * 1e3:.0f} ms",
+             "    P(hit) given    frames   really hit"]
+    for b in summary["bins"]:
+        lines.append(f"    {b['p_lo']:.1f} - {b['p_hi']:.1f}     {b['frames']:6d}   {100.0 * b['hit_frac']:5.0f} %")
+    for key, name in (("gun_error_deg", "gun extrapolation error"), ("target_error_deg", "target extrapolation error"),
+                      ("miss_deg", "real miss")):
+        if key in summary:
+            lines.append(f"    {name}: p50 {summary[key]['p50']:.2f} deg, p90 {summary[key]['p90']:.2f} deg")
+    return "\n".join(lines)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="tbot score", description="would each shot of a recorded press have hit?")
     parser.add_argument("sessions", nargs="+", metavar="SESSION")
     parser.add_argument("--image", action="store_true", help="write shot_<n>.png (the arrival frame) into the session")
     parser.add_argument("--json", action="store_true", help="print the results as JSON")
+    parser.add_argument("--every", action="store_true",
+                        help="score every frame that had a firing solution as if it had fired: chances the gun "
+                             "let go, and whether P(hit) means what it says")
     args = parser.parse_args(argv)
     status = 0
     everything = []
     for session in args.sessions:
         try:
-            shots = score(session, image=args.image)
+            shots = score(session, image=args.image, every=args.every)
         except Exception as exc:  # noqa: BLE001 - one bad session must not stop the rest
             print(f"tbot score: {session}: {exc}", file=sys.stderr)
             status = 1
             continue
         everything.append({"session": str(session), "shots": shots})
+        if args.every:
+            everything[-1]["every"] = summarize_every(shots)
         if args.json:
+            continue
+        if args.every:
+            print(f"{session}:")
+            print(format_every(everything[-1]["every"]))
             continue
         print(f"{session}: {len(shots)} shot(s)")
         for r in shots:
             print(format_shot(r))
     if args.json:
         print(json.dumps(everything, indent=1))
+    elif args.every:
+        if len(everything) > 1:
+            print("all sessions:")
+            print(format_every(summarize_every([r for e in everything for r in e["shots"]])))
     else:
         scored = [r for e in everything for r in e["shots"] if "hit" in r]
         if scored:

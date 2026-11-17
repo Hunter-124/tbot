@@ -41,6 +41,7 @@ _Z_EPS = 1e-9  # rays with z <= this are behind/along the image plane -> nan pix
 _NEWTON_ITERS = 32  # fisheye theta_d -> theta inversion
 _NEWTON_TOL = 1e-14
 _IFOV_SCALAR_MAX = 8  # ifov of up to this many points goes point by point (scalar ray path)
+_UNDISTORT_ITERS = 5  # what cv2.undistortPoints does by default: ray_xyz must give the same ray
 
 # barrel_mask sampling of the barrel surface
 _BARREL_SLICE_STEP_M = 0.002  # axial spacing of the sampled rings
@@ -122,7 +123,7 @@ def range_from_size(
 class CameraModel:
     """Intrinsic projection model: "fisheye" (cv2.fisheye, D len 4) or "pinhole" (D len 5)."""
 
-    __slots__ = ("width", "height", "K", "D", "model")
+    __slots__ = ("width", "height", "K", "D", "model", "_fast")
 
     def __init__(self, width: int, height: int, K, D, model: str = "fisheye") -> None:
         self.width = int(width)
@@ -141,6 +142,18 @@ class CameraModel:
             raise ValueError(f"pinhole needs 4/5/8/12/14 distortion coefficients, got {self.D.size}")
         if not (self.K[0, 0] > 0.0 and self.K[1, 1] > 0.0):
             raise ValueError("CameraModel: fx and fy must be positive")
+        # Plain-float copy of the model for single pixels (ray_xyz): (fx, fy, cx, cy, skew, coefficients).
+        # None for the pinhole models with thin-prism / tilt terms, which stay with OpenCV.
+        k = [float(v) for v in self.D]
+        base = (float(self.K[0, 0]), float(self.K[1, 1]), float(self.K[0, 2]), float(self.K[1, 2]),
+                float(self.K[0, 1]) / float(self.K[0, 0]))
+        if m == "fisheye":
+            self._fast = base + (tuple(k),)
+        elif len(k) in (4, 5, 8):
+            k = k + [0.0] * (8 - len(k))
+            self._fast = base + ((tuple(k) if any(k) else None),)
+        else:
+            self._fast = None
 
     # ---- construction ---------------------------------------------------------------------
     @classmethod
@@ -261,17 +274,57 @@ class CameraModel:
                 break
         return theta
 
+    def ray_xyz(self, u: float, v: float) -> tuple[float, float, float] | None:
+        """pixel_to_ray for ONE finite pixel in plain floats (no arrays in or out): what the tracker and the
+        pixel-size estimate call per detection. On a Pi 3B a cv2.undistortPoints call for one point costs
+        ~0.1 ms and four of them make one ifov; this is ~10 us. None when the model has no plain-float form
+        (pinhole with thin-prism / tilt terms): the caller then uses pixel_to_ray."""
+        fast = self._fast
+        if fast is None:
+            return None
+        fx, fy, cx, cy, skew, k = fast
+        if self.model == "fisheye":
+            y = (v - cy) / fy
+            x = (u - cx) / fx - skew * y
+            theta_d = math.hypot(x, y)
+            theta = self._theta_from_theta_d_scalar(theta_d)
+            scale = math.sin(theta) / theta_d if theta_d > 0.0 else 0.0
+            return x * scale, y * scale, math.cos(theta)
+        # pinhole: the fixed-point iteration of cv2.undistortPoints (5 passes, skew ignored, as there)
+        x0 = (u - cx) / fx
+        y0 = (v - cy) / fy
+        x, y = x0, y0
+        if k is not None:
+            k1, k2, p1, p2, k3, k4, k5, k6 = k
+            for _ in range(_UNDISTORT_ITERS):
+                r2 = x * x + y * y
+                icdist = (1.0 + ((k6 * r2 + k5) * r2 + k4) * r2) / (1.0 + ((k3 * r2 + k2) * r2 + k1) * r2)
+                if icdist < 0.0:
+                    x, y = x0, y0
+                    break
+                dx = 2.0 * p1 * x * y + p2 * (r2 + 2.0 * x * x)
+                dy = p1 * (r2 + 2.0 * y * y) + 2.0 * p2 * x * y
+                x = (x0 - dx) * icdist
+                y = (y0 - dy) * icdist
+        norm = math.sqrt(x * x + y * y + 1.0)
+        return x / norm, y / norm, 1.0 / norm
+
+    def ifov1(self, u: float, v: float) -> float:
+        """ifov of ONE finite pixel in plain floats (the same central differences as ifov)."""
+        h = 0.5
+        a, b = self.ray_xyz(u - h, v), self.ray_xyz(u + h, v)
+        c, d = self.ray_xyz(u, v - h), self.ray_xyz(u, v + h)
+        if a is None or b is None or c is None or d is None:
+            return float(self.ifov(np.array([u, v], dtype=np.float64)))
+        return 0.5 * (_angle3(a, b) + _angle3(c, d)) / (2.0 * h)
+
     def pixel_to_ray(self, uv: np.ndarray) -> np.ndarray:
         """Distorted pixel(s) -> unit ray(s) in the camera frame. (N,2)->(N,3), (2,)->(3,)."""
         arr = np.asarray(uv, dtype=np.float64)
         if arr.shape == (2,) and np.isfinite(arr).all():
-            if self.model == "fisheye":
-                y = (float(arr[1]) - self.cy) / self.fy
-                x = (float(arr[0]) - self.cx) / self.fx - self.skew * y
-                theta_d = math.hypot(x, y)
-                theta = self._theta_from_theta_d_scalar(theta_d)
-                scale = math.sin(theta) / theta_d if theta_d > 0.0 else 0.0
-                return np.array([x * scale, y * scale, math.cos(theta)], dtype=np.float64)
+            ray = self.ray_xyz(float(arr[0]), float(arr[1]))
+            if ray is not None:
+                return np.array(ray, dtype=np.float64)
             xy = cv2.undistortPoints(arr.reshape(1, 1, 2), self.K, self.D).reshape(2)
             x, y = float(xy[0]), float(xy[1])
             norm = math.sqrt(x * x + y * y + 1.0)
@@ -352,6 +405,9 @@ class CameraModel:
             out = np.empty(pts.shape[0], dtype=np.float64)
             for k in range(pts.shape[0]):
                 u, v = float(pts[k, 0]), float(pts[k, 1])
+                if self._fast is not None:
+                    out[k] = self.ifov1(u, v)
+                    continue
                 ang_u = _angle3(self.pixel_to_ray(np.array([u - h, v])), self.pixel_to_ray(np.array([u + h, v])))
                 ang_v = _angle3(self.pixel_to_ray(np.array([u, v - h])), self.pixel_to_ray(np.array([u, v + h])))
                 out[k] = 0.5 * (ang_u + ang_v) / (2.0 * h)

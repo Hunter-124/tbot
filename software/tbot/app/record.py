@@ -12,6 +12,7 @@ import csv
 import json
 import queue
 import re
+import shutil
 import sys
 import threading
 import time
@@ -39,6 +40,12 @@ __all__ = ["SessionWriter", "RingRecorder", "session_meta_extra", "summarise_ses
            "TELEMETRY_JSONL", "SUMMARY_JSON"]
 
 _SENTINEL = object()
+# Writing a press out (ring dump) is pure-Python work in a thread of the frame loop's process: IMU rows, one
+# JSON line per frame. While it holds the interpreter lock the frame loop waits for it at every OpenCV call,
+# up to the switch interval each time: a press started right after the last one was released ran two
+# 340 ms frames (2026-11-17, bird near trees). So the dump goes out in small pieces with a pause between them.
+_DUMP_PAUSE_S = 0.001
+_DUMP_IMU_CHUNK = 50
 _NUMBER = re.compile(r"[-+]?\d+(?:\.\d+)?")
 TELEMETRY_JSONL = "telemetry.jsonl"  # one line per processed frame: what the pipeline saw and decided (run.py)
 SUMMARY_JSON = "summary.json"        # the press at a glance (summarise_session)
@@ -345,6 +352,9 @@ class RingRecorder:
         self.preroll_ns = int(round(float(cfg.record.preroll_s) * 1e9))
         self.postroll_ns = int(round(float(cfg.record.postroll_s) * 1e9))
         self.max_bytes = int(cfg.record.max_ram_mb) * 1024 * 1024
+        # a press is not saved when the disk has less than this left: a full card must never be what stops the gun
+        self.min_free_bytes = int(float(getattr(cfg.record, "min_free_mb", 0)) * 1024 * 1024)
+        self.skipped = 0  # presses not saved for lack of disk space
         self.meta_extra = dict(meta_extra) if meta_extra is not None else session_meta_extra(cfg)
         self.evicted = 0  # frames thrown away by the RAM cap while a dump still wanted them
         self.sessions: list[Path] = []
@@ -493,6 +503,18 @@ class RingRecorder:
 
     def _spawn_dump(self, dump: _PendingDump, frames: list, samples: list, events: list,
                     telemetry: list | None = None, evicted: int = 0) -> None:
+        if self.min_free_bytes > 0:
+            try:
+                self.dir.mkdir(parents=True, exist_ok=True)
+                free = shutil.disk_usage(self.dir).free
+            except OSError:
+                free = None
+            if free is not None and free < self.min_free_bytes:
+                self.skipped += 1
+                print(f"tbot record: {dump.path.name} NOT saved: {free / 1e6:.0f} MB free on the disk "
+                      f"(record.min_free_mb = {self.min_free_bytes // (1024 * 1024)}); delete old sessions",
+                      file=sys.stderr)
+                return
         thread = threading.Thread(
             target=self._write_dump,
             args=(dump, frames, samples, events, telemetry or [], evicted),
@@ -515,11 +537,14 @@ class RingRecorder:
             meta_extra=meta, queue_size=64, drop_when_full=False,
         )
         try:
-            writer.add_imu(samples)
+            for k in range(0, len(samples), _DUMP_IMU_CHUNK):
+                writer.add_imu(samples[k:k + _DUMP_IMU_CHUNK])
+                time.sleep(_DUMP_PAUSE_S)
             for event in events:
                 writer.add_event(event)
             for frame in frames:
                 writer.add_frame(frame)
+                time.sleep(_DUMP_PAUSE_S)
         finally:
             writer.close()
         try:  # the extras must never cost the replayable session that is already on disk
@@ -527,6 +552,7 @@ class RingRecorder:
                 with open(dump.path / TELEMETRY_JSONL, "w") as f:
                     for record in telemetry:
                         f.write(json.dumps(record, default=_json_default) + "\n")
+                        time.sleep(_DUMP_PAUSE_S)
             save_json(dump.path / SUMMARY_JSON,
                       json.loads(json.dumps(summarise_session(frames, telemetry, events, meta["trigger"], evicted),
                                             default=_json_default)))

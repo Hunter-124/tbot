@@ -8,7 +8,11 @@
 #   tbotctl stop           stop (frees the camera for calibration tools)
 #   tbotctl status         mode, health, last lines of the log
 #   tbotctl log            follow the log
-#   tbotctl boot on|off    start (always in dry run) at power-up, or not
+#   tbotctl boot on|off    start at power-up, or not (in dry run unless a boot mode says otherwise)
+#   tbotctl boot live      FIELD MODE: start at power-up and come up LIVE after every power cycle, until
+#                          `tbotctl boot dry`. For a day at the range without a laptop.
+#   tbotctl boot dry|test  power-up mode back to dry run (or the paper-fire test mode)
+#   tbotctl clean          delete the recorded presses under sessions/ (asks first)
 #   tbotctl preflight      go / no-go checks (tbot doctor + hardware check when the camera is free)
 #   tbotctl camera on|off  CAMERA MODE: the arming button saves stills to snaps/ (no trigger), also at power-up
 set -euo pipefail
@@ -49,9 +53,10 @@ case "$cmd" in
         echo "stopped (camera free; next start defaults to dry run)"
         ;;
     status)
-        mode=$(cat /run/tbot/mode 2>/dev/null || echo dry)
+        boot_mode=$(cat /etc/tbot/boot-mode 2>/dev/null || echo dry)
+        mode=$(cat /run/tbot/mode 2>/dev/null || echo "$boot_mode")
         state=$(systemctl is-active $unit 2>/dev/null || true)
-        echo "service: $state   mode: $mode   boot: $(systemctl is-enabled $unit 2>/dev/null | head -1)"
+        echo "service: $state   mode: $mode   boot: $(systemctl is-enabled $unit 2>/dev/null | head -1), comes up in $boot_mode"
         echo "pi: $(vcgencmd measure_temp 2>/dev/null)  $(vcgencmd get_throttled 2>/dev/null)   disk free: $(df -h --output=avail "$here" | tail -1 | tr -d ' ')"
         ip=$(hostname -I | awk '{print $1}')
         echo "sessions: $(find "$here/sessions" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l)   stream: http://$ip:8080/   recorded presses: http://$ip:8080/clips"
@@ -60,10 +65,42 @@ case "$cmd" in
     log) exec journalctl -u $unit -f -o cat ;;
     boot)
         case ${2:-} in
-            on) sudo systemctl enable $unit; echo "starts at power-up, always in DRY RUN" ;;
+            on) sudo systemctl enable $unit
+                echo "starts at power-up, in: $(cat /etc/tbot/boot-mode 2>/dev/null || echo dry)" ;;
             off) sudo systemctl disable $unit ;;
-            *) echo "usage: tbotctl boot on|off" >&2; exit 2 ;;
+            live)
+                echo "FIELD MODE: from now on the gun comes up LIVE at every power-up, with nobody typing anything:"
+                echo "the servo pulls the trigger whenever the arming button is held and the solver fires."
+                echo "It stays that way until: tbotctl boot dry"
+                if [[ ${TBOT_YES:-} != 1 ]]; then
+                    read -r -p "Type LIVE to continue: " answer
+                    [[ $answer == LIVE ]] || { echo "not changed"; exit 1; }
+                fi
+                sudo mkdir -p /etc/tbot
+                echo live | sudo tee /etc/tbot/boot-mode > /dev/null
+                sync
+                sudo systemctl enable $unit
+                echo "power-up mode: live (this run is not changed: tbotctl start live)"
+                ;;
+            dry|test)
+                sudo mkdir -p /etc/tbot
+                echo "$2" | sudo tee /etc/tbot/boot-mode > /dev/null
+                sync
+                echo "power-up mode: $2"
+                ;;
+            *) echo "usage: tbotctl boot on|off|live|dry|test" >&2; exit 2 ;;
         esac
+        ;;
+    clean)
+        n=$(find "$here/sessions" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l)
+        echo "$n recorded presses, $(du -sh "$here/sessions" 2>/dev/null | cut -f1) under $here/sessions"
+        if [[ ${TBOT_YES:-} != 1 ]]; then
+            read -r -p "Delete them all? Type DELETE: " answer
+            [[ $answer == DELETE ]] || { echo "nothing deleted"; exit 1; }
+        fi
+        find "$here/sessions" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+        sync
+        echo "deleted; disk free: $(df -h --output=avail "$here" | tail -1 | tr -d ' ')"
         ;;
     camera)
         case ${2:-} in
@@ -91,5 +128,5 @@ case "$cmd" in
             echo; "$tbot" hwcheck --help > /dev/null 2>&1 && "$tbot" hwcheck || true
         fi
         ;;
-    *) sed -n '2,11p' "$0"; exit 2 ;;
+    *) sed -n '2,16p' "$0"; exit 2 ;;
 esac

@@ -30,7 +30,9 @@ emulate_mono = "none"         # cv/video sources only: none | luma | red (red = 
 buffer_count = 4
 stall_s = 0.5                 # live picam (tbot run / record): no frame this long = stalled -> close and reopen the camera
 reopen_timeout_s = 5.0        # a reopened camera with no first frame within this is stalled again (retries back off to 5 s)
-idle_fps = 30.0               # tbot run, live sources: frames processed per second while the arming button is UP (0 = all).
+idle_fps = 15.0               # tbot run, live sources: frames processed per second while the arming button is UP (0 = all).
+                              # (15 since 2026-11-17: resting on a rack the gun looks at trees or the ground, a frame
+                              # costs 50 ms and at 30 the loop never rests: 80 C indoors. A press is noticed within 67 ms)
                               # Nothing can fire then, and flat out at 100 fps a bare Pi 3B passed 72 C in 8 minutes
                               # (it throttles at 80). The moment the button is held every frame is processed
 process = true                # tbot run, picam only: acquire camera + IMU in a child process (camera/proc.py). In-process
@@ -88,6 +90,12 @@ clutter_ring_max = 0.05       # cluttered frame (8+ candidates): a candidate mus
                               # ring around it may be other blobs (tree fringe against sky: 130 -> ~15). 0 = off
 min_size_frac = 0.4           # drop detections narrower than this x a clay at fire.max_range_m (from the optics: 2.2 px
                               # with the 12 mm lens = a clay 100 m away). 0 = off
+followed_others_max = 0       # 0 = off. N: in a frame where the main established target (fire.min_track_hits reached)
+                              # was found where the tracker expected it, measure at most N candidates besides the
+                              # ones at established targets. A compute budget (each measurement costs ~6 ms on the
+                              # Pi 3B and a swing past trees keeps bringing new specks into view): N = 2 was worth
+                              # 6-8 % of the frame time on the bird presses of 2026-11-17 and cost the followed bird
+                              # 5-11 % of its detections, so it is off. Established targets are measured first either way
 static_reject = true          # scenery filter (vision/clutter.py; needs the IMU): drop candidates that keep their WORLD
                               # direction while the gun turns, before they are measured. They show as grey crosses
 static_tol_px = 3.0           # ... within this many pixels (centroid jitter, IMU timing),
@@ -253,6 +261,8 @@ max_ram_mb = 150              # armed: frames wait in RAM until the release (640
                               # evicted_frames). The Pi 3B has 1 GB: the ring, a session still being written and
                               # the two processes must all fit
 decimate = 1
+min_free_mb = 1500            # armed: a press is NOT saved when the disk has less than this free (a line in the log
+                              # says so): the pipeline keeps running whatever the card holds. 0 = no check
 clip = "process"              # armed: annotated video of each session (clip.mp4: boxes, tracks, lead, decision, timing).
                               # process = rendered after the release by a low-priority child process | inline = in
                               # the recorder thread | off. `tbot clip <session>` renders one later

@@ -59,6 +59,10 @@ class StaticFilter:
         self._R_wc: np.ndarray | None = None
         self._protect: np.ndarray | None = None
         self._protect_cos = 1.0
+        self._focus: np.ndarray | None = None
+        self._focus_cos: np.ndarray | float = 1.0
+        self._others_max = 0
+        self.n_focus = 0  # last frame: candidates kept because they are where a followed target should be
         self.static_px: list[list[float]] = []  # last frame: the candidates dropped as scenery (full-res px)
         self.n_static = 0
         self.n_new = 0
@@ -78,11 +82,33 @@ class StaticFilter:
         self.n_static = self.n_new = 0
 
     # ------------------------------------------------------------------ per frame
-    def begin(self, t_ns: int, R_wg: np.ndarray, protect_dirs_w=None, protect_px: float = 25.0) -> None:
+    def begin(self, t_ns: int, R_wg: np.ndarray, protect_dirs_w=None, protect_px: float = 25.0,
+              focus_dirs_w=None, others_max: int = 0, focus_radius_rad=None) -> None:
         """This frame's attitude (before detector.detect). protect_dirs_w: world directions (N,3) of tracks
-        known to be clays; candidates within protect_px of one are never called scenery."""
+        known to be clays; candidates within protect_px of one are never called scenery.
+        focus_dirs_w: where the targets being followed should be in this frame (world directions), the main
+        one first. Candidates within protect_px of one (or within its focus_radius_rad, when that is wider:
+        how far off the tracker itself thinks its prediction may be) go first. Of the rest only the best
+        others_max are kept (0 = all) - but only in a frame where the MAIN target has a candidate in its
+        zone: when it is not where it should be (a turn, a missed frame) the frame is searched as usual, or
+        the target would be skipped again and again while its prediction drifts. Each
+        measurement costs ~6 ms on a Pi 3B, and while there is something to shoot at, the frame rate on it is
+        worth more than a prompt look at every new speck of tree that the swing brings into view."""
         self._t_ns = int(t_ns)
         self._R_wc = np.asarray(R_wg, dtype=np.float64).reshape(3, 3) @ self._R_gc
+        if focus_dirs_w is not None and len(focus_dirs_w):
+            f = np.asarray(focus_dirs_w, dtype=np.float64).reshape(-1, 3)
+            self._focus = f / np.maximum(np.linalg.norm(f, axis=1, keepdims=True), 1e-12)
+            floor = float(protect_px) * self.ifov
+            if focus_radius_rad is not None and len(focus_radius_rad) == len(f):
+                self._focus_cos = np.cos(np.minimum(np.maximum(np.asarray(focus_radius_rad, dtype=np.float64),
+                                                               floor), 0.5 * math.pi))
+            else:
+                self._focus_cos = math.cos(floor)
+            self._others_max = max(0, int(others_max))
+        else:
+            self._focus = None
+        self.n_focus = 0
         if protect_dirs_w is not None and len(protect_dirs_w):
             p = np.asarray(protect_dirs_w, dtype=np.float64).reshape(-1, 3)
             self._protect = p / np.maximum(np.linalg.norm(p, axis=1, keepdims=True), 1e-12)
@@ -204,4 +230,12 @@ class StaticFilter:
             else:
                 fill = np.ones(n)
             keep = keep[np.lexsort((-fill[keep], new[keep]))]  # movers before unknowns, solid and sizeable first
+        if self._focus is not None and keep.size:
+            hit = (dirs[keep] @ self._focus.T) >= self._focus_cos   # (kept, targets)
+            near = hit.any(axis=1)
+            self.n_focus = int(near.sum())
+            others = keep[~near]
+            if self._others_max and hit[:, 0].any():
+                others = others[:self._others_max]
+            keep = np.concatenate((keep[near], others))
         return keep

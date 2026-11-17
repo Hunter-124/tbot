@@ -77,6 +77,16 @@ details are in [ARCHITECTURE.md](ARCHITECTURE.md); keep those signatures and `tb
 - `tbot score` and `tbotctl start test`: shots checked against the frames after them.
 - Open: per-target cost on the Pi (~17 ms a frame for one target), tree-fringe flicker, a fitted `gun_sigma`.
 
+## Changed 2026-11-17, outdoors, second round (details and measurements: INTEGRATION_STATUS.md)
+
+- Tracker and camera geometry per detection are plain-float code now (`CameraModel.ray_xyz`, `ifov1`,
+  `ClayTracker._measure_few`, `tracker3d._jac5/_proj2/_inv_small`); `tests/test_fast_paths.py` holds each
+  against the matrix form. Keep it that way: a NumPy call on a 3-vector costs 15-50 us on the Pi.
+- `StaticFilter.begin(..., focus_dirs_w, focus_radius_rad, others_max)`: candidates where established
+  targets should be go first, of the rest at most `detector.followed_others_max` are measured.
+- Open: 6 ms per measured candidate (window arithmetic + adaptive moments) is now the largest single cost;
+  the tracker's gate is too tight for a target that turns at 15 fps.
+
 ## Constraints to keep
 - Python >= 3.11, numpy 1.24 and 2.x, OpenCV 4.6 (Raspberry Pi OS apt) and 5.x; no `cv2.aruco`; no scipy at runtime.
 - Pi 3B: the whole pipeline must fit the frame period at the configured fps (`tbot bench` verdict).

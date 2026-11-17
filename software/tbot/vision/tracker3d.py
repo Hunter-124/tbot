@@ -90,22 +90,77 @@ def _azel_jacobian(p: np.ndarray) -> np.ndarray:
                      [-x * z / (r2 * rho), -y * z / (r2 * rho), rho / r2]], dtype=np.float64)
 
 
+# The per-track and per-detection arithmetic below is in plain floats on purpose: every NumPy call on a 3-vector
+# or a 3x3 costs 15-50 us on a Pi 3B whatever it computes, and one frame used to make ~150 of them per
+# detection (tracker.update with 4 tracks and 4 detections: 13.8 ms -> see docs/INTEGRATION_STATUS.md).
+def _jac5(x: float, y: float, z: float) -> tuple[float, float, float, float, float]:
+    """_azel_jacobian as (j00, j01, j10, j11, j12); j02 is zero."""
+    rho2 = x * x + y * y
+    rho2c = max(rho2, 1e-18)
+    rho = math.sqrt(rho2c)
+    r2 = rho2 + z * z
+    return -y / rho2c, x / rho2c, -x * z / (r2 * rho), -y * z / (r2 * rho), rho / r2
+
+
+def _proj2(j: tuple, c: list) -> tuple[float, float, float]:
+    """(m00, m01, m11) of J C J^T for the Jacobian of _jac5 and a 3x3 C given as nested lists."""
+    j00, j01, j10, j11, j12 = j
+    c0, c1, c2 = c
+    a0 = j00 * c0[0] + j01 * c1[0]
+    a1 = j00 * c0[1] + j01 * c1[1]
+    a2 = j00 * c0[2] + j01 * c1[2]
+    b0 = j10 * c0[0] + j11 * c1[0] + j12 * c2[0]
+    b1 = j10 * c0[1] + j11 * c1[1] + j12 * c2[1]
+    b2 = j10 * c0[2] + j11 * c1[2] + j12 * c2[2]
+    return a0 * j00 + a1 * j01, a0 * j10 + a1 * j11 + a2 * j12, b0 * j10 + b1 * j11 + b2 * j12
+
+
+def _inv_small(m: list) -> list | None:
+    """Inverse of a 2x2 or 3x3 given as nested lists (None when singular)."""
+    if len(m) == 2:
+        (a, b), (c, d) = m
+        det = a * d - b * c
+        if not det or not math.isfinite(det):
+            return None
+        return [[d / det, -b / det], [-c / det, a / det]]
+    (a, b, c), (d, e, f), (g, h, i) = m
+    c11, c12, c13 = e * i - f * h, f * g - d * i, d * h - e * g
+    det = a * c11 + b * c12 + c * c13
+    if not det or not math.isfinite(det):
+        return None
+    return [[c11 / det, (c * h - b * i) / det, (b * f - c * e) / det],
+            [c12 / det, (a * i - c * g) / det, (c * d - a * f) / det],
+            [c13 / det, (b * g - a * h) / det, (a * e - b * d) / det]]
+
+
 def _angular_view(s: np.ndarray, S: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """[az, az_rate, 0, el, el_rate, 0] and the matching position covariance, in closed form.
 
     For overlays and telemetry only (the solver uses predict/predict_dir/angular_rate); the angular
     accelerations are not filled in."""
-    p, v = s[0:3], s[3:6]
-    az, el = _azel(p)
-    j = _azel_jacobian(p)  # rows: d az/dp, d el/dp; the angular rates are the same rows applied to v
-    rate = j @ v
-    c = j @ S[0:3, 0:3] @ j.T
-    jv = j @ S[3:6, 3:6] @ j.T
-    x = np.array([az, rate[0], 0.0, el, rate[1], 0.0], dtype=np.float64)
+    px, py, pz, vx, vy, vz = s[0:6].tolist()
+    j = _jac5(px, py, pz)  # rows: d az/dp, d el/dp; the angular rates are the same rows applied to v
+    c00, c01, c11 = _proj2(j, S[0:3, 0:3].tolist())
+    v00, _, v11 = _proj2(j, S[3:6, 3:6].tolist())
+    x = np.array([math.atan2(py, px), j[0] * vx + j[1] * vy, 0.0,
+                  math.atan2(pz, math.hypot(px, py)), j[2] * vx + j[3] * vy + j[4] * vz, 0.0], dtype=np.float64)
     P = np.zeros((6, 6), dtype=np.float64)
-    P[0, 0], P[3, 3], P[0, 3], P[3, 0] = c[0, 0], c[1, 1], c[0, 1], c[0, 1]
-    P[1, 1], P[4, 4] = jv[0, 0], jv[1, 1]
+    P[0, 0], P[3, 3], P[0, 3], P[3, 0] = c00, c11, c01, c01
+    P[1, 1], P[4, 4] = v00, v11
     return x, P
+
+
+_I9 = np.eye(9, dtype=np.float64)
+_I9.setflags(write=False)
+_X0 = np.zeros(6, dtype=np.float64)   # placeholders of a new track's angular view (_sync_views replaces them)
+_P0 = np.eye(6, dtype=np.float64)
+_X0.setflags(write=False)
+_P0.setflags(write=False)
+_S_NEW = np.zeros((9, 9), dtype=np.float64)   # a new track's covariance: the position block is filled in
+for _i in range(3):
+    _S_NEW[3 + _i, 3 + _i] = _NEW_SPEED_SIGMA_MPS ** 2
+    _S_NEW[6 + _i, 6 + _i] = _NEW_ACC_SIGMA_MPS2 ** 2
+_S_NEW.setflags(write=False)
 
 
 class CartesianClayTracker(ClayTracker):
@@ -133,24 +188,31 @@ class CartesianClayTracker(ClayTracker):
             usable = np.zeros(0, dtype=bool)
 
         pairs = []
+        if n_det:
+            az_l, el_l, sa_l, se_l, ok_l = (az_m.tolist(), el_m.tolist(), sig_az.tolist(), sig_el.tolist(),
+                                            usable.tolist())
+            floor_var, gate2 = self._floor_var, self._gate * self._gate
+            floor_az_l = [floor_var / max(math.cos(e), _MIN_COS_EL) ** 2 if ok else 0.0
+                          for e, ok in zip(el_l, ok_l)]
         for j, (sp, Sp) in enumerate(preds):
-            az_p, el_p = _azel(sp[0:3])
-            H = _azel_jacobian(sp[0:3])
-            C = H @ Sp[0:3, 0:3] @ H.T
+            if not n_det:
+                break
+            px, py, pz = sp[0:3].tolist()
+            az_p, el_p = math.atan2(py, px), math.atan2(pz, math.hypot(px, py))
+            c00, c01, c11 = _proj2(_jac5(px, py, pz), Sp[0:3, 0:3].tolist())
             for i in range(n_det):
-                if not usable[i]:
+                if not ok_l[i]:
                     continue
-                d_az = _wrap_pi(float(az_m[i]) - az_p)
-                d_el = float(el_m[i]) - el_p
-                floor_az = self._floor_var / max(math.cos(float(el_m[i])), _MIN_COS_EL) ** 2
-                s00 = C[0, 0] + sig_az[i] ** 2 + floor_az
-                s11 = C[1, 1] + sig_el[i] ** 2 + self._floor_var
-                s01 = C[0, 1]
+                d_az = _wrap_pi(az_l[i] - az_p)
+                d_el = el_l[i] - el_p
+                s00 = c00 + sa_l[i] ** 2 + floor_az_l[i]
+                s11 = c11 + se_l[i] ** 2 + floor_var
+                s01 = c01
                 det = s00 * s11 - s01 * s01
                 if det <= 0.0 or not math.isfinite(det):
                     continue
                 d2 = (s11 * d_az * d_az - 2.0 * s01 * d_az * d_el + s00 * d_el * d_el) / det
-                if self._gate >= 0.0 and 0.0 <= d2 <= self._gate * self._gate:
+                if self._gate >= 0.0 and 0.0 <= d2 <= gate2:
                     pairs.append((d2, j, i))
 
         pairs.sort()
@@ -214,52 +276,71 @@ class CartesianClayTracker(ClayTracker):
         sub-blocks directly (the solver calls this every frame for each candidate fire time)."""
         dt = max(0.0, (int(t_ns) - track.t_ns) * 1e-9)
         h = 0.5 * dt * dt
-        S = track.S
-        pp, pv, pa = S[0:3, 0:3], S[0:3, 3:6], S[0:3, 6:9]
-        vv, va, aa = S[3:6, 3:6], S[3:6, 6:9], S[6:9, 6:9]
-        cross = dt * pv + h * pa + dt * h * va
-        cov = pp + cross + cross.T + dt * dt * vv + h * h * aa
-        cov = cov + np.eye(3) * (self._q3 * dt ** 5 / 20.0)
-        p = self._position(track, t_ns)
-        az, el = _azel(p)
-        H = _azel_jacobian(p)
-        C = H @ cov @ H.T
-        var = math.cos(el) ** 2 * C[0, 0] + C[1, 1]
+        S = track.S.tolist()
+        dth, dt2, h2 = dt * h, dt * dt, h * h
+        q = self._q3 * dt ** 5 / 20.0
+        # position block of F S F^T + Q: pp + (dt pv + h pa + dt h va) + (...)^T + dt^2 vv + h^2 aa
+        cov = [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]
+        for i in range(3):
+            Si, Svi, Sai = S[i], S[3 + i], S[6 + i]
+            for k in range(i, 3):
+                Sk, Svk = S[k], S[3 + k]
+                c = (Si[k] + dt * (Si[3 + k] + Sk[3 + i]) + h * (Si[6 + k] + Sk[6 + i])
+                     + dth * (Svi[6 + k] + Svk[6 + i]) + dt2 * Svi[3 + k] + h2 * Sai[6 + k])
+                cov[i][k] = cov[k][i] = c
+            cov[i][i] += q
+        s = track.s.tolist()
+        px, py, pz = s[0] + dt * s[3] + h * s[6], s[1] + dt * s[4] + h * s[7], s[2] + dt * s[5] + h * s[8]
+        az, el = math.atan2(py, px), math.atan2(pz, math.hypot(px, py))
+        c00, _, c11 = _proj2(_jac5(px, py, pz), cov)
+        var = math.cos(el) ** 2 * c00 + c11
         return az, el, math.sqrt(max(float(var), 0.0))
 
     def predict_dir(self, track: Track, t_ns: int) -> np.ndarray:
         """Unit world direction at t_ns: the mean position only (no covariance work)."""
-        p = self._position(track, t_ns)
-        return p / max(_norm3(p), 1e-12)
+        dt = max(0.0, (int(t_ns) - track.t_ns) * 1e-9)
+        h = 0.5 * dt * dt
+        s = track.s.tolist()
+        px, py, pz = s[0] + dt * s[3] + h * s[6], s[1] + dt * s[4] + h * s[7], s[2] + dt * s[5] + h * s[8]
+        n = max(math.sqrt(px * px + py * py + pz * pz), 1e-12)
+        return np.array([px / n, py / n, pz / n], dtype=np.float64)
 
     def angular_rate(self, track: Track) -> float:
         """Clay angular speed (rad/s) on the sphere: transverse velocity over range."""
-        p, v = track.s[0:3], track.s[3:6]
-        r = max(_norm3(p), 1e-6)
-        u = p / r
-        vt = v - float(v @ u) * u
-        return _norm3(vt) / r
+        px, py, pz, vx, vy, vz = track.s[0:6].tolist()
+        r = max(math.sqrt(px * px + py * py + pz * pz), 1e-6)
+        ux, uy, uz = px / r, py / r, pz / r
+        along = vx * ux + vy * uy + vz * uz
+        tx, ty, tz = vx - along * ux, vy - along * uy, vz - along * uz
+        return math.sqrt(tx * tx + ty * ty + tz * tz) / r
 
     # ----------------------------------------------------------------- internals
     def _ekf_update(self, sp, Sp, az_m, el_m, sig_az, sig_el, det: Detection, ifov: float):
-        az_p, el_p = _azel(sp[0:3])
-        H = np.zeros((2, 9), dtype=np.float64)
-        H[:, 0:3] = _azel_jacobian(sp[0:3])
-        z = np.array([_wrap_pi(az_m - az_p), el_m - el_p], dtype=np.float64)
-        R = np.diag([sig_az ** 2, sig_el ** 2])
+        # The measurement (az, el and, with a size, range) only looks at the position: H is zero outside its
+        # first three columns, so the gain is built from the 3 position columns of the covariance.
+        px, py, pz = sp[0:3].tolist()
+        j00, j01, j10, j11, j12 = _jac5(px, py, pz)
+        rows = [[j00, j01, 0.0], [j10, j11, j12]]
+        z = [_wrap_pi(az_m - math.atan2(py, px)), el_m - math.atan2(pz, math.hypot(px, py))]
+        rdiag = [sig_az ** 2, sig_el ** 2]
         r_size = self._size_range(det, ifov)
         if r_size is not None:
-            r_p = _norm3(sp[0:3])
-            Hr = np.zeros((1, 9), dtype=np.float64)
-            Hr[0, 0:3] = sp[0:3] / max(r_p, 1e-9)
-            H = np.vstack([H, Hr])
-            z = np.append(z, r_size - r_p)
-            R = np.diag([sig_az ** 2, sig_el ** 2, (float(self.cfg.tracker.size_range_sigma_frac) * r_size) ** 2])
-        Sm = H @ Sp @ H.T + R
-        K = Sp @ H.T @ np.linalg.inv(Sm)
-        s = sp + K @ z
-        A = np.eye(9) - K @ H
-        S = A @ Sp @ A.T + K @ R @ K.T
+            r_p = math.sqrt(px * px + py * py + pz * pz)
+            rn = max(r_p, 1e-9)
+            rows.append([px / rn, py / rn, pz / rn])
+            z.append(r_size - r_p)
+            rdiag.append((float(self.cfg.tracker.size_range_sigma_frac) * r_size) ** 2)
+        H3 = np.array(rows, dtype=np.float64)                 # (m, 3)
+        PHt = Sp[:, 0:3] @ H3.T                               # (9, m)
+        Sm = (H3 @ PHt[0:3]).tolist()
+        for k, r_k in enumerate(rdiag):
+            Sm[k][k] += r_k
+        inv = _inv_small(Sm)
+        K = PHt @ (np.array(inv, dtype=np.float64) if inv is not None else np.linalg.inv(np.array(Sm)))
+        s = sp + K @ np.array(z, dtype=np.float64)
+        A = _I9.copy()
+        A[:, 0:3] -= K @ H3
+        S = A @ Sp @ A.T + (K * np.array(rdiag, dtype=np.float64)) @ K.T   # Joseph form
         # keep the clay in front of the camera and at a sane range
         r = _norm3(s[0:3])
         if not (_RANGE_MIN_M <= r <= _RANGE_MAX_M) and r > 0.0:
@@ -279,18 +360,17 @@ class CartesianClayTracker(ClayTracker):
         r0, sig_r = ((r0, float(tc.size_range_sigma_frac) * r0) if r0 is not None
                      else (float(tc.range_prior_m), float(tc.range_prior_sigma_m)))
         r0 = min(max(r0, _RANGE_MIN_M), _RANGE_MAX_M)
-        u = np.array([math.cos(el) * math.cos(az), math.cos(el) * math.sin(az), math.sin(el)])
-        e_az = np.array([-math.sin(az), math.cos(az), 0.0])
-        e_el = np.cross(u, e_az)
-        Sp = (sig_r ** 2) * np.outer(u, u) + (r0 * sig_az * math.cos(el)) ** 2 * np.outer(e_az, e_az) \
-            + (r0 * sig_el) ** 2 * np.outer(e_el, e_el)
-        S = np.zeros((9, 9), dtype=np.float64)
-        S[0:3, 0:3] = Sp
-        S[3:6, 3:6] = np.eye(3) * _NEW_SPEED_SIGMA_MPS ** 2
-        S[6:9, 6:9] = np.eye(3) * _NEW_ACC_SIGMA_MPS2 ** 2
+        ce, se, ca, sa = math.cos(el), math.sin(el), math.cos(az), math.sin(az)
+        u = (ce * ca, ce * sa, se)
+        e_az = (-sa, ca, 0.0)
+        e_el = (u[1] * e_az[2] - u[2] * e_az[1], u[2] * e_az[0] - u[0] * e_az[2], u[0] * e_az[1] - u[1] * e_az[0])
+        a, b, c = sig_r ** 2, (r0 * sig_az * ce) ** 2, (r0 * sig_el) ** 2
+        S = _S_NEW.copy()
+        S[0:3, 0:3] = [[a * u[i] * u[k] + b * e_az[i] * e_az[k] + c * e_el[i] * e_el[k] for k in range(3)]
+                       for i in range(3)]
         s = np.zeros(9, dtype=np.float64)
-        s[0:3] = r0 * u
-        tr = Track(track_id=self._next_id, t_ns=t_ns, x=np.zeros(6), P=np.eye(6), range_m=r0, range_sigma_m=sig_r,
+        s[0:3] = (r0 * u[0], r0 * u[1], r0 * u[2])
+        tr = Track(track_id=self._next_id, t_ns=t_ns, x=_X0, P=_P0, range_m=r0, range_sigma_m=sig_r,
                    hits=1, misses=0, age=1, confirmed=tc.confirm_hits <= 1, last_detection=det, first_t_ns=t_ns)
         tr.s, tr.S = s, S
         self._next_id += 1
@@ -300,10 +380,14 @@ class CartesianClayTracker(ClayTracker):
     def _sync_views(self, tr: Track) -> None:
         """Refresh the angular view (x, P) and the range estimate from the 3-D state."""
         tr.x, tr.P = _angular_view(tr.s, tr.S)
-        p = tr.s[0:3]
-        r = _norm3(p)
-        u = p / max(r, 1e-12)
-        sig = math.sqrt(max(float(u @ tr.S[0:3, 0:3] @ u), 0.0))
+        px, py, pz = tr.s[0:3].tolist()
+        r = math.sqrt(px * px + py * py + pz * pz)
+        n = max(r, 1e-12)
+        ux, uy, uz = px / n, py / n, pz / n
+        (c00, c01, c02), (c10, c11, c12), (c20, c21, c22) = tr.S[0:3, 0:3].tolist()
+        var = (ux * (c00 * ux + c01 * uy + c02 * uz) + uy * (c10 * ux + c11 * uy + c12 * uz)
+               + uz * (c20 * ux + c21 * uy + c22 * uz))
+        sig = math.sqrt(max(var, 0.0))
         tr.range_m = min(max(r, _RANGE_MIN_M), _RANGE_MAX_M)
         # size samples share a systematic error: never claim better than the correlated floor
         tr.range_sigma_m = max(sig, float(self.cfg.tracker.size_range_bias_frac) * tr.range_m)
