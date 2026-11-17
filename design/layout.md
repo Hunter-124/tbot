@@ -652,15 +652,22 @@ contacts and connector seating remain open.
   the arm relief, exit channel cut through the cove (X 13..21.8, Y 15..22.5,
   above the frame top). U28: seat Y 12.9, drop-in slot open to the top.
   L40: seat Y 13.3 (0.9 from the front-inboard ear insert), side slot open to
-  +X, slot runs to Y 16.2 so the M3 × 30 tip (Y 16.1) ends inside it. The old
+  +X. Rev AB: the L40 bore now runs through the whole bracket (to the back
+  face Y 27.5, through the seat shim) so a longer screw can pass; a 5 × 7.5 rib
+  (X 37.5..42.5, Y 20..27.5, top Z -8.5) caps the front ear block where the
+  bore crown (Z -9.65) would otherwise break its top (Z -9.7). The old
   insert bores are filled from Y 8 (D4 counterbore remains below the recess
   floor). The plastic between the guard face and each nut is in compression.
-- Rear joint (X −10.5, Z −17.0): the pad now carries a spacer to Y −1.5, which
-  stops 0.5 short of a matching spacer block on trig_clamp_R_v2 (Y −5.6..−2.0,
-  standing on the bed). M3 × 16 through both into a hex nut in a side slot
-  (seat Y 1.6, open to +X), so tightening compresses the pad instead of pulling
-  it off its layers (the rev Z pad snapped at the insert). Fillets f100, f116,
-  f117 are suppressed: f100/f116 no longer rebuild on this tree.
+- Rev AB rear joint (X −15.5, Z −17.0): the rev AA rear spacer nub (the R4.7
+  boss, the spacer to Y −1.5 and its nut slot), which snapped on the range after
+  two shots, is gone. A D3.5 hole now runs through the whole rear ear block,
+  Y 5.5..27.5, with a 90° countersink in the back face. An M3 × 35 countersunk
+  screw goes in from the back (head flush at Y 27.5) into a nut in the
+  trig_clamp_R_v2 guard cradle (tip Y −7.5). The bolt clamps 22 mm of solid
+  bracket, so there is no cantilevered pad left to break. Thinnest web: 0.52
+  between this bore and the rear ear inserts (X −10.9, Y 10.5 / 20.5); after
+  ironing those inserts, run a 3.5 mm drill through the bore. Fillets f100,
+  f116, f117 are suppressed: f100/f116 no longer rebuild on this tree.
 - Four M3 × 10 countersunk screws still hold the servo ears into heat-set
   inserts, one in each ear hole.
 
@@ -684,9 +691,28 @@ contacts and connector seating remain open.
   M3 × 30 at U18 (X 18.5, Z -7.75), U28 (28.0,-3.0) and L40 (40.0,-11.4),
   heads flush with the hole pad at Y -13.9 (rev AA removed the 2.4-deep D6.8
   head pockets that left ~1.3 of plastic under each head; now ~3.7), and
-  M3 × 16 at rear (-10.5,-17.0), head flush at Y -11.5, tip Y 4.5.
+  (rev AB) the rear M3 × 35 now comes from the bracket side (see
+  `servo_bracket_L`). The rev AA rear spacer block and its D3.5 hole are
+  suppressed. The old D7 rear-head access teardrop is left in the web, because
+  removing it breaks the heal and fillet features after it.
   The U18/U28 countersink-to-countersink web is 4.3; U28 hole edge is 1.62
-  above the opening. Rear-head access through the web is D7.0.
+  above the opening.
+- Rev AB guard cradle (anti-slide lock): a solid block from the plate's inner
+  face (Y −8.5) to Y 5.0, which is 0.5 short of the bracket face. It spans
+  X −19..44.5, from the bed (Z −22.3) up to the outer surface of the guard bow.
+  - Its top follows the bow's outer spline with about 0.5 clearance (it was
+    measured at 0.27 against `guard_measured`) and is capped at Z −9 at both
+    ends.
+  - The bow therefore sits in a fitted saddle. The front face of the saddle,
+    which rises from X 13 to 40, bears on the bow, so the trigger set cannot
+    slide back toward the trigger even if the friction fit loosens. It does not
+    rely on clamp friction.
+  - The cradle carries:
+    - the rear M3 nut in a side slot (open to −X; nut Y −6.6..−4.0, bearing at
+      −4.0; D3.5 bore Y −4..5);
+    - the L40 bore, which leaves only about 0.2 of skin over its crown at the
+      cradle top. That skin is not load-bearing.
+  - Lever plane (Z ≥ −8.2) and trigger clear the cradle top by ≥ 0.8 and ≥ 2.1.
 - The bottom-front corner is trimmed by an R25.4 arc centred at XZ
   (27, 2.5), from the bed at X 32.5 to the front face at Z -15.9. The arc
   is 3.0 from the L40 countersink. Near the bed the arc is about 12° from

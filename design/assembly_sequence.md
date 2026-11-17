@@ -80,17 +80,19 @@ F14. Belly, bench-wired (lever connector in its seat, buck #1 on its posts with 
 ## Trigger set
 
 T1. Iron 4 M3 inserts into servo_bracket_L ears RI, RO, FI, FO from the Z −21.7 face (remove the print supports first).
-    The guard-clamp joints have no inserts (rev AA): drop/slide 4 M3 hex nuts into the U18 (side slot from −X), U28
-    (top slot), L40 (side slot from +X) and rear (side slot from +X) pockets; a dab of tape holds them for assembly.
+    Then run a 3.5 mm drill through the rear clamp bore (X −15.5) to clear any plastic the RI/RO inserts pushed in.
+    The guard-clamp joints have no inserts: drop/slide 3 M3 hex nuts into the bracket's U18 (side slot from −X), U28
+    (top slot, vertex down) and L40 (side slot from +X) pockets, and 1 into trig_clamp_R_v2's guard-cradle rear slot
+    (from −X); a dab of tape holds them for assembly.
 T2. Servo into the bracket from below, 4 × M3 × 10 up through the ears. Cable grommet points rearward.
 T3. Arming button, on the bench: nut off, push the button thread-first from behind the trig_clamp_R panel through the
     D7.4 hole until the flange seats on the panel back; nut on the panel front, flats horizontal, tighten with a 9.5 mm
     open-end wrench from outboard.
 T4. Bracket on the gun-left side of the guard, trig_clamp_R on the right, a 1 mm liner on each plate's guard face;
-    3 × M3 × 30 from the right (U18, U28, L40, heads flush in the hole pad) and 1 × M3 × 16 at the rear (X −10.5,
-    Z −17.0, through the D7 access counterbore, the clamp spacer block and the bracket rear spacer into its nut). The
-    rear spacers stop 0.5 apart, so the rear joint closes solid instead of bending the plates. Do not use a longer
-    rear screw: past Y 8 it would run into the rear-inboard ear insert.
+    the guard bow must sit down in the clamp's cradle (the cradle's rising front face against the bow's outer
+    surface is what stops the set sliding back toward the trigger). 3 × M3 × 30 from the right (U18, U28, L40, heads
+    flush in the hole pad), then 1 × M3 × 35 from the LEFT at the rear (X −15.5, Z −17.0: in through the bracket's
+    back-face countersink, through the whole rear ear block, into the nut in the cradle).
     Snug evenly: the plates are tapered to the 9.3 → 15.7 mm guard, so they close parallel — if the front still gaps,
     the taper location is off. Check the servo case against the bow's bottom edge ~25–29 mm ahead of the trigger face
     (layout.md "Open checks").
