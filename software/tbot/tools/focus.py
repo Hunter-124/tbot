@@ -76,12 +76,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--seconds", type=float, default=None, help="stop after this much frame time (default: end of stream or Ctrl-C)")
     parser.add_argument("--stream", action="store_true", help="serve annotated frames on the configured debug server")
     parser.add_argument("--json", action="store_true", help="write final JSON summary to stdout; live status goes to stderr")
+    parser.add_argument("--max-exposure-us", type=float, default=20000.0,
+                        help="auto-exposure time cap while focusing (static scene; default 20000). The live pipeline uses camera.ae_max_exposure_us")
     args = parser.parse_args(argv)
     if not np.isfinite(args.roi) or not 0 < args.roi <= 1:
         parser.error("--roi must be in (0, 1]")
     if args.seconds is not None and (not np.isfinite(args.seconds) or args.seconds <= 0):
         parser.error("--seconds must be positive")
     cfg, calib = load_from_args(args)
+    if cfg.camera.auto_exposure:  # nothing moves while focusing: long exposure, low gain = a clean sharpness number
+        cfg.camera.ae_max_exposure_us = min(float(args.max_exposure_us), 0.9e6 / max(float(cfg.camera.fps), 1.0))
+        cfg.camera.ae_max_gain = min(float(cfg.camera.ae_max_gain), 4.0)
     # live camera: a CSI stall reopens the camera instead of ending the session (RecoveringSource)
     source = open_live_source(cfg.camera.source, cfg, calib)
     live = bool(getattr(source, "endless", False))
