@@ -1,0 +1,81 @@
+{
+  "camera": {
+    "exposure_to_user_ms": {
+      "mean": 13.956276359999997,
+      "std": 2.5394530788946637,
+      "p50": 14.1861085,
+      "p95": 17.66601175,
+      "min": 9.13324,
+      "max": 18.700593,
+      "n": 100
+    },
+    "exposure_end_to_user_ms": {
+      "mean": 9.155773000000002,
+      "std": 0.6215861412914186,
+      "p50": 8.883307,
+      "p95": 10.087793699999999,
+      "min": 8.569905,
+      "max": 10.740344,
+      "n": 100
+    },
+    "timestamp_offset_ns": 30047,
+    "timestamp_offset_sigma_ns": NaN,
+    "n": 100,
+    "n_partial": 0,
+    "frame_period_ms": 8.333333333333334,
+    "exposure_us_mean": 497.0,
+    "warnings": [
+      "no partially lit frame: the timestamp offset was NOT measured - raise camera.exposure_us for this test (now 497 us, try 4167 us) so LED switch-ons land inside an exposure"
+    ],
+    "roi": [
+      322,
+      194,
+      17,
+      17
+    ],
+    "off_level": 15.0,
+    "on_level": 47.07136678200692,
+    "source": "picam",
+    "dropped": 0,
+    "created": "2026-11-14T22:00:55-05:00",
+    "applied_offset_ns": 30047,
+    "residual_offset_ns": -4086296,
+    "offset_kept_from_disk": true
+  },
+  "created": "2026-11-15T11:09:00-05:00",
+  "actuator": {
+    "servo": {
+      "cmd_to_break_ms": {
+        "mean": 95.0,
+        "std": 2.5,
+        "p50": 95.0,
+        "p95": 99.1,
+        "min": 95.0,
+        "max": 95.0,
+        "n": 10
+      },
+      "method": "video estimate (LED at fire cmd, webcam 10 fps)",
+      "device": "plughw:CARD=Snowball,DEV=0",
+      "run": "runs/latency-led-10shot-b",
+      "mic_latency_ms": 0.0,
+      "mic_distance_m": 0.0,
+      "fire_us": 1530.0,
+      "rest_us": 1420.0,
+      "notes": "MG996R 7.0V, rest 1420 fire 1530, lever spline play",
+      "created": "2026-11-15T11:09:00-05:00",
+      "estimate_note": "2026-11-15 video: lever motion centre 92 +/- 10 ms after the fire command (10 trials, 98 ms frames, exposure-fraction model), rounded up to 95 for full travel. Same 10 shots by mic: 161.3 +/- 1.0 ms, which includes uncalibrated USB mic latency. Std 2.5 = assumed shot-to-shot jitter (mic shows ~1 ms). Redo at 30 fps (640x480) for a tighter mean.",
+      "mic_measurement": {
+        "cmd_to_bang_ms": {
+          "mean": 161.3,
+          "std": 0.96,
+          "p50": 161.5,
+          "p95": 164.35556761418275,
+          "min": 159.41,
+          "max": 162.42,
+          "n": 10
+        },
+        "run": "runs/latency-led-10shot-b"
+      }
+    }
+  }
+}

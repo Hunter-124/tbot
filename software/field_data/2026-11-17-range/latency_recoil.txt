@@ -1,0 +1,8 @@
+searched 9 path(s); 7 with live-fire events
+fire commands with NO shot: 5  (lever slip, safety, empty chamber, dud)
+shots               : 2
+command -> ignition : median 161.1 ms  sigma 1.4  range 160.2 .. 162.0
+lock time (config)  : 6.0 ms
+=> servo cmd_to_break: 155.1 ms   (calibration now: 115.0 ms, +40.1)
+   a 20 m/s crossing clay moves 80 cm in that difference
+not written (add --write)

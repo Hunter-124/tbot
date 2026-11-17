@@ -1,0 +1,133 @@
+{
+  "frames": 38,
+  "telemetry_frames": 38,
+  "evicted_frames": 0,
+  "trigger": {
+    "t_ns": 522591300633,
+    "tag": "press",
+    "window_ns": [
+      521233903289,
+      523291300633
+    ],
+    "press_ns": [
+      522233903289,
+      522591300633
+    ]
+  },
+  "span_s": 1.97,
+  "fps": 18.78,
+  "frame_dt_ms": {
+    "p50": 60.013,
+    "p95": 70.016,
+    "max": 70.018
+  },
+  "camera_frames_skipped": 160,
+  "exposure_us": [
+    9.0,
+    9.0
+  ],
+  "gain": [
+    1.0,
+    1.0
+  ],
+  "armed_frames": 13,
+  "frames_with_detections": 32,
+  "frames_with_confirmed_track": 33,
+  "detections_per_frame": {
+    "p50": 2.0,
+    "p95": 5.15,
+    "max": 6.0
+  },
+  "decision_reasons": {
+    "track young": 8,
+    "no confirmed track": 5
+  },
+  "max_p_hit": 0.018,
+  "stage_ms": {
+    "read": {
+      "p50": 1.108,
+      "p95": 1.311,
+      "max": 1.911
+    },
+    "imu": {
+      "p50": 0.961,
+      "p95": 1.377,
+      "max": 1.716
+    },
+    "attitude": {
+      "p50": 2.125,
+      "p95": 3.113,
+      "max": 3.244
+    },
+    "detect": {
+      "p50": 20.735,
+      "p95": 37.064,
+      "max": 52.29
+    },
+    "track": {
+      "p50": 2.324,
+      "p95": 4.607,
+      "max": 5.311
+    },
+    "solve": {
+      "p50": 2.867,
+      "p95": 4.369,
+      "max": 6.042
+    },
+    "overlay": {
+      "p50": 0.0,
+      "p95": 0.0,
+      "max": 0.0
+    },
+    "total": {
+      "p50": 30.856,
+      "p95": 50.449,
+      "max": 71.27
+    }
+  },
+  "age_ms": {
+    "p50": 48.647,
+    "p95": 69.103,
+    "max": 84.052
+  },
+  "shots_total": 5,
+  "dropped_total": 40208,
+  "live": true,
+  "imu_ready": true,
+  "health": {
+    "cpu_temp_c": 60.686,
+    "throttled": {
+      "raw": 0,
+      "hex": "0x0",
+      "under_voltage_now": false,
+      "under_voltage_occurred": false,
+      "arm_frequency_capped_now": false,
+      "arm_frequency_capped_occurred": false,
+      "throttled_now": false,
+      "throttled_occurred": false,
+      "soft_temp_limit_now": false,
+      "soft_temp_limit_occurred": false,
+      "now": [],
+      "occurred": [],
+      "ok": true
+    },
+    "arm_freq_mhz": 1200.0,
+    "source": {
+      "cpu_temp_c": "sysfs",
+      "throttled": "vcgencmd",
+      "arm_freq_mhz": "vcgencmd"
+    },
+    "available": true,
+    "t_s": 522.826194487
+  },
+  "ae": {
+    "state": "too_bright",
+    "level_dn": 225.5,
+    "clip_pct": 0.0,
+    "error_stops": -1.23
+  },
+  "events": {
+    "arming": 2
+  },
+  "fire_events": []
+}

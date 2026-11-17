@@ -1,0 +1,31 @@
+20261117-104601-press: 0 shot(s)
+20261117-104603-press: 1 shot(s)
+  shot 1  track #93  range 27.7 m  P(hit) at fire 0.35
+    HIT: miss 0.52 deg (25 cm) against a pattern of 0.75 deg (36 cm); predicted miss 0.75 deg
+    gun extrapolation error 0.78 deg (the bore swung 0.4 deg during the 93 ms delay), target extrapolation error 0.64 deg (target from its track)
+20261117-104751-press: 1 shot(s)
+  shot 1  track #3117  range 22.8 m  P(hit) at fire 0.42
+    MISS: miss 1.00 deg (39 cm) against a pattern of 0.75 deg (30 cm); predicted miss 0.66 deg
+    gun extrapolation error 0.75 deg (the bore swung 1.4 deg during the 95 ms delay), target extrapolation error 0.78 deg (target from its detection)
+20261117-104806-press: 1 shot(s)
+  shot 1  track #3154  range 27.8 m  P(hit) at fire 0.59
+    HIT: miss 0.62 deg (30 cm) against a pattern of 0.75 deg (36 cm); predicted miss 0.35 deg
+    gun extrapolation error 0.82 deg (the bore swung 2.8 deg during the 97 ms delay), target extrapolation error 0.43 deg (target from its track)
+20261117-104829-press: 1 shot(s)
+  shot 1  track #3374  range 28.1 m  P(hit) at fire 0.57
+    MISS: miss 0.84 deg (41 cm) against a pattern of 0.75 deg (37 cm); predicted miss 0.11 deg
+    gun extrapolation error 1.55 deg (the bore swung 0.6 deg during the 95 ms delay), target extrapolation error 1.18 deg (target from its detection)
+20261117-105308-press: 1 shot(s)
+  shot 1  track #11706  range 30.2 m  P(hit) at fire 0.73
+    HIT: miss 0.41 deg (21 cm) against a pattern of 0.75 deg (39 cm); predicted miss 0.22 deg
+    gun extrapolation error 0.91 deg (the bore swung 0.6 deg during the 94 ms delay), target extrapolation error 0.82 deg (target from its detection)
+20261117-105335-press: 0 shot(s)
+20261117-105523-press: 1 shot(s)
+  shot 1  track #13723  range 13.2 m  P(hit) at fire 0.43
+    MISS: miss 0.84 deg (19 cm) against a pattern of 0.75 deg (17 cm); predicted miss 0.60 deg
+    gun extrapolation error 1.60 deg (the bore swung 2.6 deg during the 95 ms delay), target extrapolation error 0.19 deg (target from its detection)
+20261117-105639-press: 1 shot(s)
+  shot 1  track #14460  range 25.0 m  P(hit) at fire 0.58
+    HIT: miss 0.13 deg (5 cm) against a pattern of 0.75 deg (32 cm); predicted miss 0.40 deg
+    gun extrapolation error 0.53 deg (the bore swung 2.3 deg during the 97 ms delay), target extrapolation error 0.76 deg (target from its detection)
+total: 4/7 hits   miss p50 0.62 deg  max 1.00 deg   gun error p50 0.82 deg   target error p50 0.76 deg

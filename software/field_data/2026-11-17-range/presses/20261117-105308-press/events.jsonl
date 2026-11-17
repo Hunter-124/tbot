@@ -1,0 +1,4 @@
+{"t_ns": 492217426947, "type": "arming", "armed": true, "switch_t_ns": 492217406269}
+{"t_ns": 492779893323, "cmd_t_ns": 492789552675, "type": "fire", "live": true, "track_id": 11706, "miss_deg": 0.22023791579586294, "p_hit": 0.7309704474336625, "range_m": 30.20558928003287, "t_exit_ns": 492883893323, "tof_ms": 119.25171673381891, "shots": 5}
+{"type": "no_recoil", "t_ns": 492789552675, "cmd_t_ns": 492789552675, "shot": 5, "delay_ms": null, "peak_g": null, "expected_ms": 101.0}
+{"t_ns": 494693241946, "type": "arming", "armed": false, "switch_t_ns": 494689524081}

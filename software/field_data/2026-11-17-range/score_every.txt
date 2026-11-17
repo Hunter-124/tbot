@@ -1,0 +1,87 @@
+20261117-104601-press:
+  no frame had a firing solution for a settled track with frames after it
+20261117-104603-press:
+  3 frames with a solution, scored as if fired: 3 would have hit (100 %), longest unbroken chance 83 ms
+    P(hit) given    frames   really hit
+    0.1 - 0.2          1     100 %
+    0.2 - 0.3          1     100 %
+    0.3 - 0.4          1     100 %
+    gun extrapolation error: p50 0.78 deg, p90 0.80 deg
+    target extrapolation error: p50 0.73 deg, p90 0.82 deg
+    real miss: p50 0.47 deg, p90 0.51 deg
+20261117-104751-press:
+  4 frames with a solution, scored as if fired: 0 would have hit (0 %), longest unbroken chance 0 ms
+    P(hit) given    frames   really hit
+    0.0 - 0.1          2       0 %
+    0.1 - 0.2          1       0 %
+    0.4 - 0.5          1       0 %
+    gun extrapolation error: p50 0.81 deg, p90 1.01 deg
+    target extrapolation error: p50 0.78 deg, p90 0.79 deg
+    real miss: p50 1.14 deg, p90 1.36 deg
+20261117-104806-press:
+  7 frames with a solution, scored as if fired: 4 would have hit (57 %), longest unbroken chance 82 ms
+    P(hit) given    frames   really hit
+    0.0 - 0.1          1       0 %
+    0.1 - 0.2          4      50 %
+    0.2 - 0.3          1     100 %
+    0.5 - 0.7          1     100 %
+    gun extrapolation error: p50 1.19 deg, p90 1.34 deg
+    target extrapolation error: p50 0.41 deg, p90 1.42 deg
+    real miss: p50 0.62 deg, p90 1.21 deg
+20261117-104829-press:
+  9 frames with a solution, scored as if fired: 0 would have hit (0 %), longest unbroken chance 0 ms
+    P(hit) given    frames   really hit
+    0.0 - 0.1          7       0 %
+    0.1 - 0.2          1       0 %
+    0.5 - 0.7          1       0 %
+    gun extrapolation error: p50 1.52 deg, p90 2.05 deg
+    target extrapolation error: p50 1.06 deg, p90 1.43 deg
+    real miss: p50 1.13 deg, p90 1.34 deg
+20261117-105308-press:
+  8 frames with a solution, scored as if fired: 3 would have hit (38 %), longest unbroken chance 56 ms
+    P(hit) given    frames   really hit
+    0.0 - 0.1          5       0 %
+    0.1 - 0.2          1     100 %
+    0.3 - 0.4          1     100 %
+    0.7 - 1.0          1     100 %
+    gun extrapolation error: p50 0.85 deg, p90 1.24 deg
+    target extrapolation error: p50 0.84 deg, p90 0.97 deg
+    real miss: p50 0.96 deg, p90 1.63 deg
+20261117-105335-press:
+  7 frames with a solution, scored as if fired: 0 would have hit (0 %), longest unbroken chance 0 ms
+    P(hit) given    frames   really hit
+    0.0 - 0.1          7       0 %
+    gun extrapolation error: p50 0.82 deg, p90 4.78 deg
+    target extrapolation error: p50 2.12 deg, p90 3.42 deg
+    real miss: p50 7.11 deg, p90 65.82 deg
+20261117-105523-press:
+  11 frames with a solution, scored as if fired: 1 would have hit (9 %), longest unbroken chance 0 ms
+    P(hit) given    frames   really hit
+    0.0 - 0.1          9       0 %
+    0.3 - 0.4          1     100 %
+    0.4 - 0.5          1       0 %
+    gun extrapolation error: p50 1.27 deg, p90 1.60 deg
+    target extrapolation error: p50 0.66 deg, p90 3.16 deg
+    real miss: p50 9.00 deg, p90 12.14 deg
+20261117-105639-press:
+  5 frames with a solution, scored as if fired: 3 would have hit (60 %), longest unbroken chance 56 ms
+    P(hit) given    frames   really hit
+    0.0 - 0.1          2       0 %
+    0.3 - 0.4          2     100 %
+    0.5 - 0.7          1     100 %
+    gun extrapolation error: p50 0.62 deg, p90 1.01 deg
+    target extrapolation error: p50 0.65 deg, p90 0.73 deg
+    real miss: p50 0.36 deg, p90 1.81 deg
+all sessions:
+  54 frames with a solution, scored as if fired: 14 would have hit (26 %), longest unbroken chance 83 ms
+    P(hit) given    frames   really hit
+    0.0 - 0.1         33       0 %
+    0.1 - 0.2          8      50 %
+    0.2 - 0.3          2     100 %
+    0.3 - 0.4          5     100 %
+    0.4 - 0.5          2       0 %
+    0.5 - 0.7          3      67 %
+    0.7 - 1.0          1     100 %
+    gun extrapolation error: p50 0.93 deg, p90 1.72 deg
+    target extrapolation error: p50 0.81 deg, p90 2.07 deg
+    real miss: p50 1.22 deg, p90 10.47 deg

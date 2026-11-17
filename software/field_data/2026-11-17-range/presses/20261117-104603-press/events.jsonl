@@ -1,0 +1,5 @@
+{"t_ns": 67968469556, "type": "arming", "armed": false, "switch_t_ns": 67966804452}
+{"t_ns": 68154351640, "type": "arming", "armed": true, "switch_t_ns": 68154327004}
+{"t_ns": 69724161590, "cmd_t_ns": 69735620649, "type": "fire", "live": true, "track_id": 93, "miss_deg": 0.7512999910154969, "p_hit": 0.3532733292587476, "range_m": 27.71400994802458, "t_exit_ns": 69828161590, "tof_ms": 106.61789804495007, "shots": 1}
+{"type": "no_recoil", "t_ns": 69735620649, "cmd_t_ns": 69735620649, "shot": 1, "delay_ms": null, "peak_g": null, "expected_ms": 101.0}
+{"t_ns": 70639919712, "type": "arming", "armed": false, "switch_t_ns": 70638661170}

@@ -1,0 +1,497 @@
+{
+  "source": "picam",
+  "config": {
+    "camera": {
+      "source": "picam",
+      "width": 640,
+      "height": 400,
+      "fps": 100.0,
+      "exposure_us": 500.0,
+      "analogue_gain": 1.0,
+      "auto_exposure": true,
+      "rotate_180": false,
+      "emulate_mono": "none",
+      "buffer_count": 4,
+      "stall_s": 0.5,
+      "reopen_timeout_s": 5.0,
+      "process": true,
+      "idle_fps": 15.0,
+      "ae_target_dn": 160.0,
+      "ae_highlight_pct": 98.0,
+      "ae_min_exposure_us": 9.0,
+      "ae_max_exposure_us": 500.0,
+      "ae_knee_gain": 4.0,
+      "ae_dim_exposure_us": 4000.0,
+      "ae_min_gain": 1.0,
+      "ae_max_gain": 16.0,
+      "ae_every": 1,
+      "ae_hold_s": 0.5,
+      "ae_up_stops_per_s": 1.5
+    },
+    "optics": {
+      "model": "pinhole",
+      "focal_length_mm": 12.0,
+      "pixel_pitch_um": 3.0,
+      "sensor_width_px": 1280
+    },
+    "mount": {
+      "cam_pos_mm": [
+        540.0,
+        0.0,
+        8.0
+      ],
+      "cam_rpy_deg": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "lens_tip_x_mm": 546.2,
+      "muzzle_pos_mm": [
+        819.0,
+        0.0,
+        62.0
+      ],
+      "barrel_axis_z_mm": 62.0,
+      "barrel_od_mm": [
+        [
+          500.0,
+          21.5
+        ],
+        [
+          819.0,
+          22.5
+        ]
+      ],
+      "barrel_mask_margin_px": 6,
+      "clay_diameter_m": 0.108
+    },
+    "detector": {
+      "mode": "auto",
+      "polarity": "both",
+      "bg_downscale": 4,
+      "bg_kernel": 9,
+      "k_sigma": 6.0,
+      "min_contrast": 10.0,
+      "noise_every": 30,
+      "min_area_px": 2,
+      "max_area_px": 400,
+      "max_aspect": 5.0,
+      "max_detections": 8,
+      "hsv_lo": [
+        5,
+        110,
+        70
+      ],
+      "hsv_hi": [
+        25,
+        255,
+        255
+      ],
+      "color_combine": "or",
+      "debug": false,
+      "psf_px": 1.2,
+      "matched_sigma_px": 0.5,
+      "grow_k_sigma": 3.0,
+      "max_peak_fraction": 0.85,
+      "downscale": 0,
+      "bg_mode": "auto",
+      "local_noise_cell": 8,
+      "clutter_ring_max": 0.05,
+      "min_size_frac": 0.4,
+      "followed_others_max": 0,
+      "static_reject": true,
+      "static_tol_px": 3.0,
+      "static_lever_m": 0.9,
+      "static_min_range_m": 6.0,
+      "static_min_age_ms": 50.0,
+      "static_max_age_ms": 250.0
+    },
+    "tracker": {
+      "gate_sigma": 4.0,
+      "gate_min_deg": 0.4,
+      "confirm_hits": 3,
+      "max_misses": 6,
+      "jerk_psd_deg": 2000.0,
+      "meas_sigma_px": 0.7,
+      "range_prior_m": 20.0,
+      "range_prior_sigma_m": 8.0,
+      "size_range_sigma_frac": 0.35,
+      "size_range_bias_frac": 0.1,
+      "max_tracks": 4,
+      "model": "cartesian",
+      "jerk_psd_mps3": 50.0
+    },
+    "imu": {
+      "enabled": true,
+      "i2c_bus": 1,
+      "address": 104,
+      "sample_rate_hz": 500,
+      "gyro_range_dps": 1000,
+      "accel_range_g": 8,
+      "dlpf_hz": 98,
+      "poll_hz": 100,
+      "R_gun_imu": [
+        [
+          0.0,
+          -1.0,
+          0.0
+        ],
+        [
+          -1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          -1.0
+        ]
+      ]
+    },
+    "attitude": {
+      "accel_gain": 0.001,
+      "accel_gate_g": 0.15,
+      "history_s": 2.0,
+      "init_still_s": 0.3,
+      "auto_bias": true,
+      "bias_still_s": 1.0,
+      "bias_still_dps": 0.6,
+      "bias_max_dps": 4.0,
+      "accel_max_rate_dps": 10.0
+    },
+    "gun": {
+      "lock_time_ms": 6.0,
+      "barrel_time_ms": 3.0
+    },
+    "shot": {
+      "muzzle_velocity_mps": 360.0,
+      "pellet_diameter_mm": 2.29,
+      "pellet_density_kg_m3": 11340.0,
+      "air_density_kg_m3": 1.225,
+      "speed_of_sound_mps": 343.0,
+      "pattern_radius_ref_m": 0.3,
+      "pattern_ref_range_m": 22.9,
+      "pattern_min_radius_m": 0.02,
+      "max_range_m": 60.0
+    },
+    "fire": {
+      "live": true,
+      "min_hit_probability": 0.4,
+      "min_track_hits": 5,
+      "horizon_frames": 3,
+      "max_shots_per_arm": 1,
+      "min_range_m": 8.0,
+      "max_range_m": 40.0,
+      "min_elevation_deg": -5.0,
+      "watchdog_ms": 250.0,
+      "gun_accel_sigma_frac": 0.12,
+      "gun_rate_sigma_dps": 0.7,
+      "gun_rate_change_sigma_frac": 0.18,
+      "gun_rate_change_window_ms": 100.0,
+      "subframe": true,
+      "min_hit_probability_settled": 0.3,
+      "settled_ms": 700.0,
+      "min_shot_interval_ms": 250.0,
+      "min_clay_speed_mps": 6.0,
+      "duplicate_deg": 1.0,
+      "debris_cone_deg": 2.0,
+      "debris_spread_deg_s": 15.0,
+      "debris_window_ms": 1500.0,
+      "debris_birth_margin_ms": 50.0,
+      "recoil_settle_ms": 100.0,
+      "recoil_detect_g": 3.0,
+      "recoil_window_ms": 500.0
+    },
+    "arming": {
+      "pin": 17,
+      "active_low": true,
+      "pull": "up",
+      "debounce_ms": 5.0
+    },
+    "actuator": {
+      "type": "servo",
+      "servo": {
+        "pwm_chip": 0,
+        "pwm_channel": 0,
+        "frame_hz": 50.0,
+        "rest_us": 1420.0,
+        "fire_us": 1530.0,
+        "hold_ms": 150.0,
+        "return_ms": 250.0,
+        "jog_burst_ms": 400.0,
+        "min_us": 1400.0,
+        "max_us": 1540.0,
+        "max_jump_us": 50.0
+      },
+      "pq12": {
+        "pin_extend": 23,
+        "pin_retract": 24,
+        "extend_ms": 2500.0,
+        "retract_ms": 2500.0
+      },
+      "sim": {
+        "delay_ms": 100.0,
+        "model": "fixed",
+        "frame_hz": 50.0
+      }
+    },
+    "gpio": {
+      "backend": "auto",
+      "chip": 0,
+      "latency_led_pin": 27,
+      "break_sense_pin": 22
+    },
+    "latency": {
+      "camera_timestamp_offset_ns": 0,
+      "exposure_to_user_ms": 8.0,
+      "servo_cmd_to_break_ms": 115.0,
+      "pq12_cmd_to_break_ms": 900.0,
+      "sim_cmd_to_break_ms": 100.0,
+      "none_cmd_to_break_ms": 100.0,
+      "jitter_ms": 6.0
+    },
+    "stream": {
+      "enabled": true,
+      "host": "0.0.0.0",
+      "port": 8080,
+      "fps": 10.0,
+      "jpeg_quality": 70
+    },
+    "record": {
+      "mode": "armed",
+      "dir": "sessions",
+      "preroll_s": 1.0,
+      "postroll_s": 0.7,
+      "max_ram_mb": 150,
+      "decimate": 1,
+      "clip": "off",
+      "clip_fps": 30.0,
+      "min_free_mb": 1500.0
+    },
+    "paths": {
+      "calib_dir": "calib"
+    },
+    "sim": {
+      "scenario": "skeet_crossing",
+      "seed": 1,
+      "sky_level": 170.0,
+      "sky_gradient": 40.0,
+      "cloud_amount": 0.3,
+      "clay_contrast": -45.0,
+      "noise_sigma": 2.0,
+      "render_color": false,
+      "gyro_noise_dps": 0.05,
+      "swing_lag_s": 0.12,
+      "swing_noise_deg": 0.15,
+      "debris_fragments": 6,
+      "debris_spread_mps": 3.0,
+      "debris_life_s": 0.7
+    },
+    "calrig": {
+      "port": "/dev/ttyACM0",
+      "baud": 115200,
+      "microsteps": 16,
+      "steps_rev": 200,
+      "ratio": 1.0,
+      "vmax_dps": 45.0,
+      "amax_dps2": 20.0,
+      "vmax_cap_dps": 90.0,
+      "amax_cap_dps2": 60.0,
+      "soft_limit_deg": 90.0,
+      "hard_limit_deg": 100.0,
+      "telem_hz": 200,
+      "heartbeat_ms": 250,
+      "home_dir": 1,
+      "home_rate_dps": 5.0,
+      "run_root": "runs/calrig"
+    }
+  },
+  "calibration": {
+    "intrinsics": {
+      "model": "pinhole",
+      "width": 640,
+      "height": 400,
+      "K": [
+        [
+          2009.0,
+          0,
+          319.5
+        ],
+        [
+          0,
+          2009.0,
+          199.5
+        ],
+        [
+          0,
+          0,
+          1
+        ]
+      ],
+      "D": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "fx_full_res_px": 4018.0,
+      "f_uncertainty_pct": 0.3,
+      "created": "2026-11-16T21:15:49-05:00",
+      "source": "focal-length fit 2026-11-16 (calib_data/fx_2026-11-16b): US Letter sheet on the box face, height 215.9 mm (turn-proof), 6 distances 45/40/35/30/25/20 ft lens-front -> sheet, 3 stills each at 1280x800, 50% edge crossings repeat to <=0.05 px. f(z0=0) per distance 4051/4034/4019/4018/4019/4023; free fit 35-20 ft: 4012.6 px, z0 -1.4 cm (45 ft reading implies ~4 in tape error). Width gives ~0.6% less: sheet turned ~6 deg. D=0 and centred principal point assumed (12 mm lens, docs/FOCAL_LENGTH_HANDOFF.md); principal-point offset absorbed by the boresight.",
+      "notes": "no chessboard: rms_px / per-view fields do not apply"
+    },
+    "boresight": {
+      "rpy_deg": [
+        0.0,
+        -1.891405500774123,
+        -1.6673685443944335
+      ],
+      "range_m": 13.75,
+      "bore_pixel": [
+        522.49,
+        516.7
+      ],
+      "width": 1280,
+      "height": 800,
+      "created": "2026-11-16T21:15:55-05:00",
+      "method": "laser, mean of 3 bore-circle centres at 46 ft lens->box (13.75 m from muzzle), 1280x800: 4 hands-off stills (524.09,508.47) r 39.8; twist video 1 (524.59,522.83); twist video 2 290 frames (518.79,518.81) r 29.9 rms 7.5. Spread sd 3.2/7.4 px = 0.05/0.11 deg (yaw/pitch); laser ~0.5 deg off-axis with seating play. Solved with calib/intrinsics.json (fx 4018 @1280x800).",
+      "bore_pixel_sd_px": [
+        3.2,
+        7.4
+      ]
+    },
+    "imu": {
+      "gyro_bias_rad_s": [
+        0.014241886696273728,
+        0.11250392358355447,
+        0.008354891129296856
+      ],
+      "temp_c": 24.729791472767754,
+      "created": "2026-11-15T14:10:07-05:00",
+      "bias_note": "mean of quiet 10 s runs 2026-11-14 ~24 C",
+      "R_gun_imu": [
+        [
+          0,
+          -1,
+          0
+        ],
+        [
+          -1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          -1
+        ]
+      ],
+      "R_gun_imu_note": "calib-imu axes --auto 2026-11-15, hand-held 3 poses: Kabsch fit within 0.83 deg of this signed permutation (residuals 3.5/0.8/3.6 deg); snapped",
+      "time_offset_ns": -6310000,
+      "time_offset_note": "calib-imu sync sessions/sync1 2026-11-15: -6.31 ms, corr 0.971, 748/748 pairs, peak 885 deg/s (15 s hand-held swing)"
+    },
+    "latency": {
+      "camera": {
+        "exposure_to_user_ms": {
+          "mean": 13.956276359999997,
+          "std": 2.5394530788946637,
+          "p50": 14.1861085,
+          "p95": 17.66601175,
+          "min": 9.13324,
+          "max": 18.700593,
+          "n": 100
+        },
+        "exposure_end_to_user_ms": {
+          "mean": 9.155773000000002,
+          "std": 0.6215861412914186,
+          "p50": 8.883307,
+          "p95": 10.087793699999999,
+          "min": 8.569905,
+          "max": 10.740344,
+          "n": 100
+        },
+        "timestamp_offset_ns": 30047,
+        "timestamp_offset_sigma_ns": NaN,
+        "n": 100,
+        "n_partial": 0,
+        "frame_period_ms": 8.333333333333334,
+        "exposure_us_mean": 497.0,
+        "warnings": [
+          "no partially lit frame: the timestamp offset was NOT measured - raise camera.exposure_us for this test (now 497 us, try 4167 us) so LED switch-ons land inside an exposure"
+        ],
+        "roi": [
+          322,
+          194,
+          17,
+          17
+        ],
+        "off_level": 15.0,
+        "on_level": 47.07136678200692,
+        "source": "picam",
+        "dropped": 0,
+        "created": "2026-11-14T22:00:55-05:00",
+        "applied_offset_ns": 30047,
+        "residual_offset_ns": -4086296,
+        "offset_kept_from_disk": true
+      },
+      "created": "2026-11-15T11:09:00-05:00",
+      "actuator": {
+        "servo": {
+          "cmd_to_break_ms": {
+            "mean": 95.0,
+            "std": 2.5,
+            "p50": 95.0,
+            "p95": 99.1,
+            "min": 95.0,
+            "max": 95.0,
+            "n": 10
+          },
+          "method": "video estimate (LED at fire cmd, webcam 10 fps)",
+          "device": "plughw:CARD=Snowball,DEV=0",
+          "run": "runs/latency-led-10shot-b",
+          "mic_latency_ms": 0.0,
+          "mic_distance_m": 0.0,
+          "fire_us": 1530.0,
+          "rest_us": 1420.0,
+          "notes": "MG996R 7.0V, rest 1420 fire 1530, lever spline play",
+          "created": "2026-11-15T11:09:00-05:00",
+          "estimate_note": "2026-11-15 video: lever motion centre 92 +/- 10 ms after the fire command (10 trials, 98 ms frames, exposure-fraction model), rounded up to 95 for full travel. Same 10 shots by mic: 161.3 +/- 1.0 ms, which includes uncalibrated USB mic latency. Std 2.5 = assumed shot-to-shot jitter (mic shows ~1 ms). Redo at 30 fps (640x480) for a tighter mean.",
+          "mic_measurement": {
+            "cmd_to_bang_ms": {
+              "mean": 161.3,
+              "std": 0.96,
+              "p50": 161.5,
+              "p95": 164.35556761418275,
+              "min": 159.41,
+              "max": 162.42,
+              "n": 10
+            },
+            "run": "runs/latency-led-10shot-b"
+          }
+        }
+      }
+    }
+  },
+  "trigger": {
+    "t_ns": 494693241946,
+    "tag": "press",
+    "window_ns": [
+      491217426947,
+      495393241946
+    ],
+    "press_ns": [
+      492217426947,
+      494693241946
+    ]
+  },
+  "version": 1,
+  "width": 640,
+  "height": 400,
+  "channels": 1,
+  "dtype": "uint8",
+  "fps": 100.0,
+  "frames": 128,
+  "created": "2026-11-17T10:53:09-05:00",
+  "complete": true
+}

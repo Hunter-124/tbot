@@ -1,0 +1,160 @@
+{
+  "frames": 41,
+  "telemetry_frames": 41,
+  "evicted_frames": 0,
+  "trigger": {
+    "t_ns": 178443176702,
+    "tag": "press",
+    "window_ns": [
+      176918791962,
+      179143176702
+    ],
+    "press_ns": [
+      177918791962,
+      178443176702
+    ]
+  },
+  "span_s": 2.17,
+  "fps": 18.43,
+  "frame_dt_ms": {
+    "p50": 60.01,
+    "p95": 70.012,
+    "max": 70.013
+  },
+  "camera_frames_skipped": 177,
+  "exposure_us": [
+    9.0,
+    9.0
+  ],
+  "gain": [
+    1.0,
+    1.0
+  ],
+  "armed_frames": 15,
+  "frames_with_detections": 25,
+  "frames_with_confirmed_track": 22,
+  "detections_per_frame": {
+    "p50": 1.0,
+    "p95": 4.0,
+    "max": 6.0
+  },
+  "decision_reasons": {
+    "no confirmed track": 9,
+    "p_hit # < #": 3,
+    "track young": 2,
+    "FIRE": 1
+  },
+  "max_p_hit": 0.424,
+  "stage_ms": {
+    "read": {
+      "p50": 1.098,
+      "p95": 1.559,
+      "max": 3.836
+    },
+    "imu": {
+      "p50": 0.967,
+      "p95": 1.147,
+      "max": 1.387
+    },
+    "attitude": {
+      "p50": 2.46,
+      "p95": 3.296,
+      "max": 3.879
+    },
+    "detect": {
+      "p50": 20.039,
+      "p95": 31.011,
+      "max": 50.267
+    },
+    "track": {
+      "p50": 2.42,
+      "p95": 4.792,
+      "max": 7.694
+    },
+    "solve": {
+      "p50": 0.154,
+      "p95": 3.979,
+      "max": 11.21
+    },
+    "overlay": {
+      "p50": 0.0,
+      "p95": 0.0,
+      "max": 0.0
+    },
+    "total": {
+      "p50": 29.394,
+      "p95": 42.209,
+      "max": 68.472
+    }
+  },
+  "age_ms": {
+    "p50": 47.983,
+    "p95": 59.84,
+    "max": 90.839
+  },
+  "shots_total": 2,
+  "dropped_total": 10989,
+  "live": true,
+  "imu_ready": true,
+  "health": {
+    "cpu_temp_c": 50.464,
+    "throttled": {
+      "raw": 0,
+      "hex": "0x0",
+      "under_voltage_now": false,
+      "under_voltage_occurred": false,
+      "arm_frequency_capped_now": false,
+      "arm_frequency_capped_occurred": false,
+      "throttled_now": false,
+      "throttled_occurred": false,
+      "soft_temp_limit_now": false,
+      "soft_temp_limit_occurred": false,
+      "now": [],
+      "occurred": [],
+      "ok": true
+    },
+    "arm_freq_mhz": 1200.0,
+    "source": {
+      "cpu_temp_c": "sysfs",
+      "throttled": "vcgencmd",
+      "arm_freq_mhz": "vcgencmd"
+    },
+    "available": true,
+    "t_s": 177.363916129
+  },
+  "ae": {
+    "state": "ok",
+    "level_dn": 229.2,
+    "clip_pct": 0.0,
+    "error_stops": -1.36
+  },
+  "events": {
+    "arming": 2,
+    "fire": 1,
+    "recoil": 1
+  },
+  "fire_events": [
+    {
+      "t_ns": 178261297017,
+      "cmd_t_ns": 178270749775,
+      "type": "fire",
+      "live": true,
+      "track_id": 3117,
+      "miss_deg": 0.6602131112865512,
+      "p_hit": 0.4238576586385352,
+      "range_m": 22.801404948250735,
+      "t_exit_ns": 178365297017,
+      "tof_ms": 83.23986973717643,
+      "shots": 2
+    },
+    {
+      "type": "recoil",
+      "t_ns": 178432771989,
+      "cmd_t_ns": 178270749775,
+      "shot": 2,
+      "delay_ms": 162.022214,
+      "peak_g": 10.695131368614968,
+      "expected_ms": 101.0
+    }
+  ]
+}

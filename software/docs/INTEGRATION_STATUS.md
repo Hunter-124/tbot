@@ -357,3 +357,14 @@ Set up with `tbotctl boot live`: the gun comes up **LIVE at every power-up** unt
 
 `tests/test_hitl.py::test_sim_live_geometry_and_flash_end_to_end` fails on both the Pi and a PC on code that
 predates this work.
+
+## First live range day, 2026-11-17 (data: [field_data/2026-11-17-range](../field_data/2026-11-17-range/README.md))
+
+Nine presses, seven fire commands, two real shots (both clays broke), then the servo mount broke. The
+recordings, clips, scores and the gun's calibration of the day are in that folder. To act on before the next
+live day:
+- **Trigger delay**: recoil says 161 ms command to ignition (two shots, 1.4 ms apart), the same as the bench
+  microphone said; the gun used 95 + 6 ms. Set `cmd_to_break` to ~155 ms once the new servo mount is on, and
+  confirm with `tbot latency-recoil`.
+- **Armed frame rate** was 19-43 fps, not 100.
+- **Gun extrapolation error** (p50 0.82 deg) is now larger than the pattern radius (0.75 deg).

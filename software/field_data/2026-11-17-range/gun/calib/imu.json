@@ -1,0 +1,30 @@
+{
+  "gyro_bias_rad_s": [
+    0.014241886696273728,
+    0.11250392358355447,
+    0.008354891129296856
+  ],
+  "temp_c": 24.729791472767754,
+  "created": "2026-11-15T14:10:07-05:00",
+  "bias_note": "mean of quiet 10 s runs 2026-11-14 ~24 C",
+  "R_gun_imu": [
+    [
+      0,
+      -1,
+      0
+    ],
+    [
+      -1,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      -1
+    ]
+  ],
+  "R_gun_imu_note": "calib-imu axes --auto 2026-11-15, hand-held 3 poses: Kabsch fit within 0.83 deg of this signed permutation (residuals 3.5/0.8/3.6 deg); snapped",
+  "time_offset_ns": -6310000,
+  "time_offset_note": "calib-imu sync sessions/sync1 2026-11-15: -6.31 ms, corr 0.971, 748/748 pairs, peak 885 deg/s (15 s hand-held swing)"
+}
