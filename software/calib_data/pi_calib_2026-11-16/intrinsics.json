@@ -1,0 +1,34 @@
+{
+  "model": "pinhole",
+  "width": 640,
+  "height": 400,
+  "K": [
+    [
+      2009.0,
+      0,
+      319.5
+    ],
+    [
+      0,
+      2009.0,
+      199.5
+    ],
+    [
+      0,
+      0,
+      1
+    ]
+  ],
+  "D": [
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "fx_full_res_px": 4018.0,
+  "f_uncertainty_pct": 0.3,
+  "created": "2026-11-16T21:15:49-05:00",
+  "source": "focal-length fit 2026-11-16 (calib_data/fx_2026-11-16b): US Letter sheet on the box face, height 215.9 mm (turn-proof), 6 distances 45/40/35/30/25/20 ft lens-front -> sheet, 3 stills each at 1280x800, 50% edge crossings repeat to <=0.05 px. f(z0=0) per distance 4051/4034/4019/4018/4019/4023; free fit 35-20 ft: 4012.6 px, z0 -1.4 cm (45 ft reading implies ~4 in tape error). Width gives ~0.6% less: sheet turned ~6 deg. D=0 and centred principal point assumed (12 mm lens, docs/FOCAL_LENGTH_HANDOFF.md); principal-point offset absorbed by the boresight.",
+  "notes": "no chessboard: rms_px / per-view fields do not apply"
+}

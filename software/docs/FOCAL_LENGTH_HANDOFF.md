@@ -1,5 +1,9 @@
 # Focal-length calibration handoff (12 mm lens, no chessboard)
 
+> **Finished 2026-11-16 — see [CALIBRATION_2026-11-16.md](CALIBRATION_2026-11-16.md):** fx = 4018 px at 1280x800
+> (US Letter sheet, 6 distances), laser boresight pitch −1.891°, yaw −1.667°. The rest of this file is the
+> state before that session.
+
 State as of 2026-11-16 evening. Everything needed to continue on another computer is in the repo:
 this file, the pictures and the measurement scripts in `software/calib_data/fx_2026-11-16/`.
 

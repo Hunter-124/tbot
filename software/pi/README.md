@@ -24,3 +24,18 @@ On Windows, OpenSSH rejects a private key other users can read; if it complains,
    `powershell -ExecutionPolicy Bypass -File software\pi\flash.ps1 -DiskNumber <n> -Image <img> -Tarball tbot-software.tar.gz`
 4. `boot/user-data` and `boot/network-config` are the cloud-init files it copies onto the boot partition.
 5. First boot takes a few minutes (cloud-init, then a reboot). Then run `sudo ./scripts/pi_setup.sh` (docs/PROTOTYPING.md).
+
+## Direct ethernet to the laptop (no router)
+
+With nothing handing out DHCP, NetworkManager used to give up after 45 s, mark the wired connection failed and
+bounce eth0 (the link LEDs blink, SSH drops; it looks like the Pi resetting but it is not). Fixed on the SD card
+2026-11-16 (not in `boot/network-config`, so redo it after a reflash):
+
+```bash
+sudo nmcli con mod "Wired connection 1" ipv4.method auto ipv4.addresses 169.254.20.20/16 \
+    ipv4.dhcp-timeout infinity ipv4.may-fail yes
+sudo nmcli con up "Wired connection 1"
+```
+
+DHCP still works on a LAN; on a direct cable the Pi is always `169.254.20.20` (`ssh pi@169.254.20.20`, stream at
+`http://169.254.20.20:8080/`). The laptop gets a 169.254.x.x address on its own.

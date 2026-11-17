@@ -1,0 +1,20 @@
+{
+  "rpy_deg": [
+    0.0,
+    -1.891405500774123,
+    -1.6673685443944335
+  ],
+  "range_m": 13.75,
+  "bore_pixel": [
+    522.49,
+    516.7
+  ],
+  "width": 1280,
+  "height": 800,
+  "created": "2026-11-16T21:15:55-05:00",
+  "method": "laser, mean of 3 bore-circle centres at 46 ft lens->box (13.75 m from muzzle), 1280x800: 4 hands-off stills (524.09,508.47) r 39.8; twist video 1 (524.59,522.83); twist video 2 290 frames (518.79,518.81) r 29.9 rms 7.5. Spread sd 3.2/7.4 px = 0.05/0.11 deg (yaw/pitch); laser ~0.5 deg off-axis with seating play. Solved with calib/intrinsics.json (fx 4018 @1280x800).",
+  "bore_pixel_sd_px": [
+    3.2,
+    7.4
+  ]
+}
