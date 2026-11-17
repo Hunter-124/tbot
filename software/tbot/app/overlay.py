@@ -26,6 +26,7 @@ C_ARMED = (40, 170, 40)
 C_SAFE = (70, 70, 70)
 C_FIRE = (40, 40, 255)
 C_TEXT = (235, 235, 235)
+C_STATIC = (150, 150, 150)
 
 LEAD_PREVIEW_S = 0.1  # velocity arrow shows where the track is predicted to be this far ahead
 
@@ -114,8 +115,14 @@ def draw(
         if p is None:
             continue
         r = max(4, int(round(float(d.diameter_px) * 0.5)) + 2)
-        cv2.circle(img, p, r, C_DET, 1, cv2.LINE_AA)
-        _text(img, (p[0] + r + 2, p[1] - 2), f"{float(d.snr):.0f}", C_DET, 0.33)
+        bbox = getattr(d, "bbox", None)
+        if bbox is not None and bbox[2] > 0 and bbox[3] > 0:  # the detector's bounding box, 2 px clear of the blob
+            x, y, bw, bh = (int(b) for b in bbox)
+            cv2.rectangle(img, (x - 2, y - 2), (x + bw + 1, y + bh + 1), C_DET, 1)
+            r = max(r, (max(bw, bh) + 1) // 2 + 2)
+        else:
+            cv2.circle(img, p, r, C_DET, 1, cv2.LINE_AA)
+        _text(img, (p[0] - r, p[1] + r + 11), f"snr {float(d.snr):.0f}  {float(d.diameter_px):.1f} px", C_DET, 0.33)
 
     # --- tracks (world direction -> pixel) with a velocity arrow
     for t in tracks:
@@ -126,7 +133,7 @@ def draw(
             continue
         color = C_TRACK if t.confirmed else C_TRACK_DIM
         cv2.circle(img, p, 11, color, 2 if t.confirmed else 1, cv2.LINE_AA)
-        _text(img, (p[0] + 13, p[1] + 4), f"#{t.track_id} {t.range_m:.0f}m", color, 0.38)
+        _text(img, (p[0] + 13, p[1] - 8), f"#{t.track_id} {t.range_m:.0f}m", color, 0.38)
         lead_dir = None if track_lead is None else track_lead.get(t.track_id)
         q = _ipt(project_w(lead_dir)) if lead_dir is not None else None
         if q is not None and (abs(q[0] - p[0]) + abs(q[1] - p[1])) >= 2:
@@ -183,4 +190,80 @@ def draw(
         y0 = h - 6 - 14 * (len(lines) - 1)
         for i, s in enumerate(lines):
             _text(img, (6, y0 + 14 * i), s, C_TEXT, 0.4)
+    return img
+
+
+# ------------------------------------------------------------------------------------------ from a record
+def projector(cam, mount, R_wg) -> Callable[[np.ndarray], tuple[float, float] | None]:
+    """World direction -> pixel in the frame whose gun attitude is R_wg (None when it does not project)."""
+    R_gw = np.asarray(R_wg, dtype=np.float64).reshape(3, 3).T
+
+    def project(dir_w) -> tuple[float, float] | None:
+        if dir_w is None:
+            return None
+        d_g = R_gw @ np.asarray(dir_w, dtype=np.float64).reshape(3)
+        d_c = np.asarray(mount.gun_to_cam(d_g), dtype=np.float64).reshape(1, 3)
+        uv = np.asarray(cam.ray_to_pixel(d_c), dtype=np.float64).reshape(-1, 2)
+        u, v = float(uv[0, 0]), float(uv[0, 1])
+        if not (math.isfinite(u) and math.isfinite(v)):
+            return None
+        return (u, v)
+
+    return project
+
+
+def _nan(v) -> float:
+    return float("nan") if v is None else float(v)
+
+
+def draw_record(image: np.ndarray, rec: dict, cam, mount, *, mask: np.ndarray | None = None,
+                bore_px: Sequence[float] | None = None, banner: str | None = None) -> np.ndarray:
+    """The overlay for one frame from its telemetry record alone (tbot.app.run: the dict written to a
+    session's telemetry.jsonl). The live stream and the recorded clips are both drawn through here, off the
+    pipeline thread, so what a clip shows is what the pipeline computed on that frame.
+    `banner` is an extra first text line (the clip's clock)."""
+    import cv2
+    from types import SimpleNamespace as NS
+
+    dets = [NS(u=d[0], v=d[1], diameter_px=d[2], snr=d[3], bbox=(d[5], d[6], d[7], d[8])) for d in rec.get("dets") or ()]
+    tracks, lead = [], {}
+    for t in rec.get("tracks") or ():
+        tid = int(t["id"])
+        tracks.append(NS(track_id=tid, az=math.radians(t["az_deg"]), el=math.radians(t["el_deg"]),
+                         range_m=_nan(t.get("range_m")), confirmed=bool(t.get("confirmed"))))
+        s = t.get("s")
+        if s is not None and len(s) >= 6:  # cartesian state [p, v, a]: where the clay is LEAD_PREVIEW_S ahead
+            s = np.asarray(s, dtype=np.float64)
+            p = s[0:3] + s[3:6] * LEAD_PREVIEW_S + (0.5 * LEAD_PREVIEW_S**2 * s[6:9] if s.size >= 9 else 0.0)
+            n = float(np.linalg.norm(p))
+            if n > 0.0:
+                lead[tid] = p / n
+        elif t.get("x") is not None and len(t["x"]) >= 6:  # angular state [az, rate, acc, el, rate, acc]
+            x = t["x"]
+            lead[tid] = azel_to_dir(x[0] + x[1] * LEAD_PREVIEW_S, x[3] + x[4] * LEAD_PREVIEW_S)
+    d = rec.get("decision")
+    decision = None
+    if d:
+        decision = NS(fire=bool(d.get("fire")), reason=str(d.get("reason", "")),
+                      miss_rad=math.radians(_nan(d.get("miss_deg"))), pattern_rad=math.radians(_nan(d.get("pattern_deg"))),
+                      sigma_rad=math.radians(_nan(d.get("sigma_deg"))), p_hit=_nan(d.get("p_hit")),
+                      lead_dir_w=d.get("lead_dir_w"), bore_dir_w=d.get("bore_dir_w"))
+    R = rec.get("R_wg")
+    project = projector(cam, mount, R) if R is not None else None
+    img = draw(image, detections=dets, tracks=tracks, decision=decision, mask=mask, bore_px=bore_px, telemetry=rec,
+               project_w=project, track_lead=lead, armed=bool(rec.get("armed")), fired=bool(rec.get("fired")))
+    # what the detector discarded as scenery fixed in the world (grey crosses), and its exposure
+    for c in rec.get("static") or ():
+        q = _ipt(c)
+        if q is not None:
+            cv2.drawMarker(img, q, C_STATIC, cv2.MARKER_TILTED_CROSS, 5, 1)
+    w = img.shape[1]
+    notes = []
+    if banner:
+        notes.append(banner)
+    if rec.get("exposure_us") is not None:
+        ae = rec.get("ae") or {}
+        notes.append(f"exp {float(rec['exposure_us']):.0f}us x{float(rec.get('gain') or 1.0):.1f} {ae.get('state', '')}".rstrip())
+    for i, line in enumerate(notes):
+        _text(img, (max(150, w - 8 * len(line) - 6), 15 + 14 * i), line, C_TEXT, 0.4)
     return img

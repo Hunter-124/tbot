@@ -8,9 +8,12 @@ watchdog aborts the actuator when frames stop arriving; shutdown always aborts a
 from __future__ import annotations
 
 import argparse
+import gc
 import json
 import logging
 import signal
+import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
@@ -39,7 +42,8 @@ from tbot.hw.health import read_health
 from tbot.imu.attitude import AttitudeEstimator, FixedAttitude
 from tbot.imu.mpu6050 import NullImu, open_imu
 from tbot.optics import CameraModel, MountModel, combined_mask
-from tbot.types import Frame
+from tbot.types import Frame, MonotonicClock
+from tbot.vision.clutter import StaticFilter
 from tbot.vision.detector import ClayDetector
 from tbot.vision.tracker import ClayTracker  # noqa: F401 - re-exported for callers
 from tbot.vision.tracker3d import make_tracker
@@ -51,6 +55,7 @@ FPS_EMA_ALPHA = 0.1
 SOLVE_EMA_ALPHA = 0.1
 EXPOSURE_WARN_S = 2.0  # the scene must be out of the camera's exposure range this long before it is reported
 HOT_TEMP_C = 75.0  # warn before the Pi 3B firmware throttles at 80 C
+HEALTH_PERIOD_S = 2.0
 
 
 def _ms(t0_ns: int, t1_ns: int) -> float:
@@ -79,6 +84,8 @@ class Pipeline:
         self.mask = combined_mask(self.cam, self.mount, cfg, calib)
         self.detector = ClayDetector(cfg, self.mask)
         self.tracker = make_tracker(cfg, self.cam, self.mount)
+        self.clutter = StaticFilter(cfg, self.cam, self.mount) if bool(cfg.detector.static_reject) else None
+        self._movers: set[int] = set()  # tracks seen crossing the sky: the scenery filter never takes them
         self.shot = ShotModel(cfg)
         self.budget: LatencyBudget = calib.budget or LatencyBudget.from_config(cfg, calib.latency)
         self.solver = FireSolver(cfg, self.shot, self.mount, self.budget)
@@ -130,6 +137,8 @@ class Pipeline:
         self.server: DebugServer | None = None
         self.recorder = None
         self._recorder_is_writer = False
+        self._press_ns: int | None = None  # source-clock time the current press began (armed recording)
+        self._clip_procs: list = []
         self._display = False
         self._window = "tbot"
         self._window_open = False
@@ -148,6 +157,8 @@ class Pipeline:
         self.watchdog_aborts = 0
         self._status_wall = 0.0
         self._sig_prev: list = []
+        self._health_thread: threading.Thread | None = None
+        self._health_stop = threading.Event()
 
     # ------------------------------------------------------------------ exposure
     def _check_exposure(self, t_ns: int) -> dict | None:
@@ -189,16 +200,34 @@ class Pipeline:
                 log.warning("health: Pi at %.1f C (throttling starts at 80 C): shade/ventilate the pod", temp)
             self._health_flags["hot"] = hot
 
+    def _health_loop(self) -> None:
+        """Pi temperature / throttle flags / ARM clock every HEALTH_PERIOD_S, on its own thread: the clock comes
+        from a `vcgencmd` child process, and starting one from the frame loop stalled it for 20-40 ms (several
+        frames at 100 fps) once a second."""
+        while True:
+            try:
+                self.health = read_health()
+            except Exception:  # noqa: BLE001 - read_health never raises; a thread must not die if it ever does
+                pass
+            if self._health_stop.wait(HEALTH_PERIOD_S):
+                return
+
     # ------------------------------------------------------------------ lifecycle
     def start(self) -> None:
         """Start the source, the IMU, the debug stream and the recorder (idempotent)."""
         if self._started:
             return
         self._started = True
+        self._health_stop.clear()
+        self._health_thread = threading.Thread(target=self._health_loop, name="tbot-health", daemon=True)
+        self._health_thread.start()
         self.source.start()
         self.imu.start()
         if self.cfg.stream.enabled:
-            self.server = DebugServer(self.cfg).start()
+            self.server = DebugServer(self.cfg)
+            self.server.clips_dir = resolve_path(self.cfg.record.dir)
+            self.server.renders_on_demand = True  # frames are drawn only while somebody is watching (_publish)
+            self.server.start()
         self._open_recorder()
         if self.actuator is not None and self.cfg.fire.live:
             self.actuator.rest()  # known state before the first frame; dry run never commands the actuator
@@ -211,6 +240,7 @@ class Pipeline:
         self._closed = True
         self._stop.set()
         self._wd_stop.set()
+        self._health_stop.set()
         if self._wd_thread is not None:
             self._wd_thread.join(timeout=1.0)
             self._wd_thread = None
@@ -225,6 +255,10 @@ class Pipeline:
         finally:
             self.imu.stop()
         if self.recorder is not None:
+            if self._press_ns is not None and not self._recorder_is_writer:
+                # stopped with the button still held: the press so far is still a session
+                self.recorder.trigger(int(self.source.clock.now_ns()), tag="press", start_ns=self._press_ns)
+                self._press_ns = None
             written = self.recorder.close()
             self.recorder = None
             for p in written if isinstance(written, list) else [written]:
@@ -262,10 +296,12 @@ class Pipeline:
         w, h = int(self.source.width), int(self.source.height)
         meta = session_meta_extra(cfg, self.calib, getattr(self.source, "name", None) or cfg.camera.source)
         if mode == "armed":
-            self.recorder = RingRecorder(cfg, w, h, channels, self.nominal_fps, meta_extra=meta)
+            self.recorder = RingRecorder(cfg, w, h, channels, self.nominal_fps, meta_extra=meta,
+                                         on_dump=self._on_session)
             self._recorder_is_writer = False
             self.arming.on_change(self._on_arming_change)
-            log.info("ring recorder armed: %.1f s preroll, dumps to %s", cfg.record.preroll_s, cfg.record.dir)
+            log.info("recording every held press (%.1f s before to %.1f s after, clip: %s) to %s",
+                     cfg.record.preroll_s, cfg.record.postroll_s, cfg.record.clip, cfg.record.dir)
         elif mode == "continuous":
             path = resolve_path(cfg.record.dir) / (time.strftime("%Y%m%d-%H%M%S") + "-run")
             self.recorder = SessionWriter(path, w, h, channels, self.nominal_fps, meta_extra=meta)
@@ -275,17 +311,41 @@ class Pipeline:
             raise ValueError(f"record.mode must be off|armed|continuous, got {mode!r}")
 
     def _on_arming_change(self, armed: bool, t_ns: int) -> None:
-        """Ring recorder: dump the buffer around every press when the operator lets go."""
+        """Ring recorder: a held press is one session, from the preroll before the button went down to the
+        postroll after the operator lets go."""
         if self.recorder is None:
             return
         # The ring windows frames by the SOURCE clock; on hardware it is the same monotonic clock the
         # switch stamps with, on replay/synthetic sources it is not, so window on the source clock.
         now = int(self.source.clock.now_ns())
         self.recorder.event({"t_ns": now, "type": "arming", "armed": bool(armed), "switch_t_ns": int(t_ns)})
-        if not armed and not self._recorder_is_writer:
-            self.recorder.trigger(now, tag="disarm")
+        if self._recorder_is_writer:
+            return
+        if armed:
+            self._press_ns = now
+            self.recorder.hold(now)
+        else:
+            start, self._press_ns = self._press_ns, None
+            path = self.recorder.trigger(now, tag="press", start_ns=start)
+            log.info("press released after %.2f s: recording %s",
+                     (now - start) / 1e9 if start is not None else 0.0, path.name)
 
-    def _record(self, frame: Frame, samples: list) -> None:
+    def _on_session(self, path: Path) -> None:
+        """A press is on the SD card (recorder thread): render its annotated clip without touching the frame loop."""
+        mode = str(self.cfg.record.clip)
+        log.info("session written: %s", path)
+        if mode == "inline":
+            from tbot.tools.clip import render
+
+            log.info("clip: %s", render(path))
+        elif mode == "process":
+            self._clip_procs = [p for p in self._clip_procs if p.poll() is None]
+            cmd = [sys.executable, "-m", "tbot.tools.clip", str(path), "--nice", "15"]
+            self._clip_procs.append(subprocess.Popen(cmd, cwd=str(resolve_path(".")), stdin=subprocess.DEVNULL))
+        elif mode != "off":
+            log.warning("record.clip must be off|inline|process, got %r", mode)
+
+    def _record(self, frame: Frame, samples: list, tele: dict | None = None) -> None:
         rec = self.recorder
         if rec is None:
             return
@@ -295,6 +355,8 @@ class Pipeline:
             if samples:
                 rec.add_imu(samples)
         else:
+            if tele is not None:
+                rec.push_telemetry(int(frame.t_capture_ns), tele)
             rec.push(frame)
             if samples:
                 rec.push_imu(samples)
@@ -362,8 +424,20 @@ class Pipeline:
             fired=bool(telemetry.get("fired", False)),
         )
 
+    def _draw_record(self, image: np.ndarray, record: dict) -> np.ndarray:
+        return overlay_mod.draw_record(image, record, self.cam, self.mount, mask=self.mask, bore_px=self.bore_px)
+
     def _publish(self, frame: Frame, R_wg: np.ndarray, telemetry: dict) -> float:
         """Render + publish/show the overlay when due. Returns the time spent in ms."""
+        if self.server is not None and not self._display:
+            # stream only: drawn and JPEG-encoded on the stream thread from this frame's record, and only while
+            # somebody is watching (10 ms of drawing in the frame loop is a dropped frame at 100 fps)
+            self.server.set_telemetry(telemetry)
+            if self.server.watched() and self.server.due():
+                t0 = time.perf_counter_ns()
+                self.server.submit(frame.image, telemetry, self._draw_record)
+                return _ms(t0, time.perf_counter_ns())
+            return 0.0
         want_stream = self.server is not None and self.server.due()
         if not (want_stream or self._display):
             if self.server is not None:
@@ -385,6 +459,31 @@ class Pipeline:
                 self._stop.set()
         return _ms(t0, time.perf_counter_ns())
 
+    def _arm_scenery_filter(self, t_ns: int, R_wg: np.ndarray) -> None:
+        """Give the detector the scenery filter for this frame, when there is a real attitude to base it on."""
+        clutter = self.clutter
+        if clutter is None or isinstance(self.attitude, FixedAttitude) or not self.attitude.ready \
+                or not bool(self.cfg.detector.static_reject):
+            self.detector.candidate_filter = None
+            return
+        # Tracks that have crossed the sky at several times the filter's own speed floor are clays: keep
+        # whatever is detected near them even if they slow to a crawl (going away, or at the top of an arc).
+        rate_of = getattr(self.tracker, "angular_rate", None)
+        protect = []
+        if rate_of is not None:
+            det = self.cfg.detector
+            floor = 4.0 * float(det.static_tol_px) * clutter.ifov / max(float(det.static_min_age_ms) * 1e-3, 1e-3)
+            alive = set()
+            for t in self.tracks:
+                alive.add(t.track_id)
+                if t.confirmed and t.track_id not in self._movers and t.s is not None and rate_of(t) > floor:
+                    self._movers.add(t.track_id)
+                if t.track_id in self._movers:
+                    protect.append(self.tracker.predict_dir(t, t_ns))
+            self._movers &= alive
+        clutter.begin(t_ns, R_wg, protect_dirs_w=protect)
+        self.detector.candidate_filter = clutter.filter
+
     # ------------------------------------------------------------------ one frame
     def step(self) -> dict | None:
         """Process the next frame. None = no frame (timeout or end of stream)."""
@@ -400,6 +499,8 @@ class Pipeline:
             # the camera was reopened: tracks from before the outage would be extrapolated across it
             self.source.gap_after_restart = False
             self.tracker.reset()
+            if self.clutter is not None:
+                self.clutter.reset()
             log.warning("camera restarted (%d so far): tracks reset", int(getattr(self.source, "restarts", 0)))
 
         samples = self.imu.read()
@@ -412,6 +513,7 @@ class Pipeline:
         R_wg = np.asarray(self.attitude.R_wg(int(frame.t_exposure_ns)), dtype=np.float64)
         t_att = time.perf_counter_ns()
 
+        self._arm_scenery_filter(int(frame.t_exposure_ns), R_wg)
         self.detections = self.detector.detect(frame)
         t_det = time.perf_counter_ns()
 
@@ -484,8 +586,7 @@ class Pipeline:
             self.fps = inst if self.fps <= 0.0 else (1.0 - FPS_EMA_ALPHA) * self.fps + FPS_EMA_ALPHA * inst
         self._prev_exposure_ns = int(frame.t_exposure_ns)
 
-        self.health = read_health()  # cheap: the reader caches for 1 s and never raises
-        self._check_health(self.health)
+        self._check_health(self.health)  # self.health is refreshed by _health_loop, never by the frame loop
         ae = self._check_exposure(int(frame.t_capture_ns))
 
         tele = {
@@ -517,6 +618,14 @@ class Pipeline:
                 "solve": _ms(t_trk, t_sol),
             },
             "detector_ms": dict(self.detector.timings_ms),
+            "detector": {"scale": int(self.detector.scale), "noise_dn": float(self.detector.noise_sigma),
+                         **self.detector.stats},
+            # [u, v, diameter_px, snr, contrast_dn, bbox x, y, w, h, area_px] per detection, full-res pixels
+            "dets": [[round(float(d.u), 2), round(float(d.v), 2), round(float(d.diameter_px), 2),
+                      round(float(d.snr), 1), round(float(d.contrast), 1), *d.bbox, float(d.area_px)]
+                     for d in self.detections],
+            "static": self.clutter.static_px if self.detector.candidate_filter is not None else None,
+            "R_wg": [float(x) for x in R_wg.ravel()],
             "tracks": [
                 {
                     "id": int(t.track_id),
@@ -527,6 +636,8 @@ class Pipeline:
                     "hits": int(t.hits),
                     "misses": int(t.misses),
                     "confirmed": bool(t.confirmed),
+                    # filter state: cartesian [p, v, a] in m (world, camera origin), else angular [az, el] x 3
+                    **({"s": [float(x) for x in t.s]} if t.s is not None else {"x": [float(x) for x in t.x]}),
                 }
                 for t in self.tracks
             ],
@@ -540,6 +651,8 @@ class Pipeline:
                 "p_hit": float(decision.p_hit),
                 "range_m": float(decision.range_m),
                 "tof_ms": float(decision.tof_s * 1e3),
+                "lead_dir_w": None if decision.lead_dir_w is None else [float(x) for x in decision.lead_dir_w],
+                "bore_dir_w": None if decision.bore_dir_w is None else [float(x) for x in decision.bore_dir_w],
             },
         }
         if fired:
@@ -556,9 +669,9 @@ class Pipeline:
             }
             self._event(ev)
 
-        self._record(frame, samples)
-        if fired and self.recorder is not None and not self._recorder_is_writer:
-            self.recorder.trigger(now, tag="fire")
+        self._record(frame, samples, tele)
+        if fired and self.recorder is not None and not self._recorder_is_writer and self._press_ns is None:
+            self.recorder.trigger(now, tag="fire")  # a shot outside a recorded press (cannot happen on the gun)
 
         tele["stage_ms"]["overlay"] = self._publish(frame, R_wg, tele)
         tele["stage_ms"]["total"] = _ms(t_begin, time.perf_counter_ns())
@@ -657,13 +770,26 @@ class Pipeline:
         rc = 0
         try:
             self.start()
+            # Everything alive now (modules, calibration, buffers) lives as long as the run: take it out of the
+            # garbage collector's sight, or every full collection walks ~10^5 objects (tens of ms on a Pi 3B,
+            # i.e. dropped frames about once a second).
+            gc.collect()
+            gc.freeze()
             self._wd_stop.clear()
             self._wd_thread = threading.Thread(target=self._watchdog, name="tbot-watchdog", daemon=True)
             self._wd_thread.start()
             t_run0 = time.monotonic()
+            idle_fps = float(getattr(self.cfg.camera, "idle_fps", 0.0) or 0.0)
+            # only a source on the real clock is paced: a simulated or replayed one has no heat to save
+            idle_period = 1.0 / idle_fps if idle_fps > 0.0 and isinstance(self.source.clock, MonotonicClock) else 0.0
             while not self._stop.is_set():
+                t_loop = time.monotonic()
                 tele = self.step()
                 now = time.monotonic()
+                if tele is not None and idle_period and not tele["armed"] and not self.arming.armed:
+                    # button up: rest until the idle period is over (a press is noticed within one period, and
+                    # the tracks are already there because tracking never stopped)
+                    self._stop.wait(max(0.0, idle_period - (now - t_loop)))
                 if tele is None:
                     if self._last_frame_wall is None:
                         if now - t_run0 > startup_timeout_s:
@@ -734,7 +860,13 @@ def main(argv: list[str] | None = None) -> int:
     if args.record is not None:
         cfg.record.mode = args.record
 
-    source = open_live_source(cfg.camera.source, cfg, calib)
+    if cfg.camera.source.partition(":")[0] == "picam" and bool(cfg.camera.process):
+        from tbot.camera.proc import SensorProcess
+
+        source = SensorProcess(cfg, calib)  # camera + IMU in their own process (see camera/proc.py for why)
+        log.info("sensor process %d: %s%s", source.child_pid, source.name, " + IMU" if source.has_imu else "")
+    else:
+        source = open_live_source(cfg.camera.source, cfg, calib)
     gpio = open_gpio(cfg)
     if args.sim_armed and not isinstance(gpio, SimGpio):
         gpio.close()

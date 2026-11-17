@@ -28,9 +28,10 @@ from tbot.types import Detection, Frame
 # 8-bit quantisation alone is uniform over 1 DN => sigma = 1/sqrt(12); never report less than that,
 # so snr stays finite on synthetic/flat imagery.
 NOISE_SIGMA_FLOOR = 1.0 / 12.0**0.5
-# Noise sigma is estimated on a strided subsample: this many samples is plenty for a MAD (<1 % error)
-# and costs ~30 kB instead of a full-frame sort.
-NOISE_TARGET_SAMPLES = 20000
+# Noise sigma is estimated on a strided subsample: this many samples is plenty for a MAD (~1.5 % error; the
+# threshold is 6 sigma, so that moves it by a tenth of a sigma) and each refresh is a slow frame: two estimates
+# cost ~3.4 ms on a Pi 3B at 20000 samples, a third of the frame period at 100 fps.
+NOISE_TARGET_SAMPLES = 6000
 # Below this many usable samples the mask is ignored for the noise estimate (the image is then almost
 # entirely masked and the few remaining pixels cannot support a robust estimate).
 NOISE_MIN_SAMPLES = 64
@@ -40,9 +41,25 @@ NOISE_MIN_SAMPLES = 64
 NOISE_EXPOSURE_STEP = 1.2
 # Absolute deviations are histogrammed up to this many DN (the quantile of interest sits at ~1 sigma).
 DEV_MAX = 64
+# The robust sigma is read at this quantile of |deviation| (0.5 = the classic MAD). Lower = still right when
+# more of the frame is texture than sky: trees and roofs filling 60 % of the picture must not double the
+# threshold over the sky.
+NOISE_QUANTILE = 0.35
 # Safety valve for pathological frames (e.g. colour OR-mode on a scene full of orange): measure at most
 # this many components per frame, largest first. A real sky yields a handful.
 CANDIDATE_LIMIT = 64
+# Local threshold (_local_threshold): fixed-point gain of the block means; the neighbourhood (in blocks) the
+# smallest block mean is taken over, which must be wider than the biggest blob to detect or the blob raises
+# its own threshold (5 x 8 = 40 detection px); and the bias of that smallest-of-25 of 16-sample means (measured
+# on Gaussian noise of 4-8 DN: the smallest reads 0.66 of the truth). The local threshold only ever RAISES the
+# frame-wide one: at the sub-DN noise of a clear sky an integer |statistic| averages to almost nothing (0.43
+# of the truth at 0.7 DN) and would put the threshold far too low.
+LOCAL_GAIN = 8
+LOCAL_NEIGHBOURHOOD = 5
+LOCAL_MIN_BIAS = 1.5
+# With a candidate_filter the survivors arrive in priority order and at most this many are measured: bounded
+# frame time in a cluttered scene (each measurement is 0.6-3 ms on a Pi 3B).
+FILTERED_CANDIDATE_LIMIT = 24
 # With the matched filter on, a blob is MEASURED on the raw residual above this many raw sigmas (the
 # smoothed, grown detection footprint is fatter than the object and would bias the size up ~12 %).
 MEAS_SEED_SIGMAS = 2.5
@@ -86,8 +103,19 @@ PRESCREEN_MIN_CANDIDATES = 8
 _OFF3_Y = np.array([-1, -1, -1, 0, 0, 0, 1, 1, 1])
 _OFF3_X = np.array([-1, 0, 1, -1, 0, 1, -1, 0, 1])
 
+# detector.downscale = 0 (auto): the largest of these factors that still leaves a clay at fire.max_range_m this
+# many detection pixels across (the detector is tuned for 2-10 px blobs: PROFILE_FACTOR, matched_sigma_px).
+AUTO_DOWNSCALES = (4, 2, 1)
+AUTO_MIN_CLAY_PX = 2.5
+
 _POLARITIES = ("bright", "dark", "both")
 _MODES = ("auto", "mono", "color")
+# box: mean over the kernel - what the small-blob size calibration (PROFILE_FACTOR, psf tests) was made with.
+# morph: edge-preserving (see _detect) - measured at downscale 2 on 4-27 px discs: sizes +3.5 % and flatter
+# than box (-6..+5 %), synthetic recall 829/829 against 817/829 (box loses the clay just above the horizon).
+# auto: morph when the detector runs reduced (a long lens), box at full resolution.
+_BG_MODES = ("auto", "box", "morph")
+MORPH_SIZE_BIAS = 1.035
 _COMBINES = ("and", "or")
 
 
@@ -121,12 +149,23 @@ class ClayDetector:
         self.noise_sigma: float = float("nan")
         self.match_sigma: float = float("nan")  # noise sigma of the matched-filter image, in DN
         self.frames_seen: int = 0
+        self.stats: dict = {}  # last frame: connected components, candidates after the size/shape screen, measured
+        # optional f(uv (N,2) full-res centroids, areas (N,)) -> indices to keep, best first (run.py sets it)
+        self.candidate_filter = None
+        self._labels: np.ndarray | None = None  # full-frame label image when only a sub-rectangle was labelled
+        self._cells: np.ndarray | None = None   # local-noise buffers (_local_threshold)
+        self._labels_roi = (0, 0, 0, 0)
         self._since_noise: int = 0
         self._noise_total: float = 0.0  # exposure_us x gain of the frame the noise sigma was estimated on
         self._key: tuple | None = None
         self._mask_src: np.ndarray | None = None
         self._mask: np.ndarray | None = None  # bool, runtime size
         self._mask_key: tuple | None = None
+        self.scale: int = 1  # detection runs on the frame reduced by this factor (detector.downscale)
+        self._img_scale: int = 1  # the reduction of the image _detect is working on right now
+        self._morph_bg = False
+        self._scale_key: tuple | None = None
+        self._down: np.ndarray | None = None
         self.set_mask(mask)
 
     # ------------------------------------------------------------------ mask
@@ -164,6 +203,7 @@ class ClayDetector:
         dh = max(1, int(round(h / down)))
         self._small = np.empty((dh, dw), np.uint8)
         self._smooth = np.empty((dh, dw), np.uint8)
+        self._morph = np.empty((dh, dw), np.uint8)
         self._bg = np.empty((h, w), np.uint8)
         self._contrast = np.empty((h, w), np.int16)
         self._gsm = np.empty((h, w), np.uint8)
@@ -176,19 +216,80 @@ class ClayDetector:
         self._hsv = np.empty((h, w, 3), np.uint8) if color else None
         self._key = key
 
+    # ------------------------------------------------------------- downscale
+    def _scale_for(self, w: int) -> int:
+        """Reduction factor for a frame `w` pixels wide: detector.downscale, or with 0 the factor that keeps a
+        far clay AUTO_MIN_CLAY_PX across (nominal focal length from [optics]; calibration changes it by a few %)."""
+        want = int(getattr(self.cfg.detector, "downscale", 1) or 0)
+        key = (want, w)
+        if self._scale_key == key:
+            return self.scale
+        if want >= 1:
+            scale = want
+        else:
+            cfg = self.cfg
+            pitch_mm = float(cfg.optics.pixel_pitch_um) * 1e-3 * float(cfg.optics.sensor_width_px) / max(w, 1)
+            far_px = (float(cfg.optics.focal_length_mm) / pitch_mm * float(cfg.mount.clay_diameter_m)
+                      / max(float(cfg.fire.max_range_m), 1e-3))
+            scale = next((f for f in AUTO_DOWNSCALES if far_px / f >= AUTO_MIN_CLAY_PX), 1)
+        self._scale_key, self.scale = key, max(1, int(scale))
+        return self.scale
+
     # ---------------------------------------------------------------- detect
     def detect(self, frame: Frame) -> list[Detection]:
-        """Detections in one frame, best score first, at most cfg.detector.max_detections."""
+        """Detections in one frame, best score first, at most cfg.detector.max_detections.
+
+        With detector.downscale > 1 the whole detector runs on the frame averaged down by that factor (a long
+        lens makes the clay 5-27 px across at 640x400: four times the pixels for the same decision, and bigger
+        than the 2-10 px the measurement is tuned for). Detections come back in full-resolution pixels, and
+        diameter_px has the extra blur of the s x s pixel box removed, so cfg.detector.psf_px (the tracker
+        subtracts it) keeps meaning the system blur at full resolution."""
+        img = frame.image
+        s = self._scale_for(int(img.shape[1])) if getattr(img, "ndim", 0) in (2, 3) else 1
+        if s <= 1 or img.dtype != np.uint8 or img.shape[0] < 2 * s or img.shape[1] < 2 * s:
+            self._img_scale = 1
+            return self._detect(frame, img)
+        self._img_scale = s
+        t0 = time.perf_counter()
+        h, w = img.shape[0], img.shape[1]
+        dh, dw = h // s, w // s
+        shape = (dh, dw) + tuple(img.shape[2:])
+        if self._down is None or self._down.shape != shape:
+            self._down = np.empty(shape, np.uint8)
+        src = img if (dh * s, dw * s) == (h, w) else img[:dh * s, :dw * s]
+        if not src.flags["C_CONTIGUOUS"]:
+            src = np.ascontiguousarray(src)
+        cv2.resize(src, (dw, dh), dst=self._down, interpolation=cv2.INTER_AREA)
+        t_down = (time.perf_counter() - t0) * 1e3
+        dets = self._detect(frame, self._down)
+        box4 = 16.0 * (s * s - 1) / 12.0  # (4 sigma)^2 of the s-pixel box, less that of one pixel, in full-res px^2
+        off = 0.5 * (s - 1)
+        for d in dets:
+            d.u = d.u * s + off
+            d.v = d.v * s + off
+            d.area_px = d.area_px * (s * s)
+            full = d.diameter_px * s
+            d.diameter_px = max(full * full - box4, 4.0 * PIXEL_BOX_VAR) ** 0.5
+            x, y, bw, bh = d.bbox
+            d.bbox = (x * s, y * s, bw * s, bh * s)
+        if self.debug:
+            self.debug = {k: cv2.resize(v, (w, h), interpolation=cv2.INTER_NEAREST) for k, v in self.debug.items()}
+        self.timings_ms["downscale"] = t_down
+        self.timings_ms["total"] = (time.perf_counter() - t0) * 1e3
+        return dets
+
+    def _detect(self, frame: Frame, img: np.ndarray) -> list[Detection]:
         t0 = time.perf_counter()
         det = self.cfg.detector
         if det.mode not in _MODES:
             raise ValueError(f"detector.mode must be one of {_MODES}, got {det.mode!r}")
         if det.polarity not in _POLARITIES:
             raise ValueError(f"detector.polarity must be one of {_POLARITIES}, got {det.polarity!r}")
+        if str(getattr(det, "bg_mode", "box")) not in _BG_MODES:
+            raise ValueError(f"detector.bg_mode must be one of {_BG_MODES}, got {det.bg_mode!r}")
         if det.color_combine not in _COMBINES:
             raise ValueError(f"detector.color_combine must be one of {_COMBINES}, got {det.color_combine!r}")
 
-        img = frame.image
         if img.dtype != np.uint8:
             raise ValueError(f"frame image must be uint8, got {img.dtype}")
         if img.ndim not in (2, 3) or (img.ndim == 3 and img.shape[2] != 3):
@@ -199,7 +300,9 @@ class ClayDetector:
         # mode "color" on a mono frame has no hue to use: contrast only.
         use_hsv = is_color and det.mode in ("auto", "color")
         h, w = img.shape[0], img.shape[1]
-        down = max(1, int(det.bg_downscale))
+        # bg_downscale is in full-resolution pixels: on a frame already reduced by `scale` the background
+        # image is reduced by the rest, so the kernel covers the same patch of sky either way
+        down = max(1, int(det.bg_downscale) // max(1, self._img_scale))
         self._ensure_buffers(h, w, down, is_color)
 
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY, dst=self._gray) if is_color else img
@@ -208,7 +311,26 @@ class ClayDetector:
         k = max(1, int(det.bg_kernel))
         cv2.resize(gray, (self._small.shape[1], self._small.shape[0]), dst=self._small,
                    interpolation=cv2.INTER_AREA)
-        cv2.blur(self._small, (k, k), dst=self._smooth)
+        mode = str(getattr(det, "bg_mode", "box"))
+        # auto: each background with the scale it was validated at (see _BG_MODES)
+        self._morph_bg = mode == "morph" or (mode == "auto" and self._img_scale >= 2)
+        if self._morph_bg:
+            # Edge-preserving background: closing removes dark things narrower than the kernel, opening bright
+            # ones, and a step edge (horizon, tree line, roof) passes through both unchanged, so one after the
+            # other leaves the scene without its small structures. A clay keeps its full contrast right next
+            # to an edge, where a box blur mixes sky and ground over the kernel width and buries it, and it
+            # sits in no moat of its own making.
+            # The order matters next to an edge. Closing first removes a DARK clay before the opening can
+            # merge it with dark ground a few pixels below (the strip of sky between them is narrower than the
+            # kernel): that is the clay over the tree line, so it is the order for dark and both polarities.
+            # Opening first is the mirror image, for a bright clay beside something bright.
+            se = _rect_kernel(k)
+            first, second = ((cv2.MORPH_OPEN, cv2.MORPH_CLOSE) if det.polarity == "bright"
+                             else (cv2.MORPH_CLOSE, cv2.MORPH_OPEN))
+            cv2.morphologyEx(self._small, first, se, dst=self._morph)
+            cv2.morphologyEx(self._morph, second, se, dst=self._smooth)
+        else:
+            cv2.blur(self._small, (k, k), dst=self._smooth)
         cv2.resize(self._smooth, (w, h), dst=self._bg, interpolation=cv2.INTER_LINEAR)
         ms = float(getattr(det, "matched_sigma_px", 0.0) or 0.0)
         if ms > 0.0 and not use_hsv:
@@ -262,7 +384,11 @@ class ClayDetector:
                 cv2.subtract(self._gsm, self._bg, dst=self._absd)
             else:
                 cv2.subtract(self._bg, self._gsm, dst=self._absd)
-            cv2.threshold(self._absd, t_int, 1, cv2.THRESH_BINARY, dst=binary.view(np.uint8))
+            cell = int(getattr(det, "local_noise_cell", 0) or 0)
+            if cell > 0 and w >= 4 * cell and h >= 4 * cell:
+                self._local_threshold(det, t_int, cell, w, h, binary.view(np.uint8))
+            else:
+                cv2.threshold(self._absd, t_int, 1, cv2.THRESH_BINARY, dst=binary.view(np.uint8))
         elif math.isfinite(thr):
             # Contrast is integral in [-255, 255], so strict float comparisons reduce to
             # inclusive integer ranges. OpenCV writes the byte mask without converting the
@@ -334,6 +460,38 @@ class ClayDetector:
         }
         return dets
 
+    def _local_threshold(self, det, t_global: int, cell: int, w: int, h: int, out: np.ndarray) -> None:
+        """Threshold |matched statistic| against the LOCAL noise where that is higher than the frame's.
+
+        A frame is rarely one kind of scene: quiet sky above, a busy tree line below. The frame-wide sigma
+        (a low quantile, so it follows the quiet part) is right for the sky and makes every leaf gap in the
+        trees a candidate. Here the mean |statistic| of each `cell` x `cell` block gives a local scale, each
+        block takes the SMALLEST of its neighbourhood, and the threshold is the larger of the frame-wide one
+        and k_sigma x that. Smallest-of means a clay cannot raise its own threshold (it covers a couple of
+        blocks at most), and a clay just above the tree line is judged by the sky next to it, not the trees."""
+        cw, ch = max(1, w // cell), max(1, h // cell)
+        if self._cells is None or self._cells.shape != (ch, cw) or self._thrmap.shape != (h, w):
+            self._cells = np.empty((ch, cw), np.uint8)
+            self._cells2 = np.empty((ch, cw), np.uint8)
+            self._thrmap = np.empty((h, w), np.uint8)
+            self._abs8 = np.empty((h // 2, w // 2), np.uint8)
+        # Block statistics from every other pixel (a quarter of the work; 16 samples a block is enough for a
+        # scale that only matters where it is several times the frame's), as 8 x |stat| saturating at 255:
+        # 1/8 DN resolution for the block means, and nothing above 32 DN (a clay, an edge) counts for more.
+        cv2.resize(self._absd, (w // 2, h // 2), dst=self._abs8, interpolation=cv2.INTER_NEAREST)
+        cv2.convertScaleAbs(self._abs8, dst=self._abs8, alpha=float(LOCAL_GAIN))
+        cv2.resize(self._abs8, (cw, ch), dst=self._cells, interpolation=cv2.INTER_AREA)
+        cv2.erode(self._cells, _rect_kernel(LOCAL_NEIGHBOURHOOD), dst=self._cells2)
+        cv2.blur(self._cells2, (3, 3), dst=self._cells)
+        # mean |x| -> sigma: 1.2533 (two-sided) or 2.5066 (one polarity: the other half was clipped to 0),
+        # times LOCAL_MIN_BIAS for taking the smallest block mean of the neighbourhood; then the threshold in
+        # DN per block, never under the frame-wide one, and only then up to the image size
+        to_sigma = (1.2533 if det.polarity == "both" else 2.5066) * LOCAL_MIN_BIAS / LOCAL_GAIN
+        cv2.convertScaleAbs(self._cells, dst=self._cells, alpha=float(det.k_sigma) * to_sigma)
+        cv2.max(self._cells, max(0, int(t_global)), dst=self._cells)
+        cv2.resize(self._cells, (w, h), dst=self._thrmap, interpolation=cv2.INTER_LINEAR)
+        cv2.compare(self._absd, self._thrmap, cv2.CMP_GT, dst=out)
+
     @staticmethod
     @lru_cache(maxsize=8)
     def _matched_kernel(ms: float) -> np.ndarray:
@@ -384,7 +542,30 @@ class ClayDetector:
                  det, t_ns: int, mask: np.ndarray | None,
                  matched: np.ndarray | None = None, matched_sigma: float | None = None,
                  grow_low: float | None = None) -> list[Detection]:
-        n, labels, stats, _ = cv2.connectedComponentsWithStats(binary.view(np.uint8), connectivity=8)
+        # Label only the bounding box of the pixels that passed the threshold: a clear sky has none (most
+        # frames), a lone clay a few dozen, and labelling the whole frame costs ~1 ms on a Pi 3B either way.
+        b8 = binary.view(np.uint8)
+        rx, ry, rw, rh = cv2.boundingRect(b8)
+        self.stats = {"components": 0, "candidates": 0}
+        if rw == 0 or rh == 0:
+            return []
+        if rw * rh * 2 > b8.size:
+            n, labels, stats, cents = cv2.connectedComponentsWithStats(b8, connectivity=8)
+        else:
+            n, sub, stats, cents = cv2.connectedComponentsWithStats(
+                np.ascontiguousarray(b8[ry:ry + rh, rx:rx + rw]), connectivity=8)
+            cents += (rx, ry)
+            labels = self._labels
+            if labels is None or labels.shape != b8.shape:
+                labels = self._labels = np.zeros(b8.shape, np.int32)
+            else:
+                x0, y0, w0, h0 = self._labels_roi
+                labels[y0:y0 + h0, x0:x0 + w0] = 0
+            labels[ry:ry + rh, rx:rx + rw] = sub
+            self._labels_roi = (rx, ry, rw, rh)
+            stats[:, cv2.CC_STAT_LEFT] += rx
+            stats[:, cv2.CC_STAT_TOP] += ry
+        self.stats["components"] = int(n) - 1
         if n <= 1:
             return []
         areas = stats[1:, cv2.CC_STAT_AREA]
@@ -409,6 +590,17 @@ class ClayDetector:
                 & (long_side / short_side <= float(det.max_aspect))
             )
         idx = np.nonzero(keep)[0]
+        self.stats["candidates"] = int(idx.size)
+        ordered = False
+        if self.candidate_filter is not None and idx.size:
+            # e.g. the scenery filter (vision/clutter.py): drops candidates before they cost a measurement and
+            # says which of the rest matter most. Centroids go out in full-resolution pixels.
+            s = self._img_scale
+            order = self.candidate_filter(cents[idx + 1] * s + 0.5 * (s - 1), areas[idx] * (s * s),
+                                          ws[idx] * s, hs[idx] * s)
+            idx = idx[np.asarray(order, dtype=np.intp)]
+            ordered = True
+            self.stats["kept"] = int(idx.size)
         if idx.size and matched is not None and grow_low is not None:
             # vectorised pre-screen of tiny seeds (the Python loop below costs ~0.1 ms each on a Pi 3B): the
             # raw residual somewhere in the 3x3 around the seed's corner pixel must reach the DN floor
@@ -425,7 +617,9 @@ class ClayDetector:
                 idx = idx[ok]
         if idx.size == 0:
             return []
-        if idx.size > CANDIDATE_LIMIT:  # keep the largest; a real frame never gets here
+        if ordered:
+            idx = idx[:FILTERED_CANDIDATE_LIMIT]  # already in priority order
+        elif idx.size > CANDIDATE_LIMIT:  # keep the largest; a real frame never gets here
             idx = idx[np.argsort(areas[idx])[::-1][:CANDIDATE_LIMIT]]
 
         k_sigma = max(float(det.k_sigma), 1e-6)
@@ -434,7 +628,8 @@ class ClayDetector:
         alpha_half = ADAPTIVE_ALPHA**0.5
         # Radius over which a blob pulls its own background down (box kernel on the downscaled image).
         moat_half = max(ADAPTIVE_MIN_HALF,
-                        min(ADAPTIVE_MAX_HALF, int(0.5 * max(1, int(det.bg_kernel)) * max(1, int(det.bg_downscale))) - 1))
+                        min(ADAPTIVE_MAX_HALF, int(0.5 * max(1, int(det.bg_kernel))
+                                                   * max(1, int(det.bg_downscale) // max(1, self._img_scale))) - 1))
         out: list[Detection] = []
         grow_k = np.ones((2 * GROW_RADIUS_PX + 1, 2 * GROW_RADIUS_PX + 1), np.uint8)
         grown_done = False
@@ -561,7 +756,7 @@ class ClayDetector:
             mid = 0.5 * (oxx + oyy)
             rad = ((0.5 * (oxx - oyy)) ** 2 + oxy * oxy) ** 0.5
             lam = max(mid + rad, PIXEL_BOX_VAR)
-            diameter = 4.0 * lam**0.5 / PROFILE_FACTOR
+            diameter = 4.0 * lam**0.5 / (PROFILE_FACTOR * MORPH_SIZE_BIAS if self._morph_bg else PROFILE_FACTOR)
             snr = (abs(m_peak) / matched_sigma) if matched is not None else abs(peak) / sigma
             # 0.5 at the detection threshold, saturating towards 1; shrunk for non-compact blobs.
             s_snr = snr / (snr + k_sigma)
@@ -580,6 +775,11 @@ class ClayDetector:
                 )
             )
         return out
+
+
+@lru_cache(maxsize=8)
+def _rect_kernel(k: int) -> np.ndarray:
+    return cv2.getStructuringElement(cv2.MORPH_RECT, (k, k))
 
 
 @lru_cache(maxsize=82)
@@ -824,7 +1024,7 @@ def _robust_sigma(vals: np.ndarray) -> float:
     np.minimum(dev, DEV_MAX, out=dev)
     counts = np.bincount(dev.reshape(-1), minlength=DEV_MAX + 1)
     cum = np.cumsum(counts) / float(n)
-    k = int(np.argmin(np.abs(cum - 0.5)))
+    k = int(np.argmin(np.abs(cum - NOISE_QUANTILE)))
     # Away from these bounds the inversion is ill-conditioned (and a saturated frame hits them).
     frac = min(max(float(cum[k]), 0.05), 0.98)
     sigma = (k + 0.5) / (math.sqrt(2.0) * _erfinv(frac))

@@ -56,6 +56,18 @@ details are in [ARCHITECTURE.md](ARCHITECTURE.md); keep those signatures and `tb
    the clay was visible at +250 ms. A going-away clay is small and nearly stationary in the image; investigate the
    detector thresholds/background kernel for it.
 
+## Changed 2026-11-17 (details and measurements: INTEGRATION_STATUS.md)
+
+- The 12 mm lens makes the clay 5-27 px. The detector now runs at half resolution with that lens
+  (`detector.downscale`, auto), on an edge-preserving background (`detector.bg_mode`), with a local threshold
+  in busy regions, and reports full-resolution pixels as before. `Detection` is unchanged.
+- `ClayDetector.candidate_filter`: optional hook called with every candidate's centroid before measurement.
+  The pipeline sets it to `tbot.vision.clutter.StaticFilter.filter` (scenery = fixed in the world by the IMU).
+- Open problem 2 has a second cause: the second-moment width over-reads an edge-on clay (rectangle-like
+  silhouette) by up to 15.5 %, independent of `psf_px`.
+- Real footage arrives with every held press: `sessions/<name>/` has the frames, the IMU and what the
+  pipeline computed per frame ([PRESS_CLIPS.md](PRESS_CLIPS.md)).
+
 ## Constraints to keep
 - Python >= 3.11, numpy 1.24 and 2.x, OpenCV 4.6 (Raspberry Pi OS apt) and 5.x; no `cv2.aruco`; no scipy at runtime.
 - Pi 3B: the whole pipeline must fit the frame period at the configured fps (`tbot bench` verdict).

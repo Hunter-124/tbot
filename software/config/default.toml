@@ -30,6 +30,11 @@ emulate_mono = "none"         # cv/video sources only: none | luma | red (red = 
 buffer_count = 4
 stall_s = 0.5                 # live picam (tbot run / record): no frame this long = stalled -> close and reopen the camera
 reopen_timeout_s = 5.0        # a reopened camera with no first frame within this is stalled again (retries back off to 5 s)
+idle_fps = 30.0               # tbot run, live sources: frames processed per second while the arming button is UP (0 = all).
+                              # Nothing can fire then, and flat out at 100 fps a bare Pi 3B passed 72 C in 8 minutes
+                              # (it throttles at 80). The moment the button is held every frame is processed
+process = true                # tbot run, picam only: acquire camera + IMU in a child process (camera/proc.py). In-process
+                              # their threads held the interpreter lock and the vision loop ran 2-3x slower. false = threads
 
 [optics]                      # nominal prior until calib/intrinsics.json exists (innomaker manual V1.4 §3.1)
 model = "fisheye"             # fisheye (cv2.fisheye, equidistant base) | pinhole
@@ -50,11 +55,14 @@ clay_diameter_m = 0.108       # ISSF/ATA standard clay 108-110 mm
 [detector]
 mode = "auto"                 # auto (color if the frame is colour) | mono | color
 polarity = "both"             # bright | dark | both  (clay vs sky; mono, no filter: usually dark)
-bg_downscale = 4
-bg_kernel = 9                 # box blur kernel on the downscaled image (odd)
+bg_mode = "auto"              # morph: the frame without its small structures, keeping step edges (horizon, tree
+                              # line, roof), so a clay right above one keeps its contrast | box: mean over the kernel
+                              # (rings at edges) | auto: morph when the detector runs reduced (downscale >= 2), else box
+bg_downscale = 4              # the background is estimated on the frame reduced by this factor (full-res pixels)
+bg_kernel = 9                 # kernel on that reduced image (odd): 9 x 4 = 36 px, wider than a clay at 8 m (27 px)
 k_sigma = 6.0                 # contrast threshold in robust noise sigmas
 min_contrast = 10.0           # DN floor
-noise_every = 10              # frames between noise-sigma refreshes
+noise_every = 30              # frames between noise-sigma refreshes (an exposure/gain change refreshes at once)
 min_area_px = 2
 max_area_px = 400
 max_aspect = 5.0             # edge-on clay is 108 x 25 mm = 4.3:1 plus bbox quantisation
@@ -70,6 +78,19 @@ grow_k_sigma = 3.0            # hysteresis (0 = off): grow each k_sigma seed int
 max_peak_fraction = 0.85      # reject a blob whose raw peak holds more than this share of the raw contrast in its 3x3
                               # neighbourhood: a hot pixel / speck is one pixel, a real clay is spread by the optics
                               # (psf_px). 1.0 = off. Replaces min_area_px as the speck filter once matched/grown
+downscale = 0                 # run the detector on the frame averaged down by this factor (1 = full resolution).
+                              # 0 = auto: the largest of 4/2/1 that keeps a clay at fire.max_range_m >= 2.5 px across
+                              # (12 mm lens at 640x400: 2; the 2.8 mm kit lens: 1). Positions and sizes stay full-res px
+local_noise_cell = 8          # busy regions (trees, roofs) raise their own threshold: k_sigma x the local noise of
+                              # blocks this many detection pixels wide (smallest of the 5x5 around, so a clay beside
+                              # them is judged by the sky). Never below the frame-wide threshold. 0 = off
+static_reject = true          # scenery filter (vision/clutter.py; needs the IMU): drop candidates that keep their WORLD
+                              # direction while the gun turns, before they are measured. They show as grey crosses
+static_tol_px = 3.0           # ... within this many pixels (centroid jitter, IMU timing),
+static_lever_m = 0.9          # allowing for parallax: the camera is this far ahead of the point the shooter turns
+static_min_range_m = 6.0      # about [INFERENCE], so scenery from this range out to infinity trails its old place
+static_min_age_ms = 50.0      # compared with where candidates were this long ago ... (a clay slower than
+static_max_age_ms = 250.0     # tol / min_age = 1.7 deg/s across the sky cannot be told from scenery)
 psf_px = 1.2                  # 4-sigma diameter of the system blur (pixel box alone = 1.15 px); calibrate: tbot calib-detector --psf [INFERENCE]
 
 [tracker]
@@ -205,12 +226,19 @@ fps = 10.0
 jpeg_quality = 70
 
 [record]
-mode = "armed"                # off | armed (ring buffer dumped around each arming press) | continuous
+mode = "armed"                # off | armed (every held press of the arming button becomes one session) | continuous
 dir = "sessions"
-preroll_s = 2.0
-postroll_s = 1.0
-max_ram_mb = 200
+preroll_s = 1.0               # armed: a session runs from this long before the press ...
+postroll_s = 0.7              # ... to this long after the release
+max_ram_mb = 150              # armed: frames wait in RAM until the release (640x400 at 100 fps = 25 MB/s, so ~6 s
+                              # with the preroll); a longer press loses its oldest frames (summary.json:
+                              # evicted_frames). The Pi 3B has 1 GB: the ring, a session still being written and
+                              # the two processes must all fit
 decimate = 1
+clip = "process"              # armed: annotated video of each session (clip.mp4: boxes, tracks, lead, decision, timing).
+                              # process = rendered after the release by a low-priority child process | inline = in
+                              # the recorder thread | off. `tbot clip <session>` renders one later
+clip_fps = 30.0               # playback rate of the clip; every recorded frame is in it (100 fps capture = 3.3x slow motion)
 
 [paths]
 calib_dir = "calib"

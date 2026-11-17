@@ -9,6 +9,7 @@ COMMANDS: dict[str, tuple[str, str]] = {
     "run": ("tbot.app.run", "live pipeline: camera -> detect -> track -> fire solver (dry run unless fire.live)"),
     "sim": ("tbot.tools.sim_eval", "closed-loop evaluation on synthetic scenarios"),
     "record": ("tbot.app.record", "record a session (frames + timestamps + IMU) for replay"),
+    "clip": ("tbot.tools.clip", "annotated video (boxes, tracks, decision) of a recorded press -> <session>/clip.mp4"),
     "board": ("tbot.tools.make_board", "write a printable calibration chessboard"),
     "focus": ("tbot.tools.focus", "headless focus and exposure calibration"),
     "calib-intrinsics": ("tbot.tools.calib_intrinsics", "fisheye intrinsic calibration -> calib/intrinsics.json"),

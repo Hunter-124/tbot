@@ -26,7 +26,7 @@ below are a record, not something a checkout restores.
 | `actuator.servo.rest_us` / `fire_us` | 1420 / 1530 | bench; lever has some spline play |
 | `actuator.servo.min_us` / `max_us` | 1400 / 1540 | valid lever travel (the actuator refuses to fire outside it) |
 | `camera.rotate_180` | false | the board is upright (now also the default) |
-| `camera.fps` | 50 | see "Frame rate" |
+| `camera.fps` | 100 (was 50 until 2026-11-17) | see "Frame rate" |
 
 ## Calibration on the Pi (`calib/`)
 
@@ -76,7 +76,64 @@ below are a record, not something a checkout restores.
 - Live dry run on the rig after these changes: 50 fps, 18.3 ms p50 / 25.9 ms p95 per frame, 3 drops in 400.
 - Range access: the Pi is on Ethernet only (wlan0 is not configured). At the range use a direct cable.
 
+## Added 2026-11-17 (vision speed, detection with the 12 mm lens, press recording)
+
+Measured on the rig's Pi 3B with the real camera and IMU (dark room, so no clay in view), and on the
+simulator rendered through the rig's lens calibration. Not yet seen outdoors: the first backyard presses are
+the test, and every one of them is recorded ([PRESS_CLIPS.md](PRESS_CLIPS.md)).
+
+- **Press recording.** Every held press of the arming button is one session: raw frames, IMU, events,
+  `telemetry.jsonl` (per frame: detections with boxes, scenery dropped, tracks, fire solution, timing,
+  exposure), `summary.json` and an annotated `clip.mp4`. Browse at `http://<pi>:8080/clips`. The service no
+  longer writes `logs/run-*.jsonl`.
+- **Sensor process** (`camera.process`, `tbot/camera/proc.py`): camera + IMU are acquired in a child process and
+  handed over through shared memory. In one process their threads held the interpreter lock: at 100 fps the
+  capture thread used 33 % of a core, the IMU thread 22 %, picamera2's own threads 20 %, and every detector
+  step ran 2-3x slower live than on stored frames. Live, nothing in view, camera at 100 fps:
+
+  | | frames processed | detect p50 | frame work p50 / p95 | frame age p50 |
+  |---|---|---|---|---|
+  | before (threads, full-res detector) | 50 /s | 13.0 ms | 15.5 / 38.8 ms | 49 ms |
+  | sensor process + half-res detector | 86 /s (100 /s once warm, service log) | 4.7 ms | 6.5 / 13.5 ms | 25 ms |
+
+  Also removed from the frame loop: a `vcgencmd` child process once a second (20-40 ms stall each; now a
+  background thread), overlay drawing and JPEG encoding (own thread, and only while a browser is watching),
+  the per-frame deep copy of the health dict, full garbage collections over the whole heap (`gc.freeze`).
+- With a clay tracked and the button held (simulator frames on the Pi): detect 6.6 + track 2.7 + solve 2.6 ms,
+  about 14 ms a frame with IMU and bookkeeping, so ~70 frames/s where it matters. Next levers: the per-blob
+  measurement (3.4 ms for one clay, all small NumPy calls), tracker and solver.
+- **Idle rate** (`camera.idle_fps = 30`): while the button is up the pipeline processes 30 frames/s; the moment
+  it is held, every frame. Heat is why: flat out the bare Pi passed 72 C in 8 minutes indoors. The sensor
+  process itself is ~90 % of a core at 100 fps whatever the pipeline does (capture, auto-exposure metering,
+  IMU), and holds the board near 70 C indoors; if `health: Pi at 75 C` shows up outdoors, lower `camera.fps`
+  or fit the heatsink.
+- **Detector for the 12 mm lens.** A clay is now 5-27 px across (8-40 m), not 1.5-8 px:
+  - `detector.downscale` (0 = auto -> 2 with this lens): the detector runs on the frame averaged 2x2 and
+    reports full-resolution pixels. At full resolution a face-on clay at 8 m (572 px) was over `max_area_px`
+    and never detected, and sizes were off by -6..+5 %; now 5-27 px discs measure within 3 %.
+  - `detector.bg_mode` (auto -> morph when reduced): edge-preserving background. The box blur mixed sky and
+    ground for 36 px around the horizon and lost the clay there: synthetic recall (all scenarios, 2 seeds)
+    817/829 with 0.08 false detections a frame -> **829/829 with 0.01**.
+  - `detector.local_noise_cell`: busy regions (trees) raise their own threshold; the frame-wide noise is read
+    at a low quantile so a picture that is mostly trees does not desensitise the sky.
+  - Scenery filter (`detector.static_reject`, `tbot/vision/clutter.py`): candidates that keep their world
+    direction while the gun turns (IMU), allowing for parallax of anything beyond `static_min_range_m`, are
+    dropped before they are measured; grey crosses in the clips. On real indoor stills swung through the
+    camera model with a pasted clay: ~50 scenery candidates dropped per frame, detector time in clutter down
+    ~3x, the clay kept 2-3x more often (an indoor room is far busier than sky and a tree line; that test is
+    a stress case, not a prediction). **Never run with real attitude outdoors yet**; `static_reject = false`
+    turns it off. A clay with under ~1.7 deg/s of angular motion that never crossed the sky before looks
+    like scenery to it.
+- **Found, not fixed: size reads 12-17 % large on the simulator's clay**, at any resolution. The diameter is a
+  second-moment width, exact for an ellipse; an edge-on clay's silhouette is nearer a rectangle (x1.155).
+  Range from size then reads ~13 % short. Needs a real clay at a taped distance, edge-on and face-on, before
+  choosing a correction (`tbot calib-detector --psf --range-m`).
+- Closed-loop simulator, rig lens, 3 seeds x 8 scenarios: 14 shots / 6 hits after, 14 / 7 before (run-to-run
+  noise is +-2, see "Simulator notes").
+
 ## Frame rate and CPU
+
+*(2026-11-15 numbers, before the sensor process and the half-resolution detector; kept for the record.)*
 
 - Camera/driver: capture-only 50-200 fps with zero drops; the limit is processing.
 - Pi 3B pipeline with a clay tracked (synthetic crossing): detect 13.0 + track 2.6 + solve 1.7 = **17.5 ms

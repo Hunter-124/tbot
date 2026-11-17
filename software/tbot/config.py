@@ -36,6 +36,8 @@ class CameraConfig:
     buffer_count: int
     stall_s: float = 0.5
     reopen_timeout_s: float = 5.0
+    process: bool = True
+    idle_fps: float = 30.0
     ae_target_dn: float = 160.0
     ae_highlight_pct: float = 98.0
     ae_min_exposure_us: float = 9.0
@@ -90,6 +92,15 @@ class DetectorConfig:
     matched_sigma_px: float = 0.5
     grow_k_sigma: float = 3.0
     max_peak_fraction: float = 0.85
+    downscale: int = 0
+    bg_mode: str = "auto"
+    local_noise_cell: int = 8
+    static_reject: bool = True
+    static_tol_px: float = 3.0
+    static_lever_m: float = 0.9
+    static_min_range_m: float = 6.0
+    static_min_age_ms: float = 50.0
+    static_max_age_ms: float = 250.0
 
 
 @dataclass
@@ -259,6 +270,8 @@ class RecordConfig:
     postroll_s: float
     max_ram_mb: int
     decimate: int
+    clip: str = "process"
+    clip_fps: float = 30.0
 
 
 @dataclass

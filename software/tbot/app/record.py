@@ -11,11 +11,13 @@ import argparse
 import csv
 import json
 import queue
+import re
 import sys
 import threading
 import time
 from collections import deque
 from pathlib import Path
+from typing import Callable
 
 import numpy as np
 
@@ -33,9 +35,87 @@ from tbot.camera.replay import (
 from tbot.config import add_common_args, load_from_args, now_iso, resolve_path, save_json
 from tbot.types import Frame, ImuSample, SimClock
 
-__all__ = ["SessionWriter", "RingRecorder", "session_meta_extra", "main"]
+__all__ = ["SessionWriter", "RingRecorder", "session_meta_extra", "summarise_session", "main",
+           "TELEMETRY_JSONL", "SUMMARY_JSON"]
 
 _SENTINEL = object()
+_NUMBER = re.compile(r"[-+]?\d+(?:\.\d+)?")
+TELEMETRY_JSONL = "telemetry.jsonl"  # one line per processed frame: what the pipeline saw and decided (run.py)
+SUMMARY_JSON = "summary.json"        # the press at a glance (summarise_session)
+
+
+def _json_default(obj):
+    """json.dumps fallback for the numpy values that end up in telemetry."""
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    if isinstance(obj, np.generic):
+        return obj.item()
+    return str(obj)
+
+
+def _pcts(values) -> dict | None:
+    a = np.asarray([v for v in values if v is not None and np.isfinite(v)], dtype=np.float64)
+    if a.size == 0:
+        return None
+    return {"p50": round(float(np.percentile(a, 50)), 3), "p95": round(float(np.percentile(a, 95)), 3),
+            "max": round(float(a.max()), 3)}
+
+
+def summarise_session(frames: list, telemetry: list, events: list, trigger: dict | None = None,
+                      evicted: int = 0) -> dict:
+    """What happened in one recorded press, from the data that is about to be written: frame timing, how
+    often the clay was seen and tracked, why the solver did or did not fire, stage times, exposure, Pi health."""
+    out: dict = {"frames": len(frames), "telemetry_frames": len(telemetry), "evicted_frames": int(evicted)}
+    if trigger:
+        out["trigger"] = trigger
+    if len(frames) >= 2:
+        t = np.array([int(f.t_exposure_ns) for f in frames], dtype=np.int64)
+        dt = np.diff(t) / 1e6
+        span = float(t[-1] - t[0]) / 1e9
+        out["span_s"] = round(span, 3)
+        out["fps"] = round((len(frames) - 1) / span, 2) if span > 0 else None
+        out["frame_dt_ms"] = _pcts(dt)
+        seq = np.array([int(f.seq) for f in frames], dtype=np.int64)
+        out["camera_frames_skipped"] = int(max(0, (seq[-1] - seq[0] + 1) - len(frames)))
+        out["exposure_us"] = [float(min(f.exposure_us for f in frames)), float(max(f.exposure_us for f in frames))]
+        out["gain"] = [float(min(f.gain for f in frames)), float(max(f.gain for f in frames))]
+    if telemetry:
+        armed = [r for r in telemetry if r.get("armed")]
+        out["armed_frames"] = len(armed)
+        out["frames_with_detections"] = sum(1 for r in telemetry if r.get("n_detections"))
+        out["frames_with_confirmed_track"] = sum(
+            1 for r in telemetry if any(t.get("confirmed") for t in r.get("tracks") or ()))
+        out["detections_per_frame"] = _pcts([r.get("n_detections") for r in telemetry])
+        reasons: dict[str, int] = {}
+        p_hit = []
+        for r in armed or telemetry:
+            d = r.get("decision") or {}
+            # "p_hit 0.07 < 0.50" and "p_hit 0.12 < 0.50" are one reason
+            key = "FIRE" if d.get("fire") else _NUMBER.sub("#", str(d.get("reason", "?")))
+            reasons[key] = reasons.get(key, 0) + 1
+            p_hit.append(d.get("p_hit"))
+        out["decision_reasons"] = dict(sorted(reasons.items(), key=lambda kv: -kv[1]))
+        ph = _pcts(p_hit)
+        out["max_p_hit"] = None if ph is None else ph["max"]
+        stages: dict[str, list] = {}
+        for r in telemetry:
+            for k, v in (r.get("stage_ms") or {}).items():
+                stages.setdefault(k, []).append(v)
+        out["stage_ms"] = {k: _pcts(v) for k, v in stages.items()}
+        out["age_ms"] = _pcts([r.get("age_ms") for r in telemetry])
+        last = telemetry[-1]
+        out["shots_total"] = last.get("shots")
+        out["dropped_total"] = last.get("dropped")
+        out["live"] = last.get("live")
+        out["imu_ready"] = last.get("imu_ready")
+        out["health"] = last.get("health")
+        out["ae"] = last.get("ae")
+    out["events"] = {}
+    for e in events:
+        k = str(e.get("type", "?"))
+        out["events"][k] = out["events"].get(k, 0) + 1
+    out["fire_events"] = [e for e in events if e.get("type") in ("fire", "recoil", "no_recoil")]
+    return out
 
 
 def session_meta_extra(cfg, calib=None, source: str | None = None) -> dict:
@@ -227,13 +307,16 @@ class SessionWriter:
 
 
 class _PendingDump:
-    __slots__ = ("t0_ns", "t1_ns", "path", "tag")
+    __slots__ = ("t0_ns", "t1_ns", "path", "tag", "t_ns", "start_ns")
 
-    def __init__(self, t0_ns: int, t1_ns: int, path: Path, tag: str) -> None:
+    def __init__(self, t0_ns: int, t1_ns: int, path: Path, tag: str, t_ns: int | None = None,
+                 start_ns: int | None = None) -> None:
         self.t0_ns = t0_ns
         self.t1_ns = t1_ns
         self.path = path
         self.tag = tag
+        self.t_ns = t_ns          # the trigger itself (button release for a press)
+        self.start_ns = start_ns  # start of the held press, when the window covers one
 
 
 class RingRecorder:
@@ -243,9 +326,17 @@ class RingRecorder:
     session directory and dumps `[t_ns - preroll_s, t_ns + postroll_s]` once the postroll frames have
     arrived (or at `close()`), on a background thread. Window membership uses t_capture_ns, the time
     the frame reached user space, which is the clock the pipeline triggers on.
+
+    A held press is one session: `hold(t_press)` keeps everything from `t_press - preroll_s` in the ring
+    (still under the RAM cap, which drops the oldest frames of a very long press and counts them in
+    `evicted`), and `trigger(t_release, start_ns=t_press)` dumps the whole press. Alongside the replayable
+    frames/IMU/events each session gets telemetry.jsonl (the per-frame records given to `push_telemetry`)
+    and summary.json; `on_dump(path)` is then called from the dump thread (the pipeline renders the
+    annotated video clip there).
     """
 
-    def __init__(self, cfg, width: int, height: int, channels: int, fps: float, meta_extra: dict | None = None) -> None:
+    def __init__(self, cfg, width: int, height: int, channels: int, fps: float, meta_extra: dict | None = None,
+                 on_dump: Callable[[Path], None] | None = None) -> None:
         self.width = int(width)
         self.height = int(height)
         self.channels = int(channels)
@@ -262,6 +353,9 @@ class RingRecorder:
         self._frames: deque[Frame] = deque()
         self._imu: deque[ImuSample] = deque()
         self._events: deque[dict] = deque()
+        self._telemetry: deque[tuple[int, dict]] = deque()
+        self._hold_ns: int | None = None
+        self.on_dump = on_dump
         self._bytes = 0
         self._pending: list[_PendingDump] = []
         self._threads: list[threading.Thread] = []
@@ -283,7 +377,7 @@ class RingRecorder:
 
     # ----------------------------------------------------------------------------- input
     def push(self, frame: Frame) -> None:
-        ready: list[tuple[_PendingDump, list, list, list]] = []
+        ready: list[tuple] = []
         with self._lock:
             self._frames.append(frame)
             self._bytes += int(frame.image.nbytes)
@@ -293,12 +387,18 @@ class RingRecorder:
                 if newest >= dump.t1_ns:
                     self._pending.remove(dump)
                     ready.append((dump, *self._snapshot_locked(dump)))
-        for dump, frames, samples, events in ready:
-            self._spawn_dump(dump, frames, samples, events)
+        for dump, *data in ready:
+            self._spawn_dump(dump, *data)
 
     def push_imu(self, samples) -> None:
         with self._lock:
             self._imu.extend(samples)
+
+    def push_telemetry(self, t_ns: int, record: dict) -> None:
+        """Per-frame pipeline record for telemetry.jsonl, stamped like its frame (t_capture_ns). The dict is
+        kept by reference and serialised at dump time, so the caller may still add to it this frame."""
+        with self._lock:
+            self._telemetry.append((int(t_ns), record))
 
     def event(self, event: dict) -> None:
         if "t_ns" not in event or "type" not in event:
@@ -306,14 +406,23 @@ class RingRecorder:
         with self._lock:
             self._events.append(dict(event))
 
+    def hold(self, t_ns: int | None) -> None:
+        """A press started at t_ns (None: it ended without a trigger): keep the ring from its preroll on."""
+        with self._lock:
+            self._hold_ns = None if t_ns is None else int(t_ns)
+
     # ----------------------------------------------------------------------------- trigger / dump
-    def trigger(self, t_ns: int, tag: str = "trigger") -> Path:
-        """Reserve a session for [t_ns - preroll, t_ns + postroll] and return its path."""
+    def trigger(self, t_ns: int, tag: str = "trigger", start_ns: int | None = None) -> Path:
+        """Reserve a session for [(start_ns or t_ns) - preroll, t_ns + postroll] and return its path."""
         t_ns = int(t_ns)
+        first = t_ns if start_ns is None else min(int(start_ns), t_ns)
         path = self._reserve_path(tag)
-        dump = _PendingDump(t_ns - self.preroll_ns, t_ns + self.postroll_ns, path, tag)
+        dump = _PendingDump(first - self.preroll_ns, t_ns + self.postroll_ns, path, tag, t_ns,
+                            None if start_ns is None else int(start_ns))
         ready = None
         with self._lock:
+            if start_ns is not None:
+                self._hold_ns = None
             newest = int(self._frames[-1].t_capture_ns) if self._frames else None
             if newest is not None and newest >= dump.t1_ns:
                 ready = self._snapshot_locked(dump)
@@ -325,14 +434,14 @@ class RingRecorder:
 
     def close(self) -> list[Path]:
         """Dump everything still pending with the frames on hand and wait for the writers."""
-        pending: list[tuple[_PendingDump, list, list, list]] = []
+        pending: list[tuple] = []
         with self._lock:
             self._closed = True
             for dump in self._pending:
                 pending.append((dump, *self._snapshot_locked(dump)))
             self._pending.clear()
-        for dump, frames, samples, events in pending:
-            self._spawn_dump(dump, frames, samples, events)
+        for dump, *data in pending:
+            self._spawn_dump(dump, *data)
         for thread in list(self._threads):
             thread.join(timeout=60.0)
         self._threads.clear()
@@ -340,6 +449,7 @@ class RingRecorder:
             self._frames.clear()
             self._imu.clear()
             self._events.clear()
+            self._telemetry.clear()
             self._bytes = 0
             return list(self.sessions)
 
@@ -355,6 +465,8 @@ class RingRecorder:
 
     def _trim_locked(self, newest_ns: int) -> None:
         keep_from = newest_ns - self.preroll_ns
+        if self._hold_ns is not None:
+            keep_from = min(keep_from, self._hold_ns - self.preroll_ns)
         for dump in self._pending:
             keep_from = min(keep_from, dump.t0_ns)
         while len(self._frames) > 1 and int(self._frames[0].t_capture_ns) < keep_from:
@@ -369,27 +481,35 @@ class RingRecorder:
             self._imu.popleft()
         while self._events and int(self._events[0].get("t_ns", horizon)) < horizon:
             self._events.popleft()
+        while self._telemetry and self._telemetry[0][0] < horizon:
+            self._telemetry.popleft()
 
-    def _snapshot_locked(self, dump: _PendingDump) -> tuple[list, list, list]:
+    def _snapshot_locked(self, dump: _PendingDump) -> tuple[list, list, list, list, int]:
         frames = [f for f in self._frames if dump.t0_ns <= int(f.t_capture_ns) <= dump.t1_ns]
         samples = [s for s in self._imu if dump.t0_ns <= int(s.t_ns) <= dump.t1_ns]
         events = [e for e in self._events if dump.t0_ns <= int(e.get("t_ns", dump.t0_ns)) <= dump.t1_ns]
-        return frames, samples, events
+        telemetry = [r for t, r in self._telemetry if dump.t0_ns <= t <= dump.t1_ns]
+        return frames, samples, events, telemetry, self.evicted
 
-    def _spawn_dump(self, dump: _PendingDump, frames: list, samples: list, events: list) -> None:
+    def _spawn_dump(self, dump: _PendingDump, frames: list, samples: list, events: list,
+                    telemetry: list | None = None, evicted: int = 0) -> None:
         thread = threading.Thread(
             target=self._write_dump,
-            args=(dump, frames, samples, events),
+            args=(dump, frames, samples, events, telemetry or [], evicted),
             name=f"ring-dump-{dump.tag}",
             daemon=True,
         )
         self._threads.append(thread)
         thread.start()
 
-    def _write_dump(self, dump: _PendingDump, frames: list, samples: list, events: list) -> None:
+    def _write_dump(self, dump: _PendingDump, frames: list, samples: list, events: list,
+                    telemetry: list | None = None, evicted: int = 0) -> None:
+        telemetry = telemetry or []
         meta = dict(self.meta_extra)
-        meta["trigger"] = {"t_ns": dump.t0_ns + self.preroll_ns, "tag": dump.tag,
-                           "window_ns": [dump.t0_ns, dump.t1_ns]}
+        t_ns = dump.t0_ns + self.preroll_ns if dump.t_ns is None else dump.t_ns
+        meta["trigger"] = {"t_ns": t_ns, "tag": dump.tag, "window_ns": [dump.t0_ns, dump.t1_ns]}
+        if dump.start_ns is not None:
+            meta["trigger"]["press_ns"] = [dump.start_ns, t_ns]
         writer = SessionWriter(
             dump.path, self.width, self.height, self.channels, self.fps,
             meta_extra=meta, queue_size=64, drop_when_full=False,
@@ -402,8 +522,23 @@ class RingRecorder:
                 writer.add_frame(frame)
         finally:
             writer.close()
+        try:  # the extras must never cost the replayable session that is already on disk
+            if telemetry:
+                with open(dump.path / TELEMETRY_JSONL, "w") as f:
+                    for record in telemetry:
+                        f.write(json.dumps(record, default=_json_default) + "\n")
+            save_json(dump.path / SUMMARY_JSON,
+                      json.loads(json.dumps(summarise_session(frames, telemetry, events, meta["trigger"], evicted),
+                                            default=_json_default)))
+        except Exception as exc:  # noqa: BLE001
+            print(f"tbot record: could not write the telemetry/summary of {dump.path}: {exc}", file=sys.stderr)
         with self._lock:
             self.sessions.append(dump.path)
+        if self.on_dump is not None:
+            try:
+                self.on_dump(dump.path)
+            except Exception as exc:  # noqa: BLE001
+                print(f"tbot record: on_dump failed for {dump.path}: {exc}", file=sys.stderr)
 
 
 # ------------------------------------------------------------------------------------- tbot record
