@@ -526,7 +526,10 @@ class Pipeline:
         armed = bool(self.arming.armed)
         self.engagement.new_press(int(getattr(self.arming, "press_count", 0)))
         self.engagement.observe(self.tracks, int(frame.t_exposure_ns))
-        decision = self.solver.evaluate(now, self.tracker, self.attitude, armed, self.frame_period_s,
+        # the solver looks one decision ahead: that is the real loop period (16-30 fps with trees in view), not
+        # the camera's
+        period_s = self.frame_period_s if self.fps <= 0.0 else min(0.2, max(self.frame_period_s, 1.0 / self.fps))
+        decision = self.solver.evaluate(now, self.tracker, self.attitude, armed, period_s,
                                         accept=self.engagement.accept(now))
         if decision.fire and not self.engagement.spacing_ok(now):
             decision.fire = False
@@ -546,10 +549,11 @@ class Pipeline:
         fired = False
         cmd_t_ns = None
         if decision.fire and self.arming.try_consume_shot():
+            fire_at = max(now, int(decision.extra.get("fire_at_ns", now)))  # may be inside the frame period
             if cfg.fire.live and self.actuator is not None:
                 cmd_t_ns = int(self.source.clock.now_ns())
-                while cmd_t_ns < now:
-                    time.sleep((now - cmd_t_ns) / 1e9)
+                while cmd_t_ns < fire_at:
+                    time.sleep((fire_at - cmd_t_ns) / 1e9)
                     next_ns = int(self.source.clock.now_ns())
                     if next_ns <= cmd_t_ns:
                         # A stopped source clock cannot establish a safe command time.
@@ -595,6 +599,7 @@ class Pipeline:
             "t_exposure_ns": int(frame.t_exposure_ns),
             "t_ns": now,
             "cmd_t_ns": cmd_t_ns,
+            "fire_at_ns": int(decision.extra.get("fire_at_ns", now)) if fired else None,
             "decide_ahead_ms": decide_ahead_ns / 1e6,
             "age_ms": (now - int(frame.t_exposure_ns)) / 1e6,
             "fps": float(self.fps),

@@ -139,10 +139,16 @@ class FireSolver:
                  else np.zeros(3, dtype=np.float64))
         delay_s = self.latency.fire_delay_s(self._atype)
         jitter_s = self.latency.fire_jitter_s(self._atype)
-        g = self._geometry(now_ns, now_ns, track, tracker, rot_now, omega, delay_s, jitter_s, alpha)
+        fc = self.cfg.fire
+        # How much the swing rate has changed lately: a hand that is changing its mind will change it again
+        # (the uncertainty model in _geometry).
+        window_ns = int(float(getattr(fc, "gun_rate_change_window_ms", 100.0)) * 1e6)
+        dw = _norm3(omega - np.asarray(attitude.omega_g(now_ns - window_ns), dtype=np.float64).reshape(3)) \
+            if window_ns > 0 else 0.0
+        g = self._geometry(now_ns, now_ns, track, tracker, rot_now, omega, delay_s, jitter_s, alpha, dw)
 
         fire = False
-        fc = self.cfg.fire
+        fire_ns = now_ns
         future: list[float] = []
         speed = _norm3(track.s[3:6]) if track.s is not None else float("inf")
         if track.hits < fc.min_track_hits:
@@ -153,26 +159,48 @@ class FireSolver:
             reason = "range out of window"
         elif g["clay_el"] < math.radians(fc.min_elevation_deg):
             reason = "below min elevation"
-        elif g["p_hit"] < fc.min_hit_probability:
-            reason = f"p_hit {g['p_hit']:.2f} < {fc.min_hit_probability:.2f}"
         else:
-            better_k = 0
             period_ns = int(round(float(frame_period_s) * 1e9))
-            if period_ns > 0:
-                for k in range(1, int(fc.horizon_frames) + 1):
-                    gk = self._geometry(
-                        now_ns, now_ns + k * period_ns, track, tracker, rot_now, omega, delay_s, jitter_s, alpha
+            horizon = int(fc.horizon_frames) if period_ns > 0 else 0
+            g1 = None
+            if horizon >= 1:
+                g1 = self._geometry(now_ns, now_ns + period_ns, track, tracker, rot_now, omega, delay_s, jitter_s,
+                                    alpha, dw)
+                if bool(getattr(fc, "subframe", True)):
+                    # The command need not go out on a frame. Bore and clay close on each other almost
+                    # linearly over one frame period, so the instant of closest approach follows from the
+                    # solution for a command now and the one for a command a frame later; a third solution
+                    # at that instant says what it is worth. A fast crossing passes through the pattern in
+                    # 20-40 ms: on frames alone a 30 fps loop (trees in view) steps right over it.
+                    e0 = g["shot_dir_w"] - g["lead_dir_w"]
+                    de = (g1["shot_dir_w"] - g1["lead_dir_w"]) - e0
+                    dd = float(de @ de)
+                    if dd > 0.0:
+                        frac = -float(e0 @ de) / dd
+                        if 0.02 < frac < 0.98:
+                            at_ns = now_ns + int(round(frac * period_ns))
+                            gs = self._geometry(now_ns, at_ns, track, tracker, rot_now, omega, delay_s, jitter_s,
+                                                alpha, dw)
+                            if gs["p_hit"] > g["p_hit"]:
+                                g, fire_ns = gs, at_ns
+            if g["p_hit"] < fc.min_hit_probability:
+                reason = f"p_hit {g['p_hit']:.2f} < {fc.min_hit_probability:.2f}"
+            else:
+                better_k = 0
+                for k in range(1, horizon + 1):
+                    gk = g1 if k == 1 else self._geometry(
+                        now_ns, now_ns + k * period_ns, track, tracker, rot_now, omega, delay_s, jitter_s, alpha, dw
                     )
                     future.append(gk["p_hit"])
                     if better_k == 0 and gk["p_hit"] > g["p_hit"]:
                         better_k = k
-            if better_k:
-                reason = f"better in {better_k} frames"
-            elif not armed:
-                reason = "would fire (not armed)"
-            else:
-                fire = True
-                reason = "FIRE"
+                if better_k:
+                    reason = f"better in {better_k} frames"
+                elif not armed:
+                    reason = "would fire (not armed)"
+                else:
+                    fire = True
+                    reason = "FIRE"
         if not armed and reason != "would fire (not armed)":
             # The interlock is visible on every disarmed frame; a dry run that would fire still reads
             # "would fire (not armed)".
@@ -201,6 +229,9 @@ class FireSolver:
                 "track_sigma_rad": g["track_sigma"],
                 "gun_sigma_rad": g["gun_sigma"],
                 "gun_alpha_rad_s2": _norm3(alpha),
+                "gun_rate_change_rad_s": float(dw),
+                # when to send the command: now, or a moment later inside this frame period (fire.subframe)
+                "fire_at_ns": int(fire_ns),
                 "clay_rate_rad_s": g["omega_clay"],
                 "future_p_hit": future,
             },
@@ -218,6 +249,7 @@ class FireSolver:
         delay_s: float,
         jitter_s: float,
         alpha: np.ndarray | None = None,
+        rate_change: float = 0.0,
     ) -> dict:
         """Miss angle, uncertainty and hit probability for a trigger command issued at decide_ns."""
         t_exit_ns = int(decide_ns) + int(round(delay_s * 1e9))
@@ -227,9 +259,19 @@ class FireSolver:
         # Constant angular acceleration over the delay: a brisk swing changes rate by hundreds of deg/s^2, and a
         # constant-rate extrapolation then lands the shot behind (or ahead of) where the bore really is.
         rot_exit = rot_now @ _rotvec(omega * dt_exit + 0.5 * alpha * dt_exit * dt_exit)
-        # The acceleration itself is not constant: carry a fraction of its effect as uncertainty, so the solver
-        # does not fire confidently in the middle of a violent change of swing.
-        gun_sigma = float(self.cfg.fire.gun_accel_sigma_frac) * 0.5 * _norm3(alpha) * dt_exit * dt_exit
+        # How far off that extrapolation is, per axis. Fitted to 4276 moments of hand-held sweeping (7 presses,
+        # 2026-11-17, 104 ms ahead; real error p50 0.31 deg, p90 1.09 deg):
+        #   a rate the hand does not keep even when it looks steady        (fire.gun_rate_sigma_dps x dt),
+        #   a share of the acceleration term: the acceleration is not constant (fire.gun_accel_sigma_frac),
+        #   a share of how much the rate changed over the last 100 ms      (fire.gun_rate_change_sigma_frac x dt).
+        # error / sigma on that data: p50 0.97, p90 2.20, p99 3.9 (a perfect model: 1.18, 2.15, 3.03); with the
+        # acceleration term alone (0.3 x, no floor) it was 0.95, 2.76, 6.3: confident exactly when it should not be.
+        fc = self.cfg.fire
+        gun_sigma = math.sqrt(
+            (math.radians(float(getattr(fc, "gun_rate_sigma_dps", 0.0))) * dt_exit) ** 2
+            + (float(fc.gun_accel_sigma_frac) * 0.5 * _norm3(alpha) * dt_exit * dt_exit) ** 2
+            + (float(getattr(fc, "gun_rate_change_sigma_frac", 0.0)) * float(rate_change) * dt_exit) ** 2
+        )
         bore_w = _unit(rot_exit @ self._bore_g)
         muzzle_w = rot_exit @ self._muzzle_g
 
@@ -286,6 +328,7 @@ class FireSolver:
             "tof": tof,
             "dist": dist,
             "lead_dir_w": lead_dir,
+            "shot_dir_w": _unit(to_shot),
             "bore_dir_w": bore_w,
             "clay_el": math.asin(max(-1.0, min(1.0, float(lead_dir[2])))),
             "track_sigma": track_sigma,

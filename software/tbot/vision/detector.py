@@ -622,7 +622,8 @@ class ClayDetector:
         idx = np.nonzero(keep)[0]
         self.stats["candidates"] = int(idx.size)
         ring_max = float(getattr(det, "clutter_ring_max", 0.0) or 0.0)
-        if ring_max > 0.0 and idx.size >= CLUTTER_MIN_CANDIDATES:
+        cluttered = idx.size >= CLUTTER_MIN_CANDIDATES
+        if ring_max > 0.0 and cluttered:
             # A clay in the open has nothing next to it. The fringe of a tree against the sky is hundreds of
             # leaf gaps and twig ends side by side (daylight, 12 mm lens, pines behind a deck: 100-150
             # candidates a frame, 4 ms each to measure on a Pi 3B = 5-10 frames a second). So in a frame with
@@ -672,6 +673,12 @@ class ClayDetector:
             return []
         if ordered:
             idx = idx[:FILTERED_CANDIDATE_LIMIT]  # already in priority order
+        elif cluttered and idx.size > FILTERED_CANDIDATE_LIMIT:
+            # no candidate filter (no IMU, or the scenery filter switched off) in a cluttered frame: the same
+            # bound on the frame time, solid and sizeable candidates first (21 measurements = 350 ms on the gun)
+            a = areas[idx].astype(np.float64)
+            rank = a / np.maximum(ws[idx] * hs[idx], 1) * np.sqrt(a)
+            idx = idx[np.argsort(-rank, kind="stable")[:FILTERED_CANDIDATE_LIMIT]]
         elif idx.size > CANDIDATE_LIMIT:  # keep the largest; a real frame never gets here
             idx = idx[np.argsort(areas[idx])[::-1][:CANDIDATE_LIMIT]]
 

@@ -50,8 +50,8 @@ swing over the trigger delay and the error in extrapolating the target, and writ
 frame with the pattern circle where the shot went and a cross on the target. The press must last (or the
 post-roll run) until the shot would have arrived, about 0.2 s after the fire decision.
 
-To get shots without clays: `tbotctl start test` is a dry run that fires on paper at ANY tracked target (a
-bird, a still clay the bore is swept past), up to 6 times a press. `tbotctl start` goes back to the normal dry
+To get shots without clays: `tbotctl start test` is a dry run that fires on paper at ANY moving target it tracks (a
+bird, a plane), up to 6 times a press. `tbotctl start` goes back to the normal dry
 run. Test mode can never drive the servo.
 
 ## Limits

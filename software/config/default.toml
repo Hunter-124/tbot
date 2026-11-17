@@ -157,7 +157,14 @@ max_range_m = 60.0
 
 [fire]
 live = false                  # false = dry run: log would-fire decisions, never drive the actuator
-min_hit_probability = 0.5    # fire at the best moment only if P(hit) >= this (miss, 1-sigma uncertainty, pattern radius)
+min_hit_probability = 0.4    # fire at the best moment only if P(hit) >= this (miss, 1-sigma uncertainty, pattern radius).
+                              # Was 0.5, which mostly cost shots at fast crossers (their P peaks lower, for less time):
+                              # virtual clays through recorded gun motion, clays hit at 0.5 -> 0.3: slow 45 -> 48 %,
+                              # fast 40 -> 45 %, very fast 30 -> 44 %. But 0.3 fires before a going-away track has
+                              # settled (tbot sim, outgoing: 6/6 -> 2/6 broken); 0.4 gave 21/30 against 18/30 at 0.5
+subframe = true               # send the command at the instant of closest approach inside the frame period, not only on
+                              # a frame (virtual clays, very fast crossings, P >= 0.3: 22 -> 42 % at 30 fps, 44 -> 48 %
+                              # at 100 fps): the timing no longer depends on the frame rate
 min_track_hits = 5
 horizon_frames = 3
 max_shots_per_arm = 1         # one shot per press (raise for doubles; each needs its own target, see engagement.py)
@@ -174,8 +181,10 @@ recoil_window_ms = 500.0      # Logged as recoil/no_recoil events; `tbot latency
 min_range_m = 8.0
 max_range_m = 40.0
 min_elevation_deg = -5.0
-gun_accel_sigma_frac = 0.3    # uncertainty carried for the swing's angular acceleration over the trigger delay, as a
-                              # fraction of its 0.5*alpha*dt^2 effect (the solver extrapolates with alpha) [INFERENCE]
+gun_accel_sigma_frac = 0.12   # swing extrapolation error over the trigger delay, 1 sigma per axis, fitted to hand-held
+gun_rate_sigma_dps = 0.7      # sweeping (2026-11-17): rate the hand does not keep (deg/s x delay), this share of the
+gun_rate_change_sigma_frac = 0.18  # acceleration term 0.5*alpha*dt^2, and this share of the change of rate over the
+gun_rate_change_window_ms = 100.0  # last window x delay. See fire/solver.py _geometry
 watchdog_ms = 250.0
 
 [arming]

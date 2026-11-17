@@ -177,10 +177,11 @@ def test_area_filters_reject_blobs_and_salt():
     cfg.detector.matched_sigma_px = 0.0
     cfg.detector.grow_k_sigma = 0.0
     cfg.detector.max_peak_fraction = 1.0
-    # (the halo of the big blob, an artefact of this coarse background, passes as a score of 6-sigma specks
-    # that outrank a lone pixel: look at all of them, not only the best 8)
-    cfg.detector.max_detections = 64
-    salt = nearest(ClayDetector(cfg).detect(f), 400.0, 300.0, tol=2.0)
+    # (on a frame of its own: next to the big blob its halo, an artefact of this coarse background, passes as
+    # a score of 6-sigma specks, and a frame that cluttered only gets its few most solid candidates measured)
+    alone = sky(np.random.default_rng(14))
+    alone[300, 400] -= 60.0
+    salt = nearest(ClayDetector(cfg).detect(frame(alone)), 400.0, 300.0, tol=2.0)
     assert salt is not None
     assert (round(salt.u), round(salt.v)) == (400, 300)
     assert salt.area_px == 1.0 and salt.contrast < -50.0

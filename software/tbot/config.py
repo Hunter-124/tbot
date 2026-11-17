@@ -178,7 +178,11 @@ class FireConfig:
     max_range_m: float
     min_elevation_deg: float
     watchdog_ms: float
-    gun_accel_sigma_frac: float = 0.3
+    gun_accel_sigma_frac: float = 0.12
+    gun_rate_sigma_dps: float = 0.7
+    gun_rate_change_sigma_frac: float = 0.18
+    gun_rate_change_window_ms: float = 100.0
+    subframe: bool = True
     min_shot_interval_ms: float = 250.0
     min_clay_speed_mps: float = 6.0
     duplicate_deg: float = 1.0

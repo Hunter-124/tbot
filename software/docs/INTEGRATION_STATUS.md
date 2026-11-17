@@ -174,7 +174,7 @@ blob), not moving (`fire.min_clay_speed_mps`, and the scenery filter drops what 
 `fire.min_range_m`. By design.
 
 **Test mode and shot scoring (new).** `tbotctl start test` = dry run that fires on paper at anything it tracks
-(no speed floor, minimum range 0.5 m, 6 shots a press, scenery filter off). `tbot score sessions/<name>
+(no speed floor, minimum range 0.5 m, 6 shots a press; things fixed in the world are still ignored). `tbot score sessions/<name>
 --image` checks each shot against the frames after it: bore at the exit time (IMU replayed) against the target
 at the arrival time (its detections), split into gun-extrapolation and target-extrapolation error, and writes
 `shot_<n>.png`. First real target (a hawk, hand-held, press `080902`, ordinary dry mode): miss 0.78 deg against
@@ -185,9 +185,38 @@ moments, 104 ms): error p50 0.32 deg, p90 1.04 deg, p99 2.0 deg against a 0.75 d
 (latest rate + acceleration from a 30 ms slope) was the best of those tried; longer windows and a jerk term
 were worse (p90 1.3-2.0 deg). The error is predictable from the motion itself: the smoothest 30 % of moments
 (small acceleration and little change of rate over the last 100 ms) have p50 0.14 / p90 0.36 deg, the roughest
-30 % p50 0.68 / p90 1.49 deg. **Not done yet:** the solver's `gun_sigma` (0.3 x the acceleration term, no
-floor) should be replaced by a model fitted to this, so P(hit) is honest about rough moments and the shot is
-taken in smooth ones.
+30 % p50 0.68 / p90 1.49 deg.
+
+**Firing rule, tested on virtual clays through that recorded motion** (a clay flown at constant angular velocity
+so that the real bore path passes within 0.5 deg of it; the decision rule replayed frame by frame; scored
+against the real bore at exit; 315 clays per speed class; "clays hit"):
+
+| rule | slow 3-15 deg/s | fast 15-40 | very fast 40-90 |
+|---|---|---|---|
+| on frames, P >= 0.5, 100 fps (as it was) | 45 % | 40 % | 30 % |
+| on frames, P >= 0.5, 30 fps | 44 % | 36 % | 15 % |
+| on frames, P >= 0.5, 15 fps | 39 % | 25 % | 7 % |
+| between frames, P >= 0.3, 100 fps | 49 % | 46 % | 48 % |
+| between frames, P >= 0.3, 30 fps | 41 % | 45 % | 43 % |
+| between frames, P >= 0.3, 15 fps | 34 % | 42 % | 37 % |
+
+Firing as soon as P clears the bar instead of at the peak was worse everywhere (23-37 %). What was changed:
+- `fire.subframe`: the command goes out at the instant of closest approach inside the frame period (one extra
+  solution per frame, from the solutions for "now" and "one frame later"); the look-ahead period is the real
+  loop period, not the camera's. Timing no longer depends on the frame rate.
+- `fire.min_hit_probability` 0.5 -> 0.4. Not 0.3: the test above assumes a settled track, and `tbot sim`
+  (10 seeds x 3 scenarios, +/-2 is noise) broke 18/30 with the old rule, 20/30 with subframe + the new sigma
+  at 0.5, 21/30 at 0.4 (crossing 5 -> 8 of 10), but at 0.3 going-away clays fell from 6/6 to 2/6: it fires
+  before the track has settled.
+- The swing uncertainty is fitted to the data: `gun_rate_sigma_dps` 0.7 (a floor), `gun_accel_sigma_frac`
+  0.3 -> 0.12, `gun_rate_change_sigma_frac` 0.18 of the change of rate over the last 100 ms. Error / sigma on
+  the recorded motion: p90 2.20 and p99 3.9 (an honest model: 2.15, 3.03) against 2.76 and 6.3 before. Worth
+  1-3 points of clays hit on its own.
+- Open: the track's own uncertainty is too small while it is young (the reason 0.3 fails on going-away clays).
+  Real shots at real targets so far (2): target extrapolation error 0.49 and 0.89 deg, as large as the gun's.
+
+Shot travel time (it is in the solution, with drag: #8 at 366 m/s): 40 ft 39.8 ms, 60 ft 64.0 ms, 75 ft
+83.9 ms, 100 ft 120.9 ms; at constant box speed those would read 33, 50, 63 and 83 ms.
 
 ## Frame rate and CPU
 
