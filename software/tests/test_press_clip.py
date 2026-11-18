@@ -25,6 +25,7 @@ def _cfg(tmp_path, **sets):
     cfg.gpio.backend = "sim"
     cfg.stream.enabled = False
     cfg.record.dir = str(tmp_path / "sessions")
+    cfg.record.min_free_mb = 0  # tmp_path may be a small tmpfs (the Pi's /tmp: 450 MB, under the 1.5 GB guard)
     return cfg
 
 

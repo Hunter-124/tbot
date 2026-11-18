@@ -253,7 +253,7 @@ def test_debug_server_snapshot_and_telemetry(tmp_path):
     cfg, _ = base_cfg(tmp_path)
     cfg.stream.host = "127.0.0.1"
     cfg.stream.port = 0
-    cfg.stream.fps = 5.0
+    cfg.stream.fps = 0.5  # 2 s between frames: the first encode on a busy Pi 3B can take a good share of 0.2 s
     srv = DebugServer(cfg).start()
     try:
         assert srv.port > 0
