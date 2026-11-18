@@ -547,7 +547,7 @@ computes. Tracker 1.5, attitude 1.3, solver 0.2 (10-15 on the frame that fires, 
   until it is timed on the Pi). That is the next software step for speed. The scenery filter is the one after it.
 - **And both are small beside the trigger delay** (+19 points for the first 60 ms), which no language touches.
 
-### The native measurement kernel (done on the laptop; Pi timing still to be measured)
+### The native measurement kernel (measured on the Pi 2026-11-18)
 
 The step above is in: `tbot/vision/_measure.c` (one file, no Python headers, called through `ctypes` by
 `tbot/vision/_native.py`) is the loop of `ClayDetector._measure` and `_adaptive_moments`, statement for
@@ -574,6 +574,87 @@ environment), and it is the reference in `tests/test_native_measure.py`.
 - **Laptop timing** (AMD64, Python 3.13, the loop only, per candidate handed to it): Python 0.30 ms ->
   native 0.022 ms on the simulator scenarios (x13), 0.38 -> 0.044 ms on the range presses (x9). `tbot bench`
   (skeet_crossing, no overlay): detect 3.68 -> 2.49 ms median, 5.45 -> 3.52 ms p95.
-- **Pi 3B: not measured yet** (the Pi was off). The ~22 -> ~13 ms a frame above is still the estimate. On the
-  gun: `./scripts/build_native.sh`, then `tbot bench` with and without `TBOT_NATIVE=0`, and
-  `python -m pytest tests/test_native_measure.py` (the Pi's OpenCV and NumPy are older than the laptop's).
+- **Pi 3B (2026-11-18, OpenCV 4.10, NumPy 2.2):** `tests/test_native_measure.py` passes there too. The whole
+  pipeline over three recorded range presses (299 armed frames, replay with their IMU, scenery filter on,
+  warm page cache), kernel off -> on: frame p50 19.4 -> 15.8 ms, p90 30.7 -> 19.4 ms; detector components
+  stage p50 10.4 -> 6.3 ms, p90 19.5 -> 7.5 ms. `tbot bench` on the synthetic crossing (a clean sky, few
+  candidates) moves less: total p95 11.0 -> 8.9 ms. (A first replay run read 8 ms more in `downscale`:
+  that is the recorded frames coming off the SD card on first touch, not the kernel.)
+
+## Night before the second range day (2026-11-18): camera recovery, restarts, sensor load, graphics
+
+Done on the gun (Pi 3B, real camera and IMU, dry run, dark room) unless it says otherwise.
+
+### The camera comes back by itself
+
+Two layers, both automatic, both logged:
+1. **A stalled or failed camera is reopened inside the sensor process** (`RecoveringSource`, as before): no
+   frame for `camera.stall_s` (0.5 s), or the capture thread fails -> close, reopen, back off up to 5 s. A
+   frame or two missing does nothing at all: the tracker just sees a longer gap.
+2. **New: the whole sensor process is replaced** (`camera/proc.py`) when it dies, when it stops talking (it
+   sends a heartbeat every 0.25 s; 3 s of silence = wedged in a driver call, killed at once), or when it is
+   alive but has delivered no frame for `camera.respawn_s` (8 s: the in-process reopen is not working). A
+   fresh process starts libcamera from nothing, which before meant a service restart and a 15-20 s cold
+   start of the pipeline. Measured on the gun: sensor process killed -> streaming again in **7 s**; frozen
+   (SIGSTOP) -> noticed after 3 s, streaming again ~7-10 s after the freeze. Respawns back off 1, 2, 4, 8,
+   15 s while they keep failing; the pipeline keeps running (stream page up, status line every second).
+
+While the camera is away the pipeline's watchdog keeps the actuator safe (`watchdog: no processed frame`),
+the first frame afterwards resets the tracks (`camera restarted (N so far): tracks reset`), and the status
+line shows `CAMERA RESTARTS N`. Telemetry: `cam_restarts`, and **`lost`** = frames the sensor sent that never
+arrived (gaps in the sensor timestamps; `dropped` also counts frames merely skipped because a newer one was
+waiting, e.g. 85 a second while the button is up, so it never said whether anything was wrong).
+
+**No shot on a stale IMU** (`fire.max_imu_age_ms` = 100): when the IMU stream stops (I2C fault, the sensor
+process being replaced) the attitude and the swing the solver extrapolates are frozen; the decision is then
+`IMU stale (N ms)`. Normal age is 5-25 ms.
+
+### The sensor process was losing frames (fixed)
+
+At 100 fps the sensor process used **107 %** of a core (camera 65 %, IMU polling ~30 %, auto-exposure ~15 %:
+three threads behind one interpreter lock) and lost ~15 frames every 20 s. Now:
+- IMU: 2 I2C transactions a poll instead of 4 (the FIFO count as one 2-byte read; the overflow flag only read
+  when the FIFO is nearly full, the only time it can be set) and the FIFO bytes copied straight out of the
+  ctypes buffer (iterating smbus2's message cost 0.6 ms a poll): 3.0 -> 2.05 ms a poll; the rest is I2C bus
+  time (400 kHz already).
+- Auto-exposure meters every 2nd frame (`camera.ae_every = 2`, 50 Hz control).
+- **91 %** of a core, and **0 frames lost** in 2.5 minutes of service. Frames are still lost when something
+  else loads the Pi (a few while `top` and two SSH sessions ran): don't run tools on the gun while shooting.
+
+### Restarts and power cycles
+
+- **Power-up to first frame: 48 -> 38.5 s** (measured: reboot to the first status line). The service no longer
+  waits for `multi-user.target` (~5 s), and `tbot run` spawns the sensor process before importing the
+  pipeline, so the two load OpenCV in parallel (~4 s; `import cv2` alone is 5 s on the Pi 3B, apt's build
+  links half the system). What is left is the OS's own boot (NetworkManager, cloud-init) before the service
+  starts at ~20 s.
+- `systemctl stop` / `tbotctl stop` is clean now (it printed five Python tracebacks every time:
+  multiprocessing semaphores racing their cleanup; the stop request goes over the pipe now, and
+  `KillMode=mixed` lets the pipeline stop its sensor process itself).
+- **The log survives a power cycle:** `logs/tbot-run.log` (5 MB x 4, rotated) gets every log line and one
+  status line every 10 s. The journal (`tbotctl log`) is in RAM and starts empty after every boot.
+- The debug stream failing to start (port taken) no longer stops the gun.
+- `scripts/deploy.sh push` works from Windows without rsync (tar over scp, LF line endings, uncommitted edits
+  included unless `TBOT_DEPLOY_REV=HEAD`), precompiles the Python and builds the native kernel on the Pi.
+  After pushing a changed unit file: `tbotctl install`.
+
+### Graphics
+
+- **Overlay** (stream page and press clips), restyled: status band (ARMED/SAFE, LIVE/DRY, NO IMU, health and
+  exposure warnings), decision band with a P(hit) meter and the firing bar, corner brackets for detections,
+  grey x for scenery, rings for tracks (dashed while tentative), the lead point joined to the predicted bore
+  with the pattern circle, an edge arrow when the lead point is off screen, a FIRE flash. Draws a busy frame
+  in 7-8.5 ms on the Pi (was 31-39 ms); old recordings still draw. Samples: `docs/overlay_samples/`
+  (`after_pi_opencv4_*.png` are drawn on the Pi itself).
+- **Simulator graphics:** `tbot simviz` (or `tbot sim --render DIR`): per run an MP4 (camera view with the
+  overlay, plan and elevation views of the true and tracked paths, intercept close-up to scale, the shot in
+  flight, breaks and fragments, a timeline) and a summary PNG, plus a contact sheet. Watching a run changes
+  nothing in it (`tbot sim` prints the same report; a test checks it). Samples: `docs/sim_samples/` (the
+  MP4s are not in git).
+
+### Still open
+
+- Armed frame rate on the range presses is ~60 fps (15.8 ms p50), not 100: what is left is the scenery
+  filter (2.3 ms, ~30 small NumPy calls: the next candidate for C), the rest of the detector (bg 1.3,
+  threshold 2.1, components bookkeeping ~2 ms), attitude 1.1, tracker 1.3-1.9 ms.
+- Not seen outdoors: the recovery has only met a killed and a frozen process, not a real CSI fault.

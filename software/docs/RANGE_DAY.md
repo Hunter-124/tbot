@@ -92,12 +92,20 @@ leave it still for ~5 s, shoot. It stays that way until `tbotctl boot dry` - do 
 - Hold the arming button only with the muzzle downrange and a clay called. While it is held the gun fires
   by itself at anything that looks and moves like a clay (a bird close enough does); one shot per press.
 - If it stops responding: switch the power off and on. It restarts by itself after a crash or a hang (up
-  to ~1.5 minutes for a hang) and needs ~30 s after power-up before the first press.
+  to ~1.5 minutes for a hang) and needs **~40 s after power-up** before the first press.
+- The camera recovers by itself: a frame or two missing changes nothing, a stalled camera is reopened in
+  about a second, and a sensor process that dies or hangs is replaced in 7-10 s (the status line then says
+  `CAMERA RESTARTS N`; tracks start over). Nothing fires while the camera or the IMU is away (`IMU stale`).
+- What happened while nobody was watching: `logs/tbot-run.log` on the Pi survives power cycles (the journal
+  behind `tbotctl log` does not).
 - Every press is recorded (no clip is rendered on the gun in live mode). The card holds about 150 presses;
   when less than 1.5 GB is free presses stop being saved but the gun keeps shooting.
 - Keep the Pi's pod out of the sun: at 80 C it slows its clock and the gun gets slow with it.
 
-Watch the status line for heat (`!THR`, warning at 75 C) and `UV` (pack sagging under the servo).
+Watch the status line for heat (`!THR`, warning at 75 C) and `UV` (pack sagging under the servo). `lost N`
+there counts frames the camera sent that never arrived: a few an hour is nothing, a steady climb means the
+Pi is overloaded (a tool running beside the pipeline) or the CSI link is marginal. Don't run other tools on
+the gun while shooting.
 
 ## D. Bring the data home
 
