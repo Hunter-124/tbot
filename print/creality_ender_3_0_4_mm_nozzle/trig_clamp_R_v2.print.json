@@ -93,37 +93,37 @@
     "usable": true
   },
   "config_sha256": "54a740af33eeec43c02191f292834139b9cac66c92fa134edc259d680c01d255",
-  "mesh_sha256": "d63a8125e4ffee43e571e26dd79866f44d1ce479cc35bbf9893ebfcfbef6ac70",
+  "mesh_sha256": "6599ea120770f8abd2d206fb80fcc51fbeca6bf1846cd58d321176f9980859d7",
   "gcode": "/home/hunter/Desktop/TBOT/print/creality_ender_3_0_4_mm_nozzle/trig_clamp_R_v2.gcode",
-  "gcode_sha256": "4a7ff0305d1fb5ce05ef2a4c1cc50018e619c5b398b92766464b63124abf3413",
+  "gcode_sha256": "324e284d8adab29cb18dbf98968bdfa0b40d663241d3427b836b93ccb544c0f5",
   "project_3mf": "/home/hunter/Desktop/TBOT/print/creality_ender_3_0_4_mm_nozzle/trig_clamp_R_v2.3mf",
   "stats": {
     "layers": 121,
     "height_mm": 24.2,
-    "filament_mm": 6326.046,
-    "filament_g": 18.87,
-    "print_time_s": 11115.0,
-    "support_share": 0.1368,
+    "filament_mm": 6308.829,
+    "filament_g": 18.82,
+    "print_time_s": 11051.0,
+    "support_share": 0.1338,
     "by_type_mm": {
-      "Bridge infill": 1772.854,
+      "Bridge infill": 1766.749,
       "Custom": 260.0,
-      "External perimeter": 22500.368,
-      "Internal infill": 78548.256,
-      "Overhang perimeter": 452.458,
-      "Perimeter": 42481.209,
-      "Skirt/Brim": 450.44,
-      "Solid infill": 19819.562,
-      "Support material": 26386.15,
-      "Support material interface": 355.077,
-      "Top solid infill": 2458.527
+      "External perimeter": 22480.854,
+      "Internal infill": 78634.727,
+      "Overhang perimeter": 451.888,
+      "Perimeter": 42448.976,
+      "Skirt/Brim": 448.031,
+      "Solid infill": 19773.546,
+      "Support material": 25717.625,
+      "Support material interface": 353.929,
+      "Top solid infill": 2458.196
     },
     "slicer": "PrusaSlicer 2.9.7"
   },
   "estimate": {
-    "part_volume_mm3": 13815.391,
-    "support_volume_mm3": 1703.883,
+    "part_volume_mm3": 13816.086,
+    "support_volume_mm3": 1699.485,
     "material_g": 17.376,
-    "support_g": 0.317,
+    "support_g": 0.316,
     "time_h": 0.327,
     "layers": 122,
     "support_share": 0.018,
@@ -135,7 +135,7 @@
       {
         "check": "min_wall",
         "status": "fail",
-        "note": "Minimum measured wall 0.171 mm; required 1.32 mm. 20 more regions are not shown. To show up to 50 regions, set detail=true.",
+        "note": "Minimum measured wall 0.171 mm; required 1.32 mm. 15 more regions are not shown. To show up to 50 regions, set detail=true.",
         "fix": [
           "thicken to >= 1.32 mm (3 perimeters at 0.44 mm)"
         ]
@@ -143,7 +143,7 @@
       {
         "check": "overhang",
         "status": "fail",
-        "note": "333.5 mm2 needs support above 45 deg from vertical (bridges and bed contact excluded). 18 more regions are not shown. To show up to 50 regions, set detail=true.",
+        "note": "334.4 mm2 needs support above 45 deg from vertical (bridges and bed contact excluded). 19 more regions are not shown. To show up to 50 regions, set detail=true.",
         "fix": [
           "add 45 deg chamfers or reorient",
           "replace bed-edge fillet with a 45 deg chamfer",
@@ -153,7 +153,7 @@
       {
         "check": "support",
         "status": "warn",
-        "note": "Support envelope 1703.9 mm3; 73.8 mm2 lands on model; 8.2 mm3 enclosed/unremovable. 19 more regions are not shown. To show up to 50 regions, set detail=true.",
+        "note": "Support envelope 1699.5 mm3; 73.8 mm2 lands on model; 8.2 mm3 enclosed/unremovable. 20 more regions are not shown. To show up to 50 regions, set detail=true.",
         "fix": [
           "reorient with optimize_print_orientation; add 45 deg chamfers or split part",
           "avoid support landing on model surfaces (scars and harder removal)"
@@ -162,12 +162,12 @@
     ]
   },
   "gcode_check": {
-    "status": "warn",
+    "status": "fail",
     "issues": [
       {
         "check": "floating_extrusion",
-        "status": "warn",
-        "note": "Hard floating: 3.8 mm2/layer, 0.000 mm unanchored run; unanchored air run 6.030 mm (limit 10); backed bridge 3.424 mm; infill/interface spans informational (16.2 mm2 total)",
+        "status": "fail",
+        "note": "Hard floating: 10.8 mm2/layer, 7.380 mm unanchored run; unanchored air run 6.030 mm (limit 10); backed bridge 9.002 mm; infill/interface spans informational (15.6 mm2 total)",
         "fix": [
           "Reorient or support long unanchored outer-wall and bridge paths.",
           "Review the flagged type, layer and XY positions in PrusaSlicer before printing."

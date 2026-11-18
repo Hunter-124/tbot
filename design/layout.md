@@ -807,6 +807,14 @@ contacts and connector seating remain open.
     load face ends. That corner was not changed; the coarser rev AE mesh
     did not resolve it. It is a 50 N case; a 10 N press scales to about
     8 MPa.
+  - Follow-up: R0.3 on the nut-relief floor edge (f60,
+    `NutReliefFloorR0_3`, last in the tree). It only occupies R5.6..5.9
+    next to the floor; the 9.5 AF nut's corners reach R5.5. The same FEA
+    now peaks at 13.7 MPa on the flange face (FoS 3.6 on yield, under the
+    18 MPa endurance limit at 50 N). Slice: 18.8 g, no mesh repairs; the
+    G-code floating-extrusion check went from warn to fail (one 7.4
+    unanchored outer-wall run where the new round meets the unsupported
+    pocket roof); look at the nut pocket roof in the PrusaSlicer preview.
 
 ## Printing and materials
 
