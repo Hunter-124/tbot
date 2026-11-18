@@ -317,7 +317,7 @@ class SensorProcess(SourceBase):
     def _spawn(self) -> None:
         self._conn, child_conn = self._ctx.Pipe(duplex=True)
         self._proc = self._ctx.Process(target=_child, name="tbot-sensors", daemon=True,
-                                       args=(child_conn, self._cfg, self._calib, self.spec, self._want_imu,
+                                       args=(child_conn, self._child_cfg(), self._calib, self.spec, self._want_imu,
                                              os.getpid()))
         self._proc.start()
         child_conn.close()
@@ -331,6 +331,18 @@ class SensorProcess(SourceBase):
         self._latest = None
         now = time.monotonic()
         self._spawn_t = self._last_msg_t = self._last_frame_t = now
+
+    def _child_cfg(self):
+        """The config for a new child: a replacement starts at the exposure the camera last used, not at
+        camera.exposure_us, so it does not spend its first frames finding the light again."""
+        last = getattr(self, "_last_exposure", None)
+        if last is None or not bool(getattr(self._cfg.camera, "auto_exposure", False)):
+            return self._cfg
+        import copy  # noqa: PLC0415
+
+        cfg = copy.deepcopy(self._cfg)
+        cfg.camera.exposure_us, cfg.camera.analogue_gain = float(last[0]), float(last[1])
+        return cfg
 
     def _wait_info(self) -> dict:
         deadline = time.monotonic() + START_TIMEOUT_S
@@ -574,6 +586,7 @@ class SensorProcess(SourceBase):
             self._child_dropped = int(child_dropped)
             self._child_restarts = int(restarts)
             self._child_lost = int(lost)
+            self._last_exposure = (float(exposure_us), float(gain))
             self._last_frame_t = time.monotonic()
             if gap or self._fresh_child:
                 self.gap_after_restart = True
