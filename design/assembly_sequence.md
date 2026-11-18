@@ -79,33 +79,35 @@ F14. Belly, bench-wired (lever connector in its seat, buck #1 on its posts with 
 
 ## Trigger set
 
-T1. Iron 4 M3 inserts into servo_bracket_L ears RI, RO, FI, FO from the Z −21.7 face (remove the print supports first).
-    Then run a 3.5 mm drill through the rear clamp bore (X −15.5) to clear any plastic the RI/RO inserts pushed in.
-    The guard-clamp joints have no inserts: drop/slide 3 M3 hex nuts into the bracket's U18 (side slot from −X), U28
-    (top slot, vertex down) and L40 (side slot from +X) pockets, and 1 into trig_clamp_R_v2's guard-cradle rear slot
-    (from −X); a dab of tape holds them for assembly.
-T2. Servo into the bracket from below, 4 × M3 × 10 up through the ears. Cable grommet points rearward.
-T3. Arming button, on the bench: nut off, push the button thread-first from behind the trig_clamp_R panel through the
-    D7.4 hole until the flange seats on the panel back; nut on the panel front, flats horizontal, tighten with a 9.5 mm
+Rev AH (servo_mount_L, btn_mount_R, trig_cam, jack_shoe; see BOM for hardware).
+
+T1. Remove supports. Iron 11 M3 inserts into servo_mount_L, all from the +Y (outer) face: 3 in the pocket floor
+    (P1..P3), 4 at the bottom of the D7 recesses (U1, U2, F1, F2), 4 in the ear seats. Flush or 0.2 mm below.
+T2. Jack: slide the M3 hex nut into the side slot from the −Y end. Drive the M3 × 10 countersunk screw up through the
+    nut from below until its tip just shows in the shoe pocket. Drop jack_shoe in, dimple down, onto the tip.
+T3. Arming button, on the bench: nut off, push the button thread-first from behind the btn_mount_R panel through the
+    D7.4 hole until the flange seats on the panel back. Nut on the panel front, flats horizontal. Tighten with a 9.5 mm
     open-end wrench from outboard.
-T4. Bracket on the gun-left side of the guard, trig_clamp_R on the right, a 1 mm liner on each plate's guard face. The
-    guard bow sits in the clamp's cradle. 3 × M3 × 30 from the right (U18, U28, L40, heads flush in the hole pad). The
-    U18 bolt passes through the u18_spacer between the plates. Then 1 × M3 × 30 from the LEFT at the rear (X −15.5,
-    Z −17.0): down the bracket's back-face counterbore (the head sits about 4 mm deep), through the rear ear block,
-    into the nut in the cradle. Snug all four.
-T4a. Front jack: drive the M3 × 12 countersunk screw (2 mm hex) up into the hole in the clamp's curved front-bottom
-    face. It cuts its own thread. Turn it until the tip meets the bottom-front of the trigger guard and the whole set
-    moves forward and down onto the U18 spacer and U28 bolt, then about a quarter turn more. Firm, not cranked. Then
-    tighten the four through-bolts fully. Push the set back toward the trigger by hand: it must not move.
-T4b. The set has moved about 0.4 mm forward and 1 mm down. Re-run the servo REST/FIRE endpoint calibration, and check
-    at REST that there is daylight between the lever and the trigger.
-T5. Leads: button lead straight out of the tail, bend down/forward (R ≥ 6); servo cable rearward out of the grommet,
-    bend up (R ≥ 8). The printed parts carry no tie points; harness both leads separately to the module: servo power
-    to the pair from the carrier_R rear-wall exit, servo signal (PWM, GND) and button to the 3-wire exit from B_R (BOM
-    wire list). No sharp bends.
-T6. Power-up with the horn OFF the servo: close the lever connector, check 5.1 V at the Pi header and 7.0 V at the servo
-    lead. Centre the servo (firmware REST), press the horn on with the arm at 190° (gun frame; nearest spline tooth,
-    trim the rest in firmware), seat servo_lever over it, M3 × 12 countersunk down into the shaft.
+T4. Servo into the pocket from +Y, output toward the gun, cable to the rear. 4 × M3 × 10 countersunk through the
+    ears into the ear inserts.
+T5. Cam, on the bench: cut the single-arm horn 9.3 from its centre (just past the first hole). Press it into the
+    cam's +Y pocket and fix it with the M2 × 8 into the first hole. Plug the servo into the module, close the lever
+    connector, check 5.1 V at the Pi header and 7.0 V at the servo lead, and command REST. Press the cam onto the
+    spline with the finger pointing down and about 17° toward the servo's cable end (rear), on the nearest spline
+    tooth; firmware trims the rest. M3 × 12 countersunk into the shaft. Open the lever connector.
+T6. Mount on the gun-left side: the cam slides straight into the guard opening in front of the trigger, plug into
+    the front of the opening, saddle under the bow. btn_mount_R on the right. 1 mm liner on each guard land. From
+    the right: 3 × M3 × 20 (P1..P3) and 4 × M3 × 25 (U1, U2, F1, F2). Snug only. The D7 hole in btn_mount_R
+    reaches the cam screw later without taking the set off.
+T7. Turn the jack screw until the shoe seats on the bow and the plug pulls down and forward into the opening's
+    front corner, then about a quarter turn more. Tighten the seven screws. Push the set rearward by hand: it must
+    not move.
+T8. Calibrate: REST so the nose sits about 0.5 mm off the hook (dead travel costs nothing, so no extra gap).
+    FIRE just past the break, never at the trigger stop. Re-measure command-to-break and set it in the config.
+T9. Leads: button lead straight out of the tail, bend down/forward (R ≥ 6); servo cable rearward, bend up (R ≥ 8).
+    The printed parts carry no tie points. Harness both leads separately to the module: servo power to the pair from
+    the carrier_R rear-wall exit; servo signal (PWM, GND) and button to the 3-wire exit from B_R (BOM wire list). No
+    sharp bends.
 
 No hardware interlock: open the lever connector to make the servo safe.
 

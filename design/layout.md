@@ -892,32 +892,37 @@ above (both measured 2026-11-18).
 
 Servo and cam:
 
-- MG996R on gun-left, output axis along −Y, shaft at (X 8.5, Z 1.2). Pose of
-  `refs/mg996r`: rotate +90° about X, then translate (4.9, −3.6, −14.3). Case
-  X −1.4..39.3, Z −8.65..11.05, Y 12.4..47.7; gear cover top Y 10.0; ear seat
+- MG996R on gun-left, output axis along −Y, shaft at (X 10.5, Z 1.2). Pose of
+  `refs/mg996r`: rotate +90° about X, then translate (6.9, −3.6, −14.3). Case
+  X 0.6..41.3, Z −8.65..11.05, Y 12.4..47.7; gear cover top Y 10.0; ear seat
   Y 18.1; spline tip Y 2.7. Case top is 1.15 below the receiver underside.
-- `trig_cam`: Y ±4.6, hub R6.9, finger nose R3.0 centred 10.3 from the shaft.
-  The stock single-arm horn sits in a pocket on the +Y face: hub seat
-  R5.75 × 3.3, boss bore R4.6 × 4.3, arm slot 8.8 wide out to 9.6 from the
-  centre, M3 × 12 centre screw, one M2 × 8 into the horn's first hole (7.5).
-  **Cut the horn arm 9.3 from the centre, just past the first hole** (the arm
-  is 8 wide; longer will not fit). The slot leads the finger by 20° on the
-  side away from the trigger, inside a R5.9 lobe; thinnest wall 0.9 at the
-  slot's outer corners.
+  Rev AH-3 moved the servo 2.0 forward (+X) so the upper rear ear screw fits
+  (all four ears are now screwed); the servo's rear ear is at X −6.05.
+- `trig_cam`: Y ±4.6, hub R6.9, finger nose R2.0 centred 12.0 from the shaft
+  (rev AH-3: was R3.0 at 10.3; the longer finger recovers most of the
+  leverage the forward shift costs). The stock single-arm horn sits in a
+  pocket on the +Y face: hub seat R5.75 × 3.3, boss bore R4.6 × 4.3, arm slot
+  8.8 wide out to 9.6 from the centre, M3 × 12 centre screw, one M2 × 8 into
+  the horn's first hole (7.5). **Cut the horn arm 9.3 from the centre, just
+  past the first hole** (the arm is 8 wide; longer will not fit). The slot
+  leads the finger by 20° on the side away from the trigger, inside a R5.9
+  lobe; thinnest wall 0.94 at the slot's outer corners.
 - Angles are measured at the shaft from the rearward horizontal, negative
-  below it. Modelled at −88° (finger straight down, nose 1.2 clear of the
-  trigger hook). First contact −77°, on the lower hook at about (3.7,−10.6);
-  the nose then slides up the blade as it sweeps it back. Modelled break
-  (7.6°) at −19°, modelled stop (9.4°) at −9.5°, geometric maximum 10.7° at
-  −4°. Lowest point of the sweep is 1.15 above the floor; highest 7.8.
-- Rest to break is about 65° of servo travel (old lever: 31°). No in-plane
-  member can do better in this opening: the shaft cannot sit above or below
-  the blade, so the effective arm is about 4 mm. Expect roughly 70 ms more
-  actuation time [INFERENCE, 2.2 ms/° no load]. **Re-measure the trigger
-  delay** and set it in the config before live fire. Peak torque about
-  0.17 N·m at the 35 N design load, before friction.
-- Past −10° the linkage approaches dead centre and multiplies force. Set the
-  FIRE endpoint just past the break, never at the mechanical maximum.
+  below it. Modelled at −72.5° (finger 17.5° behind straight down, nose 0.6
+  clear of the trigger hook). First contact −66.75°, on the lower hook at about
+  (4.2,−11.1); the nose then slides up the blade as it sweeps it back.
+  Modelled break (7.6°) at −2.5°, trigger stop (9.4°) at +3.25°. Past the stop
+  the cam would only load the trigger against its stop. Lowest point of the
+  sweep is 1.05 above the floor; highest 8.1.
+- Rest to break is about 64° of servo travel from first contact. The rest
+  angle is set in firmware, so put REST just before contact and dead travel
+  costs nothing. Peak servo torque in the model is 0.27 N·m at the 35 N design
+  load before friction (0.20 at the old shaft position; the MG996R is about
+  0.9–1.1). Forward of the trigger, every millimetre costs leverage, but the
+  4th ear screw needs the 2 mm. **Re-measure the trigger delay** and set it
+  in the config before live fire.
+- Set the FIRE endpoint just past the break (about 0°), never at the trigger
+  stop.
 
 `servo_mount_L` (24.0 cm³, 25 g sliced):
 
@@ -940,12 +945,14 @@ Servo and cam:
 - Inserts (M3 × 5.7, D4.0 bores), all installed from +Y: three in the pocket
   floor for P1 (31.5,1.0), P2 (22,−7.5), P3 (22.5,6.0); four in D7 recesses
   (floor Y 13.5) for U1 (8,−20.3), U2 (24,−19.0), F1 (46,−10.8), F2 (59,−3.2);
-  three in the ear seats at (−5.8,−3.8), (43.7,6.2), (43.7,−3.8). The upper
-  rear ear hole is left empty to keep clear of the safety button.
+  four in the ear seats at (−3.8,−3.8), (−3.8,6.2), (45.7,6.2), (45.7,−3.8).
+  The upper rear insert has 1.6 of wall to the mount's rear edge (X −7.4),
+  which stays clear of the safety button.
 
 `btn_mount_R` (17.0 cm³, 20 g sliced): plate Y −5.5..−12.5, land tapered to
 −(h(X) + 0.85), seven D3.4 countersunk holes on the same seven axes, D7 access
-hole on the shaft axis for the cam screw. Arming button unchanged in position
+hole on the shaft axis (10.5, 1.2) for the cam screw, with a teardrop top for
+printing. Arming button unchanged in position
 and angle (hole centre (−4.556,−21.5,−10.15), axis (0.985,0,−0.174), panel
 2.8 net, D10.4 body bore 13.3 long). The plate floats on its screws, so the
 squeeze adapts to the real guard width; it closes up to 1.5 before touching
@@ -954,16 +961,16 @@ the plug.
 Screws: P1..P3 are M3 × 20, U1, U2, F1, F2 are M3 × 25, heads in the right
 plate at Y −12.5, tips at Y 7.5 and 12.5.
 
-Checks in `asm/tbot_full.step+` (trigger area, 24 members): no interference
-between printed parts, gun and hardware except the expected ones (the two
-guard models; horn spline teeth on the smooth modelled servo spline, 14 mm³;
-M2 self-tapper in the horn hole; jack thread in its nut; a 0.08 mm³ sliver
-between the button and its panel). Clearances: mount to guard 0.50, plate to
-guard 0.85, cam to trigger at rest 0.87, cam to each side 0.9, shoe to bow
-0.075 (seats when the jack is turned), mount to `gun_body` 0.10 at the
-safety crossbolt (D8 at X −11.5, Z 11, modelled to Y 12): the mount's
-rear-top corner is right beside the safety head, and the servo's rear ear
-(X −8.05) is 0.6 ahead of it on the outside. Check the safety can still be
+Checks in `asm/tbot_full.step+` (trigger area, 24 members, rev AH-3): no
+interference between printed parts, gun and hardware except the expected ones
+(the two guard models; horn spline teeth on the smooth modelled servo spline,
+14 mm³; M2 self-tapper in the horn hole; jack thread in its nut). Clearances:
+mount to guard 0.50, plate to guard 0.85, cam to trigger at rest 0.61, cam to
+guard 0.95, cam to each side 0.9, servo to `gun_body` 1.8, shoe to bow 0.075
+(seats when the jack is turned), mount to `gun_body` 0.10 at the safety
+crossbolt (D8 at X −11.5, Z 11, modelled to Y 12): the mount's rear-top
+corner is right beside the safety head. The servo's rear ear (X −6.05) is
+now 2.6 ahead of the safety head (was 0.6). Check that the safety can still be
 pushed. Not yet printed or fitted.
 
 ## Printing and materials
