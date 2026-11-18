@@ -17,6 +17,7 @@ import argparse
 import copy
 import logging
 import math
+import time
 from typing import Sequence
 
 import numpy as np
@@ -208,6 +209,11 @@ def evaluate_run(
     pipe = Pipeline(cfg, calib, source, gpio=gpio)
     if armed:
         gpio.inject(int(cfg.arming.pin), 0 if cfg.arming.active_low else 1)
+        # the debounce runs on a real timer and the simulation does not wait for real time: without this the
+        # first frames are armed or not as this computer happens to be fast, and a run does not repeat
+        t_end = time.monotonic() + 1.0
+        while not pipe.arming.armed and time.monotonic() < t_end:
+            time.sleep(0.001)
 
     lead_ns = int(lead_s * 1e9)
     frames = 0

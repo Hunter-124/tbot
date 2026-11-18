@@ -257,7 +257,9 @@ def test_disarmed_run_reports_the_interlock_but_fills_the_geometry(scene_cfg):
 def test_actuator_delay_changes_the_fire_time(scene_cfg):
     _, scene = scene_cfg
     # Both actuator budgets, one scene; the slower actuator must commit much earlier in the swing.
-    sets = ["tracker.jerk_psd_deg=0.2", "tracker.meas_sigma_px=0.1"]
+    # (a turntable's constant rate, not a hand: 0.9 s ahead the fitted hand model would leave no chance at all)
+    sets = ["tracker.jerk_psd_deg=0.2", "tracker.meas_sigma_px=0.1", "fire.gun_accel_floor_dps2=0",
+            "fire.gun_rate_drift_per_s=0", "fire.gun_rate_sigma_dps=0.7"]
     cfg_servo = load_config(sets=sets + ["actuator.type=servo"])
     cfg_pq12 = load_config(sets=sets + ["actuator.type=pq12"])
     scene = Scene(cfg_servo)
@@ -304,8 +306,8 @@ def test_incoming_clay_with_the_bore_on_it_fires(scene_cfg):
     assert d.miss_rad < d.pattern_rad
     assert all(x.reason.startswith("p_hit") for x in decisions[cfg.fire.min_track_hits:fired])
     mature = decisions[fired + 20]
-    assert mature.p_hit > 0.99 and mature.miss_rad < 0.3 * mature.pattern_rad
-    assert mature.sigma_rad < 0.25 * mature.pattern_rad
+    assert mature.p_hit > 0.97 and mature.miss_rad < 0.3 * mature.pattern_rad
+    assert mature.sigma_rad < 0.4 * mature.pattern_rad  # the floor: what the steadiest hand still does
 
 
 def test_range_outside_the_window_never_fires(scene_cfg):
@@ -367,14 +369,17 @@ class AcceleratingSwing:
 
 
 def test_solver_extrapolates_the_swing_with_its_angular_acceleration(scene_cfg):
-    """A brisk swing (2 rad/s, 9 rad/s^2): with alpha the predicted bore at shot exit matches the truth; a
-    constant-rate extrapolation is off by ~alpha*dt^2/2, and the solver's sigma carries part of that."""
-    cfg, scene = scene_cfg
+    """A brisk swing (2 rad/s, 9 rad/s^2). With the acceleration kept for the whole delay
+    (fire.gun_accel_decay_s = 0) the predicted bore at shot exit matches a swing that really keeps it; a
+    constant-rate extrapolation is off by alpha*dt^2/2. With the fitted decay (a hand does not keep its
+    acceleration) the term shrinks to alpha * tau^2 (dt/tau - 1 + e^(-dt/tau)), and the sigma carries a
+    share of that term."""
+    _, scene = scene_cfg
     delay = scene.latency.fire_delay_s("servo")
     t = T0 + 40 * DT_NS
     bore_g = np.asarray(scene.mount.bore_dir_g, dtype=float)
 
-    def bore_err_and_sigma(att):
+    def bore_err_and_sigma(att, cfg):
         tracker = ClayTracker(cfg, scene.cam, scene.mount)
         solver = FireSolver(cfg, scene.shot, scene.mount, scene.latency)
         rng = np.random.default_rng(1)
@@ -389,10 +394,18 @@ def test_solver_extrapolates_the_swing_with_its_angular_acceleration(scene_cfg):
         truth /= np.linalg.norm(truth)
         return math.degrees(math.acos(min(1.0, float(np.dot(truth, d.bore_dir_w))))), d.sigma_rad
 
-    err_alpha, sig_alpha = bore_err_and_sigma(AcceleratingSwing(-0.6, 0.15, 2.0, 9.0))
-    err_const, _ = bore_err_and_sigma(AcceleratingSwing(-0.6, 0.15, 2.0, 9.0, with_alpha=False))
+    kept = load_config(sets=SCENE_SETS + ["fire.gun_accel_decay_s=0"])
+    fitted = load_config(sets=SCENE_SETS)
+    tau = float(fitted.fire.gun_accel_decay_s)
+    assert tau > 0.0
+    err_alpha, _ = bore_err_and_sigma(AcceleratingSwing(-0.6, 0.15, 2.0, 9.0), kept)
+    err_const, _ = bore_err_and_sigma(AcceleratingSwing(-0.6, 0.15, 2.0, 9.0, with_alpha=False), kept)
+    err_decay, sig_decay = bore_err_and_sigma(AcceleratingSwing(-0.6, 0.15, 2.0, 9.0), fitted)
     expect_const = math.degrees(0.5 * 9.0 * delay * delay)
+    k_acc = tau * tau * (delay / tau - 1.0 + math.exp(-delay / tau))
     assert err_const == pytest.approx(expect_const, rel=0.15)
     assert err_alpha < 0.05 * expect_const
-    assert sig_alpha >= cfg.fire.gun_accel_sigma_frac * math.radians(expect_const) * 0.99
+    assert 0.0 < k_acc < 0.5 * delay * delay
+    assert err_decay == pytest.approx(math.degrees(9.0 * (0.5 * delay * delay - k_acc)), rel=0.15)
+    assert sig_decay >= fitted.fire.gun_accel_sigma_frac * 9.0 * k_acc * 0.99
     assert t  # keeps the frame index explicit

@@ -179,13 +179,24 @@ class FireConfig:
     max_range_m: float
     min_elevation_deg: float
     watchdog_ms: float
-    gun_accel_sigma_frac: float = 0.12
-    gun_rate_sigma_dps: float = 0.7
-    gun_rate_change_sigma_frac: float = 0.18
+    gun_accel_sigma_frac: float = 0.6
+    gun_rate_sigma_dps: float = 0.0
+    gun_rate_change_sigma_frac: float = 0.1
     gun_rate_change_window_ms: float = 100.0
+    gun_accel_decay_s: float = 0.02
+    gun_accel_floor_dps2: float = 20.0
+    gun_rate_drift_per_s: float = 1.0
     subframe: bool = True
     min_hit_probability_settled: float = 0.0
     settled_ms: float = 150.0
+    aim_prior_deg: float = 0.0
+    aim_prior_evidence: float = 0.2
+    adaptive: bool = False
+    min_hit_probability_floor: float = 0.2
+    adaptive_reach: float = 0.85
+    adaptive_regret: float = 0.9
+    adaptive_relax_from_ms: float = 200.0
+    adaptive_relax_to_ms: float = 700.0
     min_shot_interval_ms: float = 250.0
     min_clay_speed_mps: float = 6.0
     duplicate_deg: float = 1.0
@@ -326,6 +337,7 @@ class SimConfig:
     debris_fragments: int
     debris_spread_mps: float
     debris_life_s: float
+    process_ms: float = 0.0
 
 
 @dataclass
@@ -622,6 +634,15 @@ class LatencyBudget:
                 # An operator estimate written into latency.json is labelled as such, not as a measurement.
                 method = str(rec.get("method", "")).lower()
                 sources[f"actuator.{t}"] = "estimate" if "estimate" in method else "measured"
+                # ... and a measurement kept beside an estimate wins over it. The gun's file of 2026-11-15 holds
+                # a 10 fps video estimate (95 ms) and, set aside as "includes microphone latency", ten shots by
+                # microphone: command -> bang 161.3 +/- 1.0 ms. The recoil of the first live shots (160.2 and
+                # 162.0 ms) showed the microphone was right. Bang = break + lock time.
+                bang = (rec.get("mic_measurement") or {}).get("cmd_to_bang_ms") if "estimate" in method else None
+                if isinstance(bang, dict) and "mean" in bang:
+                    cmd[t] = float(bang["mean"]) - float(cfg.gun.lock_time_ms)
+                    jit[t] = max(float(bang.get("std", 0.0)), 1.5)
+                    sources[f"actuator.{t}"] = "measured (microphone)"
         return cls(
             camera_timestamp_offset_ns=cam_off,
             exposure_to_user_ms=exp_ms,

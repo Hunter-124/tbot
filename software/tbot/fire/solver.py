@@ -15,6 +15,7 @@ from ..config import Config, LatencyBudget
 from ..optics import MountModel
 from ..types import FireDecision, Track
 from .ballistics import G_MPS2, ShotModel
+from .policy import FirePolicy
 
 _UP_W = np.array([0.0, 0.0, 1.0], dtype=np.float64)
 _TOF_ITERS = 3  # fixed-point passes on time of flight (converges in 2 at skeet ranges)
@@ -31,8 +32,45 @@ _QUAD_T_HALF_W = 0.5 * _QUAD_T_W
 _QUAD_NSIG = 6.0  # integrate only where the Gaussian has mass; beyond 6 sigma it is < 1e-8
 
 
+_SERIES_MAX = 40.0  # the series below is used while miss^2 / 2 sigma^2 and pattern^2 / 2 sigma^2 are under this
+
+
 def _hit_probability(miss: float, pattern: float, sigma: float) -> float:
     """P(|e + miss| < pattern) for an isotropic 2-D Gaussian aim error e ~ N(0, sigma^2 I)."""
+    if not (pattern > 0.0) or not math.isfinite(miss):
+        return 0.0
+    if not (sigma > 0.0):
+        return 1.0 if miss < pattern else 0.0
+    # |e + miss|^2 / sigma^2 is noncentral chi-square with 2 degrees of freedom, whose distribution function is
+    # a Poisson mixture of integer-order gamma functions: a few dozen float operations instead of a
+    # 16 x 32-point quadrature (0.9 ms of small NumPy calls on a Pi 3B, three or four times on a firing frame).
+    inv = 1.0 / (2.0 * sigma * sigma)
+    a = miss * miss * inv
+    b = pattern * pattern * inv
+    if a < _SERIES_MAX and b < _SERIES_MAX:
+        pois = math.exp(-a)          # Poisson(k; a)
+        term = math.exp(-b)          # e^-b b^k / k!
+        tail = 1.0 - term            # P(k + 1, b) = 1 - e^-b sum_{j<=k} b^j / j!
+        total = pois * tail
+        k = 0
+        k_peak = a if a > b else b
+        while True:
+            k += 1
+            pois *= a / k
+            term *= b / k
+            tail -= term
+            if tail <= 0.0:
+                break
+            add = pois * tail
+            total += add
+            if k > k_peak and add < 1e-12:
+                break
+        return min(max(total, 0.0), 1.0)
+    return _hit_probability_quad(miss, pattern, sigma)
+
+
+def _hit_probability_quad(miss: float, pattern: float, sigma: float) -> float:
+    """The same probability by polar quadrature: any miss / pattern / sigma, and the reference for the series."""
     if not (pattern > 0.0) or not math.isfinite(miss):
         return 0.0
     if not (sigma > 0.0):
@@ -103,6 +141,12 @@ def _tof(shot, distance: float) -> float:
 class FireSolver:
     """Decides whether firing *now* is the best moment to break the clay."""
 
+    @staticmethod
+    def worst_case_work(cfg: Config) -> float:
+        """The most firing solutions one frame can need (the frame that fires needs them all): now, the aim
+        one period on, the instant of closest approach, and every frame of the look-ahead."""
+        return 2.6 + max(0, int(cfg.fire.horizon_frames))
+
     def __init__(self, cfg: Config, shot: ShotModel, mount: MountModel, latency: LatencyBudget):
         self.cfg = cfg
         self.shot = shot
@@ -118,6 +162,9 @@ class FireSolver:
             mount.cam_pos_g, dtype=np.float64
         ).reshape(3)
         self._bore_g = _unit(np.asarray(mount.bore_dir_g, dtype=np.float64).reshape(3))
+        self.policy = FirePolicy.from_config(cfg)
+        self._aim_prior = math.radians(float(getattr(cfg.fire, "aim_prior_deg", 0.0) or 0.0))
+        self._evidence = float(getattr(cfg.fire, "aim_prior_evidence", 0.0) or 0.0)
 
     def evaluate(
         self,
@@ -152,6 +199,8 @@ class FireSolver:
 
         fire = False
         fire_ns = now_ns
+        bar = ceiling = float("nan")
+        work = 1.0  # firing solutions worked out on this frame (an aim-only one counts 0.6): see WORST_CASE_WORK
         future: list[float] = []
         speed = _norm3(track.s[3:6]) if track.s is not None else float("inf")
         if track.hits < fc.min_track_hits:
@@ -176,6 +225,7 @@ class FireSolver:
                 # approach can come near the pattern: 7.4 -> 3.6 ms a frame on a Pi 3B.)
                 a1 = self._geometry(now_ns, now_ns + period_ns, track, tracker, rot_now, omega, delay_s, jitter_s,
                                     alpha, dw, aim_only=True)
+                work += 0.6
                 e0 = g["shot_dir_w"] - g["lead_dir_w"]
                 de = (a1["shot_dir_w"] - a1["lead_dir_w"]) - e0
                 dd = float(de @ de)
@@ -185,28 +235,34 @@ class FireSolver:
                         closest = _norm3(e0 + frac * de)
                         # the uncertainty grows with the time to exit (at most with its square)
                         grow = ((delay_s + frac * period_ns * 1e-9) / delay_s) ** 2 if delay_s > 0.0 else 1.0
-                        if closest < g["pattern"] + _SUBFRAME_NSIG * grow * g["sigma"]:
+                        # (with the aim prior the miss counts for k times itself against sqrt(k) sigma)
+                        sg = grow * g["sigma"]
+                        pr = self._aim_prior
+                        k = pr * pr / (pr * pr + sg * sg) if pr > 0.0 and sg > 0.0 else 1.0
+                        if k * closest < g["pattern"] + _SUBFRAME_NSIG * math.sqrt(k) * sg:
                             at_ns = now_ns + int(round(frac * period_ns))
                             gs = self._geometry(now_ns, at_ns, track, tracker, rot_now, omega, delay_s, jitter_s,
                                                 alpha, dw)
+                            work += 1.0
                             if gs["p_hit"] > g["p_hit"]:
                                 g, fire_ns = gs, at_ns
-            # The bar: min_hit_probability while the track is fresh (its uncertainty is understated for the
-            # first frames, so its P(hit) reads high), the lower settled bar once it has been followed for
-            # settled_ms. One shot a press: waiting for 0.4 on a clay that only ever offers 0.3 is a clay lost.
-            bar = float(fc.min_hit_probability)
-            settled_bar = float(getattr(fc, "min_hit_probability_settled", 0.0) or 0.0)
-            if 0.0 < settled_bar < bar and track.first_t_ns and                     (now_ns - int(track.first_t_ns)) >= float(getattr(fc, "settled_ms", 0.0)) * 1e6:
-                bar = settled_bar
+            # The bar this top of P(hit) has to clear (fire/policy.py): fire.min_hit_probability, lowered to
+            # what this swing can give, to the chances this target has already let go, and with the time it
+            # has been followed. One shot a press: waiting for 0.4 on a clay that only ever offers 0.3 is a
+            # clay lost.
+            ceiling = self._p_hit(0.0, g["pattern"], g["sigma"])  # what a perfect aim would be worth right now
+            bar = self.policy.bar(track.track_id, now_ns, int(track.first_t_ns or 0), g["p_hit"], ceiling)
             if g["p_hit"] < bar:
                 reason = f"p_hit {g['p_hit']:.2f} < {bar:.2f}"
             else:
                 better_k = 0
                 for k in range(1, horizon + 1):
                     gk = self._geometry(
-                        now_ns, now_ns + k * period_ns, track, tracker, rot_now, omega, delay_s, jitter_s, alpha, dw
+                        now_ns, now_ns + k * period_ns, track, tracker, rot_now, omega, delay_s, jitter_s, alpha, dw,
+                        remeasured=True,
                     )
                     future.append(gk["p_hit"])
+                    work += 1.0
                     if better_k == 0 and gk["p_hit"] > g["p_hit"]:
                         better_k = k
                 if better_k:
@@ -247,12 +303,41 @@ class FireSolver:
                 "gun_rate_change_rad_s": float(dw),
                 # when to send the command: now, or a moment later inside this frame period (fire.subframe)
                 "fire_at_ns": int(fire_ns),
+                "bar": bar,
+                "ceiling": ceiling,
+                "work": work,
                 "clay_rate_rad_s": g["omega_clay"],
                 "future_p_hit": future,
             },
         )
 
     # ----------------------------------------------------------------- internals
+    def _p_hit(self, miss: float, pattern: float, sigma: float) -> float:
+        """P(hit) for a predicted miss known to `sigma`.
+
+        The predicted miss is the true one plus an error of `sigma`, and the true one is not just anything: a
+        solution exists because a shooter is swinging through the target (fire.aim_prior_deg, 1 sigma per axis
+        of where the charge really goes relative to the clay over such frames). With that prior the best
+        estimate of the true miss is the predicted one shrunk by k = prior^2 / (prior^2 + sigma^2), known to
+        sqrt(k) sigma. Without it (0) every frame near the top of a pass is called far less likely than it is:
+        virtual clays through the range-day swings (`tbot vclay --calibration`), frames given 0.1-0.2 hit 44 %
+        and 0.3-0.4 hit 65 %. The 54 real frames of that day with a solution agree (Brier 0.134 -> 0.115 with
+        the prior; of the 28 frames it then puts under 0.2 none would have hit).
+
+        A prior is not a measurement: with nothing known (a track three frames old, sigma 18 deg) it alone
+        would call any frame 0.25-0.36. So it only counts as far as the measurement by itself supports a
+        shot: below fire.aim_prior_evidence of plain P(hit) the result is scaled down in proportion. As
+        shipped (1.0 deg, 0.2), 58 000 virtual-clay frames: given 0.2-0.3 hit 46 %, 0.4-0.5 62 %, 0.6-0.8 81 %."""
+        p_raw = _hit_probability(miss, pattern, sigma)
+        prior = self._aim_prior
+        if not (prior > 0.0 and sigma > 0.0):
+            return p_raw
+        k = prior * prior / (prior * prior + sigma * sigma)
+        p = _hit_probability(k * miss, pattern, math.sqrt(k) * sigma)
+        if p_raw < self._evidence:
+            p *= p_raw / self._evidence
+        return p
+
     def _geometry(
         self,
         now_ns: int,
@@ -266,28 +351,61 @@ class FireSolver:
         alpha: np.ndarray | None = None,
         rate_change: float = 0.0,
         aim_only: bool = False,
+        remeasured: bool = False,
     ) -> dict:
         """Miss angle, uncertainty and hit probability for a trigger command issued at decide_ns.
-        aim_only: just where the shot and the clay will be ("shot_dir_w", "lead_dir_w")."""
+        aim_only: just where the shot and the clay will be ("shot_dir_w", "lead_dir_w").
+        remeasured: decide_ns is a later frame, which will have its own fresh look at the gun: the aim is
+        extrapolated from now, but the swing uncertainty is that of a decision made then. Otherwise waiting
+        always looks worse than it will be (the uncertainty grows with the square of the time ahead) and the
+        shot goes early."""
         t_exit_ns = int(decide_ns) + int(round(delay_s * 1e9))
         dt_exit = (t_exit_ns - now_ns) * 1e-9
         if alpha is None:
             alpha = np.zeros(3, dtype=np.float64)
-        # Constant angular acceleration over the delay: a brisk swing changes rate by hundreds of deg/s^2, and a
-        # constant-rate extrapolation then lands the shot behind (or ahead of) where the bore really is.
-        rot_exit = rot_now @ _rotvec(omega * dt_exit + 0.5 * alpha * dt_exit * dt_exit)
-        # How far off that extrapolation is, per axis. Fitted to 4276 moments of hand-held sweeping (7 presses,
-        # 2026-11-17, 104 ms ahead; real error p50 0.31 deg, p90 1.09 deg):
-        #   a rate the hand does not keep even when it looks steady        (fire.gun_rate_sigma_dps x dt),
-        #   a share of the acceleration term: the acceleration is not constant (fire.gun_accel_sigma_frac),
-        #   a share of how much the rate changed over the last 100 ms      (fire.gun_rate_change_sigma_frac x dt).
-        # error / sigma on that data: p50 0.97, p90 2.20, p99 3.9 (a perfect model: 1.18, 2.15, 3.03); with the
-        # acceleration term alone (0.3 x, no floor) it was 0.95, 2.76, 6.3: confident exactly when it should not be.
+        # Where the bore will be at exit. A hand does not keep its acceleration: over the 164 ms of the measured
+        # trigger delay a constant-acceleration extrapolation is WORSE than no acceleration term at all. Range day
+        # 2026-11-17, real swings on real clays, the 135 frames of 9 presses that had a target (10-30 deg/s),
+        # bore error p50 / p90 / rms: constant acceleration 1.10 / 2.98 / 2.19 deg, constant rate 0.69 / 1.64 /
+        # 1.03, against a 0.75 deg pattern. So the acceleration decays with fire.gun_accel_decay_s (0.02 s):
+        #     turned by  omega * dt  +  alpha * tau^2 (dt/tau - 1 + e^(-dt/tau))
+        # 0.70 / 1.60 / 1.00 deg at 164 ms, and still the better one at 104 ms (0.41 / 1.23 / 0.84 -> 0.31 /
+        # 0.78 / 0.48). 0 = the acceleration is kept (alpha * dt^2 / 2). A decay of the rate itself fits the
+        # whole press better but that is the gun being mounted and lowered (100-190 deg/s); on a target it
+        # is within the noise, and a sustained fast swing is not in the data to say otherwise.
         fc = self.cfg.fire
+        t_acc = float(getattr(fc, "gun_accel_decay_s", 0.0) or 0.0)
+        half_dt2 = 0.5 * dt_exit * dt_exit
+        k_acc = half_dt2
+        if t_acc > 0.0 and dt_exit > 0.0:
+            k_acc = t_acc * t_acc * (dt_exit / t_acc - 1.0 + math.exp(-dt_exit / t_acc))
+        rot_exit = rot_now @ _rotvec(omega * dt_exit + alpha * k_acc)
+        # How far off that is, 1 sigma per axis. What the hand does next is an acceleration nobody measured, so
+        # the error grows with the SQUARE of the time ahead (p50 0.31 deg at 104 ms, 0.70 at 164, 0.85 at 190):
+        #   fire.gun_accel_floor_dps2 x dt^2/2            the steadiest hand still does this much
+        #   fire.gun_rate_drift_per_s x |omega| x dt^2/2  a faster swing changes faster
+        #   fire.gun_accel_sigma_frac x the acceleration term above
+        #   fire.gun_rate_change_sigma_frac x the mean acceleration of the last gun_rate_change_window_ms x dt^2/2
+        #   fire.gun_rate_sigma_dps x dt                  a constant rate error (0: the gyro re-zeroes at rest)
+        # Fitted to the same frames; error / sigma (a perfect model reads p50 1.18, p90 2.15, p99 3.03):
+        # 104 ms 1.10 / 2.20 / 3.18, 164 ms 1.11 / 2.29 / 3.27, 190 ms 1.04 / 2.26 / 3.19.
+        window_s = float(getattr(fc, "gun_rate_change_window_ms", 100.0)) * 1e-3
+        half_s2, k_acc_s = half_dt2, k_acc
+        if remeasured:
+            # a later frame will look again: its uncertainty is one trigger delay's worth, not delay + wait
+            dt_sigma = (t_exit_ns - int(decide_ns)) * 1e-9
+            half_s2 = 0.5 * dt_sigma * dt_sigma
+            k_acc_s = (t_acc * t_acc * (dt_sigma / t_acc - 1.0 + math.exp(-dt_sigma / t_acc))
+                       if t_acc > 0.0 and dt_sigma > 0.0 else half_s2)
+        else:
+            dt_sigma = dt_exit
         gun_sigma = math.sqrt(
-            (math.radians(float(getattr(fc, "gun_rate_sigma_dps", 0.0))) * dt_exit) ** 2
-            + (float(fc.gun_accel_sigma_frac) * 0.5 * _norm3(alpha) * dt_exit * dt_exit) ** 2
-            + (float(getattr(fc, "gun_rate_change_sigma_frac", 0.0)) * float(rate_change) * dt_exit) ** 2
+            (math.radians(float(getattr(fc, "gun_rate_sigma_dps", 0.0))) * dt_sigma) ** 2
+            + (math.radians(float(getattr(fc, "gun_accel_floor_dps2", 0.0))) * half_s2) ** 2
+            + (float(getattr(fc, "gun_rate_drift_per_s", 0.0)) * _norm3(omega) * half_s2) ** 2
+            + (float(fc.gun_accel_sigma_frac) * _norm3(alpha) * k_acc_s) ** 2
+            + (float(getattr(fc, "gun_rate_change_sigma_frac", 0.0)) * float(rate_change)
+               / max(window_s, 1e-3) * half_s2) ** 2
         )
         bore_w = _unit(rot_exit @ self._bore_g)
         muzzle_w = rot_exit @ self._muzzle_g
@@ -342,7 +460,7 @@ class FireSolver:
             "miss": miss,
             "pattern": pattern,
             "sigma": sigma,
-            "p_hit": _hit_probability(miss, pattern, sigma),
+            "p_hit": self._p_hit(miss, pattern, sigma),
             "range_m": rng,
             "tof": tof,
             "dist": dist,

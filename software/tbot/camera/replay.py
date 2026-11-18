@@ -100,8 +100,13 @@ class ReplaySource(SourceBase):
     (counted in `dropped`), reproducing what a live source would have done to a slow consumer.
     """
 
-    def __init__(self, path: str | Path, realtime: bool = False) -> None:
+    def __init__(self, path: str | Path, realtime: bool = False, work_ms: float = 0.0) -> None:
+        """work_ms > 0: the loop's own work per frame (detect + track) is modelled instead of taken from this
+        computer: the clock stands at each frame's arrival, moves on by work_ms when the pipeline reports the
+        frame processed, and the IMU samples of that time are there for the solver. A replay then repeats
+        exactly and decides as late as the gun does."""
         super().__init__()
+        self._work_ns = int(round(float(work_ms) * 1e6))
         self.path = Path(path).expanduser()
         meta_path = self.path / META_JSON
         if not meta_path.exists():
@@ -156,7 +161,16 @@ class ReplaySource(SourceBase):
         self._index = 0
         self._t_capture_ns: int | None = None
         self._imu: _ReplayImu | None = None
-        self.clock = SimClock(self._rows[0][2] if self._rows else _SIM_T0_NS)
+        self.clock = SimClock(self._rows[0][2] if self._rows else _SIM_T0_NS, frozen=self._work_ns > 0)
+
+    def processed(self) -> None:
+        if self._work_ns > 0:
+            self.clock.advance(self._work_ns)
+
+    def _imu_limit_ns(self) -> int | None:
+        if self._t_capture_ns is None:
+            return None
+        return max(self._t_capture_ns, int(self.clock.now_ns())) if self._work_ns > 0 else self._t_capture_ns
 
     # ----------------------------------------------------------------------------- lifecycle
     def stop(self) -> None:
@@ -197,5 +211,5 @@ class ReplaySource(SourceBase):
         if not self._samples:
             return None
         if self._imu is None:
-            self._imu = _ReplayImu(self._samples, lambda: self._t_capture_ns)
+            self._imu = _ReplayImu(self._samples, self._imu_limit_ns)
         return self._imu

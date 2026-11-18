@@ -57,6 +57,7 @@ LEAD_PREVIEW_S = overlay_mod.LEAD_PREVIEW_S  # overlay velocity arrow horizon
 FPS_EMA_ALPHA = 0.1
 SOLVE_EMA_ALPHA = 0.1
 EXPOSURE_WARN_S = 2.0  # the scene must be out of the camera's exposure range this long before it is reported
+DELAY_MISMATCH_MS = 15.0  # a shot whose recoil comes this far from the assumed trigger delay is reported
 HOT_TEMP_C = 75.0  # warn before the Pi 3B firmware throttles at 80 C
 HEALTH_PERIOD_S = 2.0
 
@@ -75,6 +76,24 @@ def _sd_notify(message: str) -> None:
             sock.sendto(message.encode(), addr)
     except OSError:
         pass
+
+
+def _wait_until(clock, t_ns: int) -> int | None:
+    """Wait for t_ns on a source's clock and return the time it then is; None when the clock does not get
+    there (a stopped source clock cannot establish a safe command time). Clocks that know how to wait
+    (types.MonotonicClock, SimClock) do it themselves; any other is read and slept on."""
+    wait = getattr(clock, "sleep_until", None)
+    if wait is not None:
+        now = int(wait(int(t_ns)))
+        return now if now >= t_ns else None
+    now = int(clock.now_ns())
+    while now < t_ns:
+        time.sleep((t_ns - now) / 1e9)
+        nxt = int(clock.now_ns())
+        if nxt <= now:
+            return None
+        now = nxt
+    return now
 
 
 def _ms(t0_ns: int, t1_ns: int) -> float:
@@ -168,7 +187,9 @@ class Pipeline:
         self._stop = threading.Event()
         self._prev_exposure_ns: int | None = None
         self._last_step_ns: int | None = None
-        self._expected_solve_ns = 0.0
+        self._processed = getattr(source, "processed", None)  # a simulated source models the work time here
+        self._solution_ns = 0.0  # time one firing solution takes (running mean over frames with a target)
+        self._worst_work = FireSolver.worst_case_work(cfg)
         self._last_frame_wall: float | None = None
         self._wd_thread: threading.Thread | None = None
         self._wd_stop = threading.Event()
@@ -387,6 +408,12 @@ class Pipeline:
             self.recoil_delays_ms.append(float(rec.delay_ms))
             log.info("shot %d: recoil %.1f ms after the command (budget %.1f ms, %+.1f)  peak %.1f g",
                      rec.shot, rec.delay_ms, expected, rec.delay_ms - expected, rec.peak_g)
+            if abs(rec.delay_ms - expected) > DELAY_MISMATCH_MS:
+                # the first range day shot with a delay 60 ms short and nobody could see it until the data
+                # was read at home: 60 ms is 6 clays in a hundred, 20 ms is one
+                log.warning("TRIGGER DELAY is off by %+.0f ms (measured %.0f, assumed %.0f): the lever or its "
+                            "mount has changed, or calib/latency.json is stale. After a few shots: "
+                            "`tbot latency-recoil --write`", rec.delay_ms - expected, rec.delay_ms, expected)
         else:
             self.no_recoil += 1
             log.warning("shot %d: NO RECOIL within %.0f ms of the command - the gun did not fire (lever slipped, "
@@ -555,10 +582,31 @@ class Pipeline:
         self.tracks = self.tracker.update(int(frame.t_exposure_ns), self.detections, R_wg)
         t_trk = time.perf_counter_ns()
 
+        if self._processed is not None:
+            self._processed()
+        if armed_now := bool(self.arming.armed):
+            # The gun has moved on while this frame was looked at (detection and tracking: 15-25 ms on the
+            # Pi 3B), and the solver extrapolates the swing from the newest IMU sample over a delay whose
+            # error grows with its square. So read the IMU again before solving: the same 164 ms of trigger
+            # delay then start 20 ms later (`tbot vclay`, 1500 virtual clays through the range-day swings:
+            # clays hit 60.0 -> 62.3 %; with the commands also going out 9 ms late, as they did, 58.7 %).
+            late = self.imu.read()
+            if late:
+                self.attitude.update(late)
+                if self.recoil.waiting:
+                    for rec in self.recoil.feed(late):
+                        self._on_recoil(rec)
+                samples = list(samples) + list(late) if samples else late
+        t_imu2 = time.perf_counter_ns()
+
+        # The solver decides for the moment the command can really go out: when its own work is done. That is
+        # the work of the frame that FIRES, the dearest of all (look-ahead and all); planning for the average
+        # frame sent every command of the first range day 7-11 ms late (2026-11-17: solve 10-15 ms on the
+        # firing frames against a 1.4-3.7 ms average). The command then waits for the planned instant.
         solve_start_ns = int(self.source.clock.now_ns())
-        decide_ahead_ns = int(self._expected_solve_ns)
+        decide_ahead_ns = int(self._solution_ns * self._worst_work)
         now = solve_start_ns + decide_ahead_ns
-        armed = bool(self.arming.armed)
+        armed = armed_now
         self.engagement.new_press(int(getattr(self.arming, "press_count", 0)))
         self.engagement.observe(self.tracks, int(frame.t_exposure_ns))
         # the solver looks one decision ahead: that is the real loop period (16-30 fps with trees in view), not
@@ -576,25 +624,18 @@ class Pipeline:
         t_sol = time.perf_counter_ns()
         solve_end_ns = int(self.source.clock.now_ns())
         solve_ns = max(0, solve_end_ns - solve_start_ns)
-        self._expected_solve_ns = (
-            solve_ns if self.frames == 0
-            else (1.0 - SOLVE_EMA_ALPHA) * self._expected_solve_ns + SOLVE_EMA_ALPHA * solve_ns
-        )
+        work = float(decision.extra.get("work", 0.0)) if decision.extra else 0.0
+        if work > 0.0:  # a frame with a target: what one firing solution costs on this machine, right now
+            per = solve_ns / work
+            self._solution_ns = (per if self._solution_ns <= 0.0
+                                 else (1.0 - SOLVE_EMA_ALPHA) * self._solution_ns + SOLVE_EMA_ALPHA * per)
 
         fired = False
         cmd_t_ns = None
         if decision.fire and self.arming.try_consume_shot():
             fire_at = max(now, int(decision.extra.get("fire_at_ns", now)))  # may be inside the frame period
             if cfg.fire.live and self.actuator is not None:
-                cmd_t_ns = int(self.source.clock.now_ns())
-                while cmd_t_ns < fire_at:
-                    time.sleep((fire_at - cmd_t_ns) / 1e9)
-                    next_ns = int(self.source.clock.now_ns())
-                    if next_ns <= cmd_t_ns:
-                        # A stopped source clock cannot establish a safe command time.
-                        cmd_t_ns = None
-                        break
-                    cmd_t_ns = next_ns
+                cmd_t_ns = _wait_until(self.source.clock, fire_at)
                 if cmd_t_ns is not None:
                     fired = bool(self.actuator.fire(cmd_t_ns))
                     if not fired:
@@ -655,7 +696,8 @@ class Pipeline:
                 "attitude": _ms(t_imu, t_att),
                 "detect": _ms(t_att, t_det),
                 "track": _ms(t_det, t_trk),
-                "solve": _ms(t_trk, t_sol),
+                "imu2": _ms(t_trk, t_imu2),
+                "solve": _ms(t_imu2, t_sol),
             },
             "detector_ms": dict(self.detector.timings_ms),
             "detector": {"scale": int(self.detector.scale), "noise_dn": float(self.detector.noise_sigma),

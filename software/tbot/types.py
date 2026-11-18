@@ -123,6 +123,14 @@ class MonotonicClock:
     def now_ns(self) -> int:
         return time.monotonic_ns()
 
+    def sleep_until(self, t_ns: int) -> int:
+        """Wait for t_ns; returns the time it then is."""
+        now = time.monotonic_ns()
+        while now < t_ns:
+            time.sleep((t_ns - now) / 1e9)
+            now = time.monotonic_ns()
+        return now
+
 
 class SimClock:
     """Simulated clock for synthetic/replay sources.
@@ -149,6 +157,21 @@ class SimClock:
         if self._frozen:
             return self._t_ns
         return self._t_ns + (time.perf_counter_ns() - self._wall0)
+
+    def sleep_until(self, t_ns: int) -> int:
+        """Wait for t_ns; returns the time it then is. A frozen clock simply moves there."""
+        if self._frozen:
+            if t_ns > self._t_ns:
+                self._t_ns = int(t_ns)
+            return self._t_ns
+        now = self.now_ns()
+        while now < t_ns:
+            time.sleep((t_ns - now) / 1e9)
+            nxt = self.now_ns()
+            if nxt <= now:  # a clock that does not move cannot be waited on
+                break
+            now = nxt
+        return now
 
 
 class ImuSource(Protocol):

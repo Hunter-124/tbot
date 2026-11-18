@@ -165,17 +165,27 @@ max_range_m = 60.0
 
 [fire]
 live = false                  # false = dry run: log would-fire decisions, never drive the actuator
-min_hit_probability = 0.4    # fire at the best moment only if P(hit) >= this (miss, 1-sigma uncertainty, pattern radius).
-                              # Was 0.5, which mostly cost shots at fast crossers (their P peaks lower, for less time):
-                              # virtual clays through recorded gun motion, clays hit at 0.5 -> 0.3: slow 45 -> 48 %,
-                              # fast 40 -> 45 %, very fast 30 -> 44 %. But 0.3 fires before a going-away track has
-                              # settled (tbot sim, outgoing: 6/6 -> 2/6 broken); 0.4 gave 21/30 against 18/30 at 0.5
-min_hit_probability_settled = 0.30  # the bar once a track has been followed for settled_ms without a shot: one shot a
-settled_ms = 700.0            # press, and a target that never offers 0.40 (hawk, 2026-11-17: 2.5 s at 0.27-0.38) is
-                              # otherwise never shot at. tbot sim, 10 seeds x 9 scenarios, clays broken of 90 (+/-2 is
-                              # noise): flat 0.40 43, flat 0.35 38, flat 0.30 34 (going-away 9/10 -> 4/10: the shot goes
-                              # early and worse when a better moment was coming); 0.40 then 0.30 after 150 ms 34, 300 ms
-                              # 37, 500 ms 38, 700 ms 42, 1000 ms (0.25) 41. 0 = same bar throughout
+min_hit_probability = 0.4     # the bar P(hit) must clear at its top before the one shot of a press is spent. With
+                              # fire.adaptive it is only where the bar starts (fire/policy.py); the levels below are
+                              # from `tbot vclay --policies` on the range-day swings at the measured 164 ms delay,
+                              # 1500 virtual clays, clays hit: fixed 0.50 38 %, fixed 0.40 57 %, fixed 0.30 62 %,
+                              # fixed 0.25 64 %, adaptive as below 63 % (and much the same wherever it starts)
+min_hit_probability_settled = 0.25  # the bar for a target that has been followed a while: reached at settled_ms when
+settled_ms = 700.0            # fire.adaptive is false, between the two adaptive_relax ages when it is true
+aim_prior_deg = 1.0           # P(hit) knows a shooter is swinging through the target: 1 sigma per axis of the true miss
+                              # over frames that have a solution (fire/solver.py _geometry). 0 = no such prior
+aim_prior_evidence = 0.2      # ... and the prior only counts as far as the measurement supports a shot by itself: below
+                              # this P(hit) without the prior, the result is scaled down in proportion. 0.05 against
+                              # 0.2: virtual clays 61 % either way, hits per shot 66 against 71 %; tbot sim (6 seeds)
+                              # 13 against 17 of 54 clays, going-away 0/6 against 4/6 (a young track fired on the prior)
+adaptive = true               # the bar follows the engagement (fire/policy.py); false = the two fixed bars above
+min_hit_probability_floor = 0.2    # adaptive: never fire below this, whatever the excuse (a perfect aim with nothing
+                              # known about the swing reads 0.25 from the prior alone)
+adaptive_reach = 0.85         # adaptive: this share of what a PERFECT aim would be worth right now is enough. It does
+                              # most of the work: 0.40 with it alone 61 %, without 57 %
+adaptive_regret = 0.9         # adaptive: this share of a chance the target already offered and lost is enough
+adaptive_relax_from_ms = 200.0     # adaptive: the bar slides from min_hit_probability to the settled bar between
+adaptive_relax_to_ms = 700.0       # these two track ages (shots on the bench go at a median track age of 0.24 s)
 subframe = true               # send the command at the instant of closest approach inside the frame period, not only on
                               # a frame (virtual clays, very fast crossings, P >= 0.3: 22 -> 42 % at 30 fps, 44 -> 48 %
                               # at 100 fps): the timing no longer depends on the frame rate
@@ -195,10 +205,15 @@ recoil_window_ms = 500.0      # Logged as recoil/no_recoil events; `tbot latency
 min_range_m = 8.0
 max_range_m = 40.0
 min_elevation_deg = -5.0
-gun_accel_sigma_frac = 0.12   # swing extrapolation error over the trigger delay, 1 sigma per axis, fitted to hand-held
-gun_rate_sigma_dps = 0.7      # sweeping (2026-11-17): rate the hand does not keep (deg/s x delay), this share of the
-gun_rate_change_sigma_frac = 0.18  # acceleration term 0.5*alpha*dt^2, and this share of the change of rate over the
-gun_rate_change_window_ms = 100.0  # last window x delay. See fire/solver.py _geometry
+gun_accel_decay_s = 0.02      # swing extrapolation over the trigger delay (fire/solver.py _geometry): the gun's angular
+                              # acceleration fades with this time constant (0 = kept for the whole delay). Range day
+                              # 2026-11-17, 164 ms ahead, frames with a target: bore error rms 2.19 -> 1.00 deg
+gun_accel_floor_dps2 = 20.0   # its uncertainty, 1 sigma per axis, each x delay^2 / 2: what the steadiest hand does,
+gun_rate_drift_per_s = 1.0    # this x the swing rate (a faster swing changes faster),
+gun_rate_change_sigma_frac = 0.1   # this share of the mean acceleration over the last window;
+gun_rate_change_window_ms = 100.0
+gun_accel_sigma_frac = 0.6    # plus this share of the acceleration term itself,
+gun_rate_sigma_dps = 0.0      # and a constant rate error x delay (0: the gyro re-zeroes whenever the gun rests)
 watchdog_ms = 250.0
 
 [arming]
@@ -233,7 +248,7 @@ retract_ms = 2500.0
 [actuator.sim]
 model = "fixed"              # timing model: fixed | servo (dimensionless) [INFERENCE]
 frame_hz = 50.0              # servo PWM frame frequency (Hz) [INFERENCE]
-delay_ms = 100.0             # command-to-break delay, or servo travel after frame boundary (ms) [INFERENCE]
+delay_ms = 155.0             # command-to-break delay, or servo travel after frame boundary (ms): as measured on the gun
 
 [gpio]
 backend = "auto"              # auto (lgpio on a Pi, else sim) | lgpio | sim
@@ -244,11 +259,16 @@ break_sense_pin = 22
 [latency]                     # defaults until calib/latency.json has measurements
 camera_timestamp_offset_ns = 0
 exposure_to_user_ms = 8.0     # [INFERENCE]
-servo_cmd_to_break_ms = 115.0 # layout.md MG996R estimate, loaded @ 4.8 V [INFERENCE]
+servo_cmd_to_break_ms = 155.0 # measured on this gun (MG996R at 7.0 V, rest 1420 / fire 1530 us): recoil of the two live
+                              # shots of 2026-11-17, command -> ignition 160.2 and 162.0 ms, and ten bench shots by
+                              # microphone, 161.3 +/- 1.0 ms; minus gun.lock_time_ms. Was 115 (an estimate), and 95 on
+                              # the gun from a 10 fps video. Re-measure after any change to the lever or its mount:
+                              # `tbot latency-recoil --write` (calib/latency.json then overrides this)
 pq12_cmd_to_break_ms = 900.0  # 6.7 mm at 6-10 mm/s [INFERENCE]
-sim_cmd_to_break_ms = 100.0
+sim_cmd_to_break_ms = 155.0   # what the solver ASSUMES of the simulated actuator (its real delay: actuator.sim.delay_ms)
 none_cmd_to_break_ms = 100.0
-jitter_ms = 6.0               # 1-sigma until measured: a 50 Hz servo frame quantises the command by U(0,20 ms) -> 20/sqrt(12) = 5.8 ms
+jitter_ms = 2.0               # 1-sigma shot to shot. Measured 1.0 ms (microphone, 10 shots) and 1.4 ms (recoil, 2): the
+                              # PWM starts with the command, so the 50 Hz frame does not quantise it (that would be 5.8 ms)
 
 [stream]
 enabled = false
@@ -287,6 +307,11 @@ clay_contrast = -45.0         # mono DN, negative = clay darker than sky
 noise_sigma = 2.0
 render_color = false
 gyro_noise_dps = 0.05
+process_ms = 22.0             # the gun's own work per frame (detect + track), as on the Pi 3B with a target in view
+                              # (range day 2026-11-17: 18-25 ms p50). The simulated loop then takes the newest frame
+                              # each time round (every 2nd-3rd of the camera's), the solver runs on a frame ~40 ms
+                              # old and on an attitude as fresh as the gun's, and a run repeats exactly. 0 = this
+                              # computer's own speed: every frame, a few ms old, different every run
 swing_lag_s = 0.12            # simulated shooter: pursuit lag of the swing behind the clay
 swing_noise_deg = 0.15
 debris_fragments = 6          # fragments a broken clay turns into (rendered, judged as debris_shots)

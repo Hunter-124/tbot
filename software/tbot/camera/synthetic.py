@@ -57,6 +57,9 @@ def _unit_rows(v: np.ndarray) -> np.ndarray:
     return v / n[:, None]
 
 
+_LOOP_TAIL_NS = 2_000_000  # solver, telemetry and recording after the modelled detect + track work
+
+
 class SyntheticImu:
     """Gun-frame IMU of the simulated gun, sampled at cfg.imu.sample_rate_hz (ImuSource protocol)."""
 
@@ -83,7 +86,7 @@ class SyntheticImu:
         if not self._running:
             return []
         sc = self._src.scenario
-        limit = self._src.frame_t_ns
+        limit = self._src.imu_limit_ns()
         period = 1e9 / self._rate
         out: list[ImuSample] = []
         while len(out) < _IMU_MAX_BURST:
@@ -114,7 +117,10 @@ class SyntheticSource(SourceBase):
         self.is_color = bool(cfg.sim.render_color)
         self.nominal_fps = float(cfg.camera.fps)
         self.name = f"synthetic:{self.scenario_name}"
-        self.clock = SimClock(T0_NS)
+        # sim.process_ms > 0: the loop's own work time is modelled (see read), on a clock that only moves when
+        # the simulation moves it, so a run repeats exactly. 0: the clock runs on with this computer's time.
+        self._work_ns = int(round(float(getattr(cfg.sim, "process_ms", 0.0)) * 1e6))
+        self.clock = SimClock(T0_NS, frozen=self._work_ns > 0)
         self.frame_t_ns = T0_NS
         self.cam = CameraModel.from_calibration(calib.intrinsics, cfg, self.width, self.height)
         self.mount = MountModel.from_config(cfg, calib.boresight)
@@ -170,6 +176,7 @@ class SyntheticSource(SourceBase):
         self.frame_t_ns = T0_NS
         self.clock.set(T0_NS)
         self.dropped = 0
+        self.skipped = 0
         self.scenario.reset_breaks()  # a fresh pass throws whole clays again
 
     def stop(self) -> None:
@@ -184,18 +191,42 @@ class SyntheticSource(SourceBase):
     def n_frames(self) -> int:
         return self.scenario.n_frames
 
+    def imu_limit_ns(self) -> int:
+        """IMU samples up to this time have been taken: the newest frame's arrival, or (modelled work time)
+        the simulated present, so a second read just before the solver gets the samples of the work time."""
+        return max(self.frame_t_ns, int(self.clock.now_ns())) if self._work_ns > 0 else self.frame_t_ns
+
+    def processed(self) -> None:
+        if self._work_ns > 0:
+            self.clock.advance(self._work_ns)
+
     def read(self, timeout_s: float = 1.0) -> Frame | None:
-        """Next scenario frame (the simulator never drops); None once the scenario has run out."""
+        """Next scenario frame; None once the scenario has run out.
+
+        sim.process_ms = 0: every frame, the simulator never drops. Otherwise the loop behaves as on the gun:
+        it comes back for a frame when its work on the last one is done (the clock, moved on by processed()
+        and by any wait for the fire command), takes the NEWEST frame that has arrived by then, or waits for
+        the next one, and the ones in between are never seen (counted in `skipped`)."""
         i = self._seq
+        latency = int(round(self._exposure_s * 0.5e9)) + int(round(self.cfg.latency.exposure_to_user_ms * 1e6))
+        period = 1e9 / self.nominal_fps
+        t_start = None
+        if self._work_ns > 0 and i > 0:
+            ready = int(self.clock.now_ns()) + _LOOP_TAIL_NS
+            newest = int(math.floor((ready - T0_NS - latency) / period))
+            if newest > i:
+                self.skipped += newest - i
+                i = newest
+            t_start = ready
         t_s = i / self.nominal_fps
         if t_s > self.scenario.duration_s + 1e-9:
             return None
-        t_exp = T0_NS + int(round(i * 1e9 / self.nominal_fps))
-        t_cap = t_exp + int(round(self._exposure_s * 0.5e9)) + int(round(self.cfg.latency.exposure_to_user_ms * 1e6))
+        t_exp = T0_NS + int(round(i * period))
+        t_cap = t_exp + latency
         image = self._render(t_s, i)
         self._seq = i + 1
         self.frame_t_ns = t_cap
-        self.clock.set(t_cap)
+        self.clock.set(t_cap if t_start is None else max(t_start, t_cap))
         return Frame(image=image, seq=i, t_exposure_ns=t_exp, t_capture_ns=t_cap,
                      exposure_us=float(self.cfg.camera.exposure_us), gain=float(self.cfg.camera.analogue_gain))
 

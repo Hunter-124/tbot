@@ -19,7 +19,8 @@ from tbot.vision.detector import ClayDetector
 
 
 def _cfg(tmp_path, **sets):
-    cfg = load_config(sets=[f"{k}={v}" for k, v in sets.items()])
+    # (every frame of the scenario, as these tests count them: no modelled work time)
+    cfg = load_config(sets=[f"{k}={v}" for k, v in {"sim.process_ms": 0.0, **sets}.items()])
     cfg.paths.calib_dir = str(tmp_path / "calib")
     cfg.gpio.backend = "sim"
     cfg.stream.enabled = False

@@ -52,6 +52,11 @@ class SourceBase:
     def imu(self) -> ImuSource | None:
         return None
 
+    def processed(self) -> None:
+        """The pipeline calls this when detection and tracking of the frame it read are done, just before the
+        fire solver. A real source does nothing; a simulated one moves its clock by the time that work takes
+        on the gun (SyntheticSource, sim.process_ms)."""
+
     def __enter__(self):
         self.start()
         return self
