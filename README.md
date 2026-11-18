@@ -4,7 +4,7 @@
 predicts where it will be when the shot arrives, and a servo presses the trigger at the instant the two line up.
 The shooter only swings the gun and holds a button.
 
-Designed, built and calibrated by one person in 23 days (2026-10-25 to 2026-11-17). The software was written with AI coding tools.
+Designed, built and calibrated by one person in 23 days (2026-10-25 to 2026-11-17).
 First live range day: **two shots fired by the machine, two clays broken.**
 
 ![The assembled gun: trigger servo at the guard, camera and compute module clamped under the barrel](docs/media/hero_assembled.jpg)
