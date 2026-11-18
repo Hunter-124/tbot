@@ -1,0 +1,185 @@
+{
+  "schema": "chudware.print_job/1",
+  "part": "trig_cam",
+  "source": {
+    "kind": "doc",
+    "doc_id": "doc-cpp00000003"
+  },
+  "copies": 1,
+  "printer": {
+    "name": "Creality Ender-3 (0.4 mm nozzle)",
+    "vendor": "Creality",
+    "bed_polygon": [
+      [
+        3.0,
+        3.0
+      ],
+      [
+        228.0,
+        3.0
+      ],
+      [
+        228.0,
+        228.0
+      ],
+      [
+        3.0,
+        228.0
+      ]
+    ],
+    "max_height_mm": 250.0
+  },
+  "presets": {
+    "print": "0.20 mm NORMAL (0.4 mm nozzle) @CREALITY",
+    "filament": "Generic PLA @CREALITY"
+  },
+  "goal": "strength",
+  "settings_changed": {
+    "perimeters": "4",
+    "fill_density": "100%",
+    "fill_pattern": "rectilinear",
+    "top_solid_layers": "6",
+    "bottom_solid_layers": "5",
+    "support_material": "0",
+    "binary_gcode": "0",
+    "overhangs": "1"
+  },
+  "effective": {
+    "layer_height": "0.20",
+    "first_layer_height": "0.2",
+    "perimeters": "4",
+    "fill_density": "100%",
+    "fill_pattern": "rectilinear",
+    "top_solid_layers": "6",
+    "bottom_solid_layers": "5",
+    "support_material": "0",
+    "support_material_style": null,
+    "support_material_threshold": "40",
+    "dont_support_bridges": "1",
+    "overhangs": "1",
+    "brim_width": "0",
+    "temperature": "205",
+    "first_layer_temperature": "210",
+    "bed_temperature": "60",
+    "first_layer_bed_temperature": "60",
+    "nozzle_diameter": "0.4",
+    "retract_length": "5"
+  },
+  "orientation": {
+    "build_dir": [
+      0.0,
+      1.0,
+      0.0
+    ],
+    "yaw_deg": 0.0,
+    "source": "caller",
+    "why": "caller-specified build direction"
+  },
+  "slicer": {
+    "kind": "flatpak",
+    "argv_prefix": [
+      "/usr/bin/flatpak",
+      "run",
+      "--user",
+      "--command=prusa-slicer",
+      "com.prusa3d.PrusaSlicer"
+    ],
+    "version": "2.9.7",
+    "profiles_dir": "/home/hunter/.local/share/flatpak/app/com.prusa3d.PrusaSlicer/x86_64/stable/22caa5995fef8170cbed1d404f993996e5552e47159391666a7b096a85d8f641/files/share/PrusaSlicer/profiles",
+    "source": "flatpak_user",
+    "identity": "22caa5995fef8170cbed1d404f993996e5552e47159391666a7b096a85d8f641",
+    "usable": true
+  },
+  "config_sha256": "9646b6c97941f79fc22e11e645a723eb69ce5201440749953a693fde38099235",
+  "mesh_sha256": "dcbc582401bf0ce73ad49fb506f8bb7c2ea0be689c3e9e175ef69ed73d3cf8d2",
+  "gcode": "/home/hunter/Desktop/TBOT/print/creality_ender_3_0_4_mm_nozzle/trig_cam.gcode",
+  "gcode_sha256": "8a4aa22cef5d15f7425403450b1131e99ed143e7ac74141a2c7da4363e2cbb7a",
+  "project_3mf": "/home/hunter/Desktop/TBOT/print/creality_ender_3_0_4_mm_nozzle/trig_cam.3mf",
+  "stats": {
+    "layers": 46,
+    "height_mm": 9.2,
+    "filament_mm": 626.721,
+    "filament_g": 1.87,
+    "print_time_s": 1054.0,
+    "support_share": 0.0,
+    "by_type_mm": {
+      "Custom": 260.0,
+      "External perimeter": 4035.666,
+      "Internal infill": 2966.707,
+      "Overhang perimeter": 18.639,
+      "Perimeter": 8394.439,
+      "Skirt/Brim": 307.092,
+      "Solid infill": 2056.63,
+      "Top solid infill": 285.408
+    },
+    "slicer": "PrusaSlicer 2.9.7"
+  },
+  "estimate": {
+    "part_volume_mm3": 1419.178,
+    "support_volume_mm3": 1.939,
+    "material_g": 1.76,
+    "support_g": 0.0,
+    "time_h": 0.052,
+    "layers": 46,
+    "support_share": 0.0,
+    "method": "deterministic shell/infill/flow ranking estimate, not slicer output"
+  },
+  "printability": {
+    "status": "fail",
+    "issues": [
+      {
+        "check": "min_wall",
+        "status": "fail",
+        "note": "Minimum measured wall 0.974 mm; required 1.76 mm. 9 more regions are not shown. To show up to 50 regions, set detail=true.",
+        "fix": [
+          "thicken to >= 1.76 mm (4 perimeters at 0.44 mm)"
+        ]
+      },
+      {
+        "check": "overhang",
+        "status": "fail",
+        "note": "10.3 mm2 needs support above 45 deg from vertical (bridges and bed contact excluded).",
+        "fix": [
+          "add 45 deg chamfers or reorient",
+          "shorten ceiling to a bridgeable span or reorient"
+        ]
+      },
+      {
+        "check": "small_holes",
+        "status": "warn",
+        "note": "4 cylindrical holes evaluated; 1 below printability thresholds.",
+        "fix": [
+          "vertical holes print ~0.1-0.2 mm undersize; size +0.2 mm or drill",
+          "use teardrop/diamond profiles for large horizontal holes"
+        ]
+      }
+    ]
+  },
+  "gcode_check": {
+    "status": "warn",
+    "issues": [
+      {
+        "check": "floating_extrusion",
+        "status": "warn",
+        "note": "Hard floating: 0.0 mm2/layer, 0.000 mm unanchored run; unanchored air run 8.105 mm (limit 10); backed bridge 0.000 mm; infill/interface spans informational (0.0 mm2 total)",
+        "fix": [
+          "Reorient or support long unanchored outer-wall and bridge paths.",
+          "Review the flagged type, layer and XY positions in PrusaSlicer before printing."
+        ]
+      }
+    ]
+  },
+  "slicer_warnings": [],
+  "slicer_mesh_repairs": {
+    "available": true,
+    "volumes": 1,
+    "counts": {
+      "edges_fixed": 0,
+      "degenerate_facets": 0,
+      "facets_removed": 0,
+      "facets_reversed": 0,
+      "backwards_edges": 0
+    }
+  },
+  "print_ready": false
+}

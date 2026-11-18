@@ -1,0 +1,202 @@
+{
+  "schema": "chudware.print_job/1",
+  "part": "btn_mount_R",
+  "source": {
+    "kind": "doc",
+    "doc_id": "doc-cpp00000002"
+  },
+  "copies": 1,
+  "printer": {
+    "name": "Creality Ender-3 (0.4 mm nozzle)",
+    "vendor": "Creality",
+    "bed_polygon": [
+      [
+        3.0,
+        3.0
+      ],
+      [
+        228.0,
+        3.0
+      ],
+      [
+        228.0,
+        228.0
+      ],
+      [
+        3.0,
+        228.0
+      ]
+    ],
+    "max_height_mm": 250.0
+  },
+  "presets": {
+    "print": "0.20 mm NORMAL (0.4 mm nozzle) @CREALITY",
+    "filament": "Generic PLA @CREALITY"
+  },
+  "goal": "strength",
+  "settings_changed": {
+    "perimeters": "4",
+    "fill_density": "35%",
+    "fill_pattern": "cubic",
+    "top_solid_layers": "6",
+    "bottom_solid_layers": "5",
+    "support_material": "1",
+    "support_material_auto": "1",
+    "support_material_style": "organic",
+    "support_material_threshold": "45",
+    "support_material_buildplate_only": "1",
+    "binary_gcode": "0",
+    "overhangs": "1"
+  },
+  "effective": {
+    "layer_height": "0.20",
+    "first_layer_height": "0.2",
+    "perimeters": "4",
+    "fill_density": "35%",
+    "fill_pattern": "cubic",
+    "top_solid_layers": "6",
+    "bottom_solid_layers": "5",
+    "support_material": "1",
+    "support_material_style": "organic",
+    "support_material_threshold": "45",
+    "dont_support_bridges": "1",
+    "overhangs": "1",
+    "brim_width": "0",
+    "temperature": "205",
+    "first_layer_temperature": "210",
+    "bed_temperature": "60",
+    "first_layer_bed_temperature": "60",
+    "nozzle_diameter": "0.4",
+    "retract_length": "5"
+  },
+  "orientation": {
+    "build_dir": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "yaw_deg": 0.0,
+    "source": "caller",
+    "why": "caller-specified build direction"
+  },
+  "slicer": {
+    "kind": "flatpak",
+    "argv_prefix": [
+      "/usr/bin/flatpak",
+      "run",
+      "--user",
+      "--command=prusa-slicer",
+      "com.prusa3d.PrusaSlicer"
+    ],
+    "version": "2.9.7",
+    "profiles_dir": "/home/hunter/.local/share/flatpak/app/com.prusa3d.PrusaSlicer/x86_64/stable/22caa5995fef8170cbed1d404f993996e5552e47159391666a7b096a85d8f641/files/share/PrusaSlicer/profiles",
+    "source": "flatpak_user",
+    "identity": "22caa5995fef8170cbed1d404f993996e5552e47159391666a7b096a85d8f641",
+    "usable": true
+  },
+  "config_sha256": "ad00b08ad1653e0882050c986cb5418caa42a8c7aa1ea33e63358ea22fbe0ed1",
+  "mesh_sha256": "c97bfee0a8026fe7a72654afc8221249ceb4acb9ceef739c6c4b7528626849e1",
+  "gcode": "/home/hunter/Desktop/TBOT/print/creality_ender_3_0_4_mm_nozzle/btn_mount_R.gcode",
+  "gcode_sha256": "bcf07f58b372dfdcfe7f710505e6fbfbb3c77024016246accd4c3e7f4e5f69af",
+  "project_3mf": "/home/hunter/Desktop/TBOT/print/creality_ender_3_0_4_mm_nozzle/btn_mount_R.3mf",
+  "stats": {
+    "layers": 176,
+    "height_mm": 35.2,
+    "filament_mm": 6704.31,
+    "filament_g": 20.0,
+    "print_time_s": 10422.0,
+    "support_share": 0.1952,
+    "by_type_mm": {
+      "Bridge infill": 707.16,
+      "Custom": 260.0,
+      "External perimeter": 30647.446,
+      "Internal infill": 34890.454,
+      "Overhang perimeter": 593.976,
+      "Perimeter": 85454.829,
+      "Skirt/Brim": 440.982,
+      "Solid infill": 15886.546,
+      "Support material": 40483.732,
+      "Support material interface": 693.325,
+      "Top solid infill": 878.995
+    },
+    "slicer": "PrusaSlicer 2.9.7"
+  },
+  "estimate": {
+    "part_volume_mm3": 17018.257,
+    "support_volume_mm3": 4142.891,
+    "material_g": 18.411,
+    "support_g": 0.771,
+    "time_h": 0.373,
+    "layers": 176,
+    "support_share": 0.042,
+    "method": "deterministic shell/infill/flow ranking estimate, not slicer output"
+  },
+  "printability": {
+    "status": "fail",
+    "issues": [
+      {
+        "check": "min_wall",
+        "status": "warn",
+        "note": "Minimum measured wall 1.973 mm; required 1.76 mm. 10 more regions are not shown. To show up to 50 regions, set detail=true.",
+        "fix": [
+          "thicken to >= 1.76 mm (4 perimeters at 0.44 mm)"
+        ]
+      },
+      {
+        "check": "overhang",
+        "status": "fail",
+        "note": "497.3 mm2 needs support above 45 deg from vertical (bridges and bed contact excluded). 11 more regions are not shown. To show up to 50 regions, set detail=true.",
+        "fix": [
+          "add 45 deg chamfers or reorient",
+          "replace large horizontal hole crown with teardrop/diamond geometry",
+          "shorten ceiling to a bridgeable span or reorient"
+        ]
+      },
+      {
+        "check": "support",
+        "status": "warn",
+        "note": "Support envelope 4142.9 mm3; 140.6 mm2 lands on model; 0.0 mm3 enclosed/unremovable. 11 more regions are not shown. To show up to 50 regions, set detail=true.",
+        "fix": [
+          "reorient with optimize_print_orientation; add 45 deg chamfers or split part",
+          "avoid support landing on model surfaces (scars and harder removal)"
+        ]
+      }
+    ]
+  },
+  "gcode_check": {
+    "status": "warn",
+    "issues": [
+      {
+        "check": "floating_extrusion",
+        "status": "warn",
+        "note": "Hard floating: 3.5 mm2/layer, 0.000 mm unanchored run; unanchored air run 1.185 mm (limit 10); backed bridge 4.210 mm; infill/interface spans informational (60.1 mm2 total)",
+        "fix": [
+          "Reorient or support long unanchored outer-wall and bridge paths.",
+          "Review the flagged type, layer and XY positions in PrusaSlicer before printing."
+        ]
+      },
+      {
+        "check": "support_towers",
+        "status": "warn",
+        "note": "10 distinct tall/slender support islands (height >=20 mm, height/width >8)",
+        "fix": [
+          "Use a flatter orientation or grid/organic supports with wider anchored bases.",
+          "Add a support sheath/brim and reduce unsupported tower height."
+        ]
+      }
+    ]
+  },
+  "slicer_warnings": [],
+  "slicer_mesh_repairs": {
+    "available": true,
+    "volumes": 1,
+    "counts": {
+      "edges_fixed": 0,
+      "degenerate_facets": 0,
+      "facets_removed": 0,
+      "facets_reversed": 0,
+      "backwards_edges": 0
+    }
+  },
+  "print_ready": true
+}

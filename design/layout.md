@@ -864,6 +864,96 @@ the set could ride down and back off it.
   existing shallow R25.4 front-bottom arc, a cosmetic edge. Spacer 0.3 g,
   printed standing up with a brim.
 
+### Rev AH — servo output inside the guard, finger cam, plug-and-saddle mount
+
+Replaces `servo_bracket_L`, `servo_lever`, `trig_clamp_R_v2` and `u18_spacer`
+(rev AG and earlier stay in the repo for reference). New parts:
+`servo_mount_L`, `btn_mount_R`, `trig_cam`, `jack_shoe`. Sub-assembly:
+`asm/trigger_set_AH.step+`. `asm/tbot_full.step+` still shows rev AG.
+
+Guard and trigger as measured 2026-11-18 (side photo with tape, scale 10.6 px/mm
+fitted to the outer profile and cross-checked against the 2026-11-05 scan mesh,
+agreement about 1 mm). These numbers supersede `guard_measured` and
+`gun_trigger`, which are **not yet updated** (they still say 29 high and a
+straight trigger):
+
+- Opening: floor Z −13.2 (X 3..10), ceiling Z 12.2 (not 16), so 25.4 high. Front
+  inside wall leans forward: X 27.9 at Z −10.1, 33.9 at −4.5, 36.5 at 0.9, 38.2
+  at 6.3, 39.6 at the ceiling. Bow outer bottom −16.5 (unchanged). Outer front
+  slope beyond X 45 is shallower than modelled: Z −7.0 at X 45, −3.4 at 51, 0.0
+  at 57, 3.8 at 63, 9.8 at 72.
+- Trigger is a deep crescent, not a straight blade. Front face (X,Z): tip
+  (4.6,−11.5), (2.0,−8.5), (0.2,−4.8), belly (−0.5,−1.0), (0.3,2.8), (2.9,6.6),
+  (6.7,10.3), (9.1,11.7). The tip hooks 5 forward and ends 1.7 above the floor;
+  the root sweeps 9 forward at the ceiling. Pivot (−4,26) is still [INFERENCE].
+- Safety button: in the guard's rear web, about X −16.4..−7.9, Z 2.3..12.2.
+  Nothing in rev AH is behind X −7.4 above Z 0.3 on the left, or behind X −7.0
+  above Z 1.5 on the right.
+
+Servo and cam:
+
+- MG996R on gun-left, output axis along −Y, shaft at (X 8.5, Z 1.2). Pose of
+  `refs/mg996r`: rotate +90° about X, then translate (4.9, −3.6, −14.3). Case
+  X −1.4..39.3, Z −8.65..11.05, Y 12.4..47.7; gear cover top Y 10.0; ear seat
+  Y 18.1; spline tip Y 2.7. Case top is 1.15 below the receiver underside.
+- `trig_cam`: Y ±4.6, hub R6.9, finger nose R3.0 centred 10.3 from the shaft.
+  The stock horn sits in a pocket on the +Y face exactly like the old lever
+  (hub seat R5.75 × 3.3, boss bore R4.2 × 4.3, M3 × 12 centre screw, one
+  M2 × 8 into the horn's first hole at 7.5). **The horn arm must be cut at its
+  second hole (10.7 from centre)**: the slot is 11.2 long and leads the finger
+  by 20° on the side away from the trigger.
+- Angles are measured at the shaft from the rearward horizontal, negative
+  below it. Modelled at −88° (finger straight down, nose 1.2 clear of the
+  trigger hook). First contact −77°, on the lower hook at about (3.7,−10.6);
+  the nose then slides up the blade as it sweeps it back. Modelled break
+  (7.6°) at −19°, modelled stop (9.4°) at −9.5°, geometric maximum 10.7° at
+  −4°. Lowest point of the sweep is 1.15 above the floor; highest 7.8.
+- Rest to break is about 65° of servo travel (old lever: 31°). No in-plane
+  member can do better in this opening: the shaft cannot sit above or below
+  the blade, so the effective arm is about 4 mm. Expect roughly 70 ms more
+  actuation time [INFERENCE, 2.2 ms/° no load]. **Re-measure the trigger
+  delay** and set it in the config before live fire. Peak torque about
+  0.17 N·m at the 35 N design load, before friction.
+- Past −10° the linkage approaches dead centre and multiplies force. Set the
+  FIRE endpoint just past the break, never at the mechanical maximum.
+
+`servo_mount_L` (24.0 cm³, 25 g sliced):
+
+- Slab Y 5.5..18.1 with the ear seats on its outer face, servo pocket floor at
+  Y 9.7 (web 5.5..9.7), D16.4 hole for the output collar. Guard land tapered
+  to h(X) + 0.85.
+- Plug, Y 5.5..−4.0, fills the front of the opening from X 18.7 to the front
+  wall with 0.5 clearance, top Z 9.5. Recoil bears on it directly.
+- Saddle, Y 5.5..−4.0, runs under the bow and front slope with 0.7 clearance
+  down to Z −24.4. The bow is enclosed between plug and saddle, so the set
+  cannot come off even if every screw loosens.
+- Jack: M3 × 10 countersunk through a trapped M3 nut (side slot from the −Y
+  end), axis normal to the outer slope at (33.0,−12.3), direction
+  (−0.353, 0.936). It lifts `jack_shoe` (9.2 × 8.0 × 3.0) against the bow, which
+  pulls the plug down and forward into the corner between the floor and the
+  front wall. The screw never touches the gun.
+- Inserts (M3 × 5.7, D4.0 bores), all installed from +Y: three in the pocket
+  floor for P1 (31.5,1.0), P2 (22,−7.5), P3 (22.5,6.0); four in D7 recesses
+  (floor Y 13.5) for U1 (8,−20.3), U2 (24,−19.0), F1 (46,−10.8), F2 (59,−3.2);
+  three in the ear seats at (−5.8,−3.8), (43.7,6.2), (43.7,−3.8). The upper
+  rear ear hole is left empty to keep clear of the safety button.
+
+`btn_mount_R` (17.0 cm³, 20 g sliced): plate Y −5.5..−12.5, land tapered to
+−(h(X) + 0.85), seven D3.4 countersunk holes on the same seven axes, D7 access
+hole on the shaft axis for the cam screw. Arming button unchanged in position
+and angle (hole centre (−4.556,−21.5,−10.15), axis (0.985,0,−0.174), panel
+2.8 net, D10.4 body bore 13.3 long). The plate floats on its screws, so the
+squeeze adapts to the real guard width; it closes up to 1.5 before touching
+the plug.
+
+Screws: P1..P3 are M3 × 20, U1, U2, F1, F2 are M3 × 25, heads in the right
+plate at Y −12.5, tips at Y 7.5 and 12.5.
+
+Checks: `check_interference` on the four parts plus the servo is clear (mount
+to plate 1.5, cam to each side 0.9, cam to servo 1.9, servo seated on its
+pads). Fit against the gun is from the measured profile above, not from
+`guard_measured`. Not yet printed or fitted.
+
 ## Printing and materials
 
 All ten printed parts are PLA (`chin_lid` is obsolete). Do not leave them in a hot car: PLA can

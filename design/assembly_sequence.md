@@ -125,3 +125,26 @@ No hardware interlock: open the lever connector to make the servo safe.
 - Ports with everything installed: Ethernet + 2 × USB through cover_L's front windows; HDMI, micro-USB and audio
   through the top-skin notches with cover_L off; microSD from the rear (carrier_L rear slot).
 - Module off the gun: belly, covers and carriers (MI-1) first, then bands, then 2 cross screws + back the stud off.
+
+## Trigger set rev AH (current)
+
+Gun unloaded and checked, battery connector open, for every step.
+
+T1. Inserts in `servo_mount_L`, all from the outer (+Y) side: three in the servo
+    pocket floor, four in the D7 recesses, three in the ear seats.
+T2. Slide an M3 nut into the jack slot and `jack_shoe` (dimple down) into its
+    pocket, both from the −Y end of the saddle. Start the M3 × 10 jack screw from
+    underneath, only until it reaches the shoe.
+T3. Servo into the pocket, three M3 × 10 through the ears.
+T4. Cut the horn arm at its second hole. Drive the servo to its REST angle, fit
+    the horn so the arm points down and about 20° forward, then `trig_cam` over
+    it: M2 × 8 into the horn, M3 × 12 into the shaft. The finger should hang
+    straight down.
+T5. Liners on both lands. Slide the left assembly onto the guard from gun-left:
+    plug into the front of the opening, saddle under the bow, finger ahead of the
+    trigger hook without touching it.
+T6. `btn_mount_R` with the button fitted, seven screws (three M3 × 20 in the
+    opening, four M3 × 25 outside the bow), snug only.
+T7. Tighten the jack until the set stops moving, then tighten the seven screws.
+T8. Calibrate REST and FIRE with the gun empty (FIRE just past the break), then
+    re-measure the trigger delay and update the config.
