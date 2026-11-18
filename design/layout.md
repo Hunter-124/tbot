@@ -699,7 +699,8 @@ contacts and connector seating remain open.
   The U18/U28 countersink-to-countersink web is 4.3; U28 hole edge is 1.62
   above the opening.
 - Rev AB guard cradle (anti-slide lock): a solid block from the plate's inner
-  face (Y −8.5) to Y 5.0, which is 0.5 short of the bracket face. It spans
+  face (Y −8.5) to Y 4.0, which is 1.5 short of the bracket face (rev AE;
+  it was Y 5.0, 0.5 short). It spans
   X −19..44.5, from the bed (Z −22.3) up to the outer surface of the guard bow.
   - Its top follows the bow's outer spline with about 0.5 clearance (it was
     measured at 0.27 against `guard_measured`) and is capped at Z −9 at both
@@ -710,7 +711,7 @@ contacts and connector seating remain open.
     rely on clamp friction.
   - The cradle carries:
     - the rear M3 nut in a side slot (open to −X; nut Y −6.6..−4.0, bearing at
-      −4.0; D3.5 bore Y −4..5);
+      −4.0; D3.5 bore Y −4..4);
     - the L40 bore, which leaves only about 0.2 of skin over its crown at the
       cradle top. That skin is not load-bearing.
   - Lever plane (Z ≥ −8.2) and trigger clear the cradle top by ≥ 0.8 and ≥ 2.1.
@@ -765,6 +766,16 @@ contacts and connector seating remain open.
   and Chudware's STL export passes its facet check. Kernel hazard: exactly
   coincident tangent arcs between the pad and the plate fillets hang the
   boolean indefinitely.
+- Rev AE (clamp gap for a thinner guard). The real trigger guard looks
+  slightly thinner than `guard_measured`, so the guard cradle (f13 depth
+  13.5 to 12.5) now stops at Y 4.0, 1.5 short of the bracket face at Y 5.5.
+  The screws can then pull the plate up to 1.5 closer before the cradle
+  bottoms on the bracket, so a thinner guard is still gripped rather than
+  the cradle carrying the clamp load. Volume 15640.6 mm³, about 19.4 g. FEA
+  (PLA, M3 bores fixed, 50 N on the button panel along the press direction,
+  2.5 mm tet10): 4.7 MPa peak away from the fixtures (fatigue limit
+  18 MPa), 0.027 deflection; the 18.8 MPa raw peak is the clamped rear-bore
+  singularity.
 
 ## Printing and materials
 
