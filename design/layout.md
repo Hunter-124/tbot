@@ -692,9 +692,10 @@ contacts and connector seating remain open.
   heads flush with the hole pad at Y -13.9 (rev AA removed the 2.4-deep D6.8
   head pockets that left ~1.3 of plastic under each head; now ~3.7), and
   (rev AB) the rear M3 × 35 now comes from the bracket side (see
-  `servo_bracket_L`). The rev AA rear spacer block and its D3.5 hole are
-  suppressed. The old D7 rear-head access teardrop is left in the web, because
-  removing it breaks the heal and fillet features after it.
+  `servo_bracket_L`). Rev AC (history rebuild) removed the old X −10.5 rear
+  hole and its D7 rear-head access teardrop through the button web, which had
+  no bolt since rev AB, along with the rev AA spacer block and the buried lip,
+  bottom-rib, back-rim-rib and rear-boss bodies.
   The U18/U28 countersink-to-countersink web is 4.3; U28 hole edge is 1.62
   above the opening.
 - Rev AB guard cradle (anti-slide lock): a solid block from the plate's inner
@@ -731,6 +732,22 @@ contacts and connector seating remain open.
   relief in the web clears the nut; the R6 web is trimmed to the collar and
   45° foot. The guard rail ends at approximately Z 2, leaving manual finger
   space above it. No integral cable-management anchors are present.
+- Rev AC feature tree (rebuilt from 86 features to 46, no heal, no transform
+  or Boolean tool bodies). In order:
+  - plate (trigger scallop included in its sketch), guard land plus taper cut,
+    guard cradle, then one R25.4 front-bottom trim cut for all three;
+  - plate-outline R4/R3/R2 fillets;
+  - the button module, sketched on `DatumButtonFace` (origin on the button
+    axis, normal 10° down);
+  - the bed flat, hole pad, holes, rear bore and nut slot;
+  - the R6 web;
+  - the bottom and scallop ribs (`rib_h` = 2.4, same height as the pad);
+  - the trigger-edge R0.75 and the hood dress-ups.
+  The scallop rib's ends are buried in the button flange and the hole pad. The
+  old rib-end cap that collided with the R6 web (and its 0.1 step to the pad)
+  is gone. The trigger edge is R0.75: R1.5 no longer builds on this tree. The
+  flange-front R1 is dropped because it forces the R6 web smaller. Equations:
+  `plate_t`, `rib_h`, `flange_t`.
 
 ## Printing and materials
 
