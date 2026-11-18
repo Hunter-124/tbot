@@ -208,6 +208,11 @@ class PicamSource(SourceBase):
             raise RuntimeError(_NO_PICAMERA2) from exc
         if not Picamera2.global_camera_info():
             raise RuntimeError(_NO_CAMERA)
+        try:
+            from picamera2 import MappedArray  # noqa: PLC0415
+        except ImportError:
+            MappedArray = None  # noqa: N806
+        self._mapped_array = MappedArray
         self._picam2 = Picamera2()
         self.sensor_mode = select_sensor_mode(self._picam2.sensor_modes, self.width, self.height)
 
@@ -377,12 +382,12 @@ class PicamSource(SourceBase):
                     continue
                 t_capture_ns = time.monotonic_ns()
                 try:
-                    array = request.make_array("main")
+                    image = self._y_plane(request)
                     metadata = request.get_metadata()
                 finally:
                     request.release()
                 if not self._stop.is_set():
-                    frame = self._make_frame(array, metadata, t_capture_ns)
+                    frame = self._make_frame(image, metadata, t_capture_ns, extracted=True)
                     self._publish(frame)
                     self._auto_expose(frame)
         except BaseException as exc:  # noqa: BLE001 - surfaced to the consumer in read()
@@ -391,8 +396,21 @@ class PicamSource(SourceBase):
                     self._error = exc
                     self._cond.notify_all()
 
-    def _make_frame(self, array: np.ndarray, metadata: dict, t_capture_ns: int) -> Frame:
-        image = extract_y_plane(array, self.width, self.height)
+    def _y_plane(self, request) -> np.ndarray:
+        """The Y plane, copied once straight out of the mapped camera buffer. request.make_array() copies the
+        whole YUV420 buffer first (384 KB at 640x400) and extract_y_plane then copies 256 KB of that again:
+        100 times a second, in the thread that must keep up with the camera."""
+        mapped = self._mapped_array
+        if mapped is not None:
+            try:
+                with mapped(request, "main", write=False) as m:
+                    return extract_y_plane(m.array, self.width, self.height)
+            except TypeError:  # an older picamera2 without write=
+                self._mapped_array = None
+        return extract_y_plane(request.make_array("main"), self.width, self.height)
+
+    def _make_frame(self, array: np.ndarray, metadata: dict, t_capture_ns: int, extracted: bool = False) -> Frame:
+        image = array if extracted else extract_y_plane(array, self.width, self.height)
         if self._rotate_180:
             image = cv2.rotate(image, cv2.ROTATE_180)
         exposure_us = float(metadata.get("ExposureTime", self._exposure_us))
