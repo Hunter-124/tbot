@@ -1,0 +1,1976 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="284.986mm" height="2355.053mm" viewBox="0 0 284.986 2355.053" font-family="monospace" font-size="3">
+<title>HARNESS TBOT front module harness (rev W) (tbot_front) - FORMBOARD scale 1:1 - dimensions mm, true 3D bundle lengths</title>
+<rect x="0" y="0" width="284.986" height="2355.053" fill="#ffffff"/>
+<text x="10" y="16" font-weight="bold">HARNESS TBOT front module harness (rev W) (tbot_front) - FORMBOARD scale 1:1 - dimensions mm, true 3D bundle lengths</text>
+<line data-segment="s13" data-length-mm="11" x1="163.001" y1="491.573" x2="152.001" y2="491.573" stroke="#202020" stroke-width="3.949" stroke-linecap="butt"/>
+<text x="153.901" y="496.547">11.0</text>
+<line data-segment="s15" data-length-mm="5.35" x1="150.616" y1="486.405" x2="152.001" y2="491.573" stroke="#202020" stroke-width="1.9" stroke-linecap="butt"/>
+<text x="153.193" y="488.46">5.3</text>
+<line data-segment="s2" data-length-mm="11.605" x1="159.997" y1="480.363" x2="163.001" y2="491.573" stroke="#202020" stroke-width="1.9" stroke-linecap="butt"/>
+<text x="163.323" y="485.214">11.6</text>
+<line data-segment="s20" data-length-mm="17.214" x1="100.663" y1="491.573" x2="83.449" y2="491.573" stroke="#202020" stroke-width="3.8" stroke-linecap="butt"/>
+<text x="88.456" y="496.473">17.2</text>
+<line data-segment="s22" data-length-mm="12.732" x1="113.395" y1="491.573" x2="100.663" y2="491.573" stroke="#202020" stroke-width="1.9" stroke-linecap="butt"/>
+<text x="103.429" y="495.523">12.7</text>
+<line data-segment="s24" data-length-mm="0.318" x1="113.713" y1="491.573" x2="113.395" y2="491.573" stroke="#202020" stroke-width="3.8" stroke-linecap="butt"/>
+<text x="110.854" y="488.073">0.3</text>
+<line data-segment="s26" data-length-mm="13.374" x1="127.086" y1="491.573" x2="113.713" y2="491.573" stroke="#202020" stroke-width="1.9" stroke-linecap="butt"/>
+<text x="116.799" y="495.523">13.4</text>
+<line data-segment="s28" data-length-mm="1.569" x1="128.656" y1="491.573" x2="127.086" y2="491.573" stroke="#202020" stroke-width="3.8" stroke-linecap="butt"/>
+<text x="125.171" y="496.473">1.6</text>
+<line data-segment="s29" data-length-mm="8.119" x1="152.001" y1="491.573" x2="143.882" y2="491.573" stroke="#202020" stroke-width="3.8" stroke-linecap="butt"/>
+<text x="145.241" y="496.473">8.1</text>
+<line data-segment="s30" data-length-mm="15.226" x1="143.882" y1="491.573" x2="128.656" y2="491.573" stroke="#202020" stroke-width="1.9" stroke-linecap="butt"/>
+<text x="132.669" y="495.523">15.2</text>
+<line data-segment="s31" data-length-mm="8.238" x1="209.086" y1="491.573" x2="200.848" y2="491.573" stroke="#202020" stroke-width="1.9" stroke-linecap="butt"/>
+<text x="202.267" y="495.523">8.2</text>
+<line data-segment="s33" data-length-mm="4" x1="199.813" y1="487.709" x2="200.848" y2="491.573" stroke="#202020" stroke-width="1.9" stroke-linecap="butt"/>
+<text x="202.215" y="489.112">4.0</text>
+<line data-segment="s34" data-length-mm="21.643" x1="200.848" y1="491.573" x2="179.205" y2="491.573" stroke="#202020" stroke-width="1.9" stroke-linecap="butt"/>
+<text x="186.427" y="495.523">21.6</text>
+<line data-segment="s36" data-length-mm="4.252" x1="167.253" y1="491.573" x2="163.001" y2="491.573" stroke="#202020" stroke-width="3.8" stroke-linecap="butt"/>
+<text x="162.427" y="496.473">4.3</text>
+<line data-segment="s37" data-length-mm="0.697" x1="179.205" y1="491.573" x2="178.508" y2="491.573" stroke="#202020" stroke-width="3.8" stroke-linecap="butt"/>
+<text x="176.156" y="496.473">0.7</text>
+<line data-segment="s38" data-length-mm="11.255" x1="178.508" y1="491.573" x2="167.253" y2="491.573" stroke="#202020" stroke-width="1.9" stroke-linecap="butt"/>
+<text x="169.28" y="489.023">11.3</text>
+<line data-segment="s4" data-length-mm="7.549" x1="83.449" y1="491.573" x2="75.9" y2="491.573" stroke="#202020" stroke-width="1.9" stroke-linecap="butt"/>
+<text x="76.974" y="495.523">7.5</text>
+<line data-segment="s5" data-length-mm="6.387" x1="81.795" y1="485.403" x2="83.449" y2="491.573" stroke="#202020" stroke-width="1.9" stroke-linecap="butt"/>
+<text x="84.506" y="487.959">6.4</text>
+<line data-segment="s40" data-length-mm="62.723" x1="151.223" y1="432.726" x2="88.5" y2="432.726" stroke="#202020" stroke-width="1.9" stroke-linecap="butt"/>
+<text x="116.262" y="436.676">62.7</text>
+<line data-segment="s39" data-length-mm="69.614" x1="158.114" y1="399.976" x2="88.5" y2="399.976" stroke="#202020" stroke-width="1.9" stroke-linecap="butt"/>
+<text x="119.707" y="403.926">69.6</text>
+<line data-segment="s41" data-length-mm="31.072" x1="72.3" y1="367.376" x2="103.372" y2="367.376" stroke="#202020" stroke-width="1.6" stroke-linecap="butt"/>
+<text x="84.236" y="364.976">31.1</text>
+<line data-segment="s42" data-length-mm="17.22" x1="143.681" y1="367.376" x2="126.461" y2="367.376" stroke="#202020" stroke-width="1.6" stroke-linecap="butt"/>
+<text x="131.471" y="371.176">17.2</text>
+<line data-segment="s43" data-length-mm="29.113" x1="126.85" y1="342.163" x2="112.294" y2="367.376" stroke="#202020" stroke-width="1.6" stroke-linecap="butt"/>
+<text x="120.707" y="358.204">29.1</text>
+<line data-segment="s44" data-length-mm="8.922" x1="112.294" y1="367.376" x2="103.372" y2="367.376" stroke="#202020" stroke-width="1.6" stroke-linecap="butt"/>
+<text x="105.133" y="371.176">8.9</text>
+<line data-segment="s45" data-length-mm="14.168" x1="126.461" y1="367.376" x2="112.294" y2="367.376" stroke="#202020" stroke-width="1.6" stroke-linecap="butt"/>
+<text x="115.777" y="371.176">14.2</text>
+<line data-segment="s47" data-length-mm="59.023" x1="88.5" y1="297.075" x2="147.523" y2="297.075" stroke="#202020" stroke-width="1.1" stroke-linecap="butt"/>
+<text x="114.411" y="294.925">59.0</text>
+<line data-segment="s49" data-length-mm="61.071" x1="88.5" y1="264.725" x2="149.571" y2="264.725" stroke="#202020" stroke-width="1.1" stroke-linecap="butt"/>
+<text x="115.435" y="262.575">61.1</text>
+<line data-segment="s48" data-length-mm="63.726" x1="88.5" y1="232.375" x2="152.226" y2="232.375" stroke="#202020" stroke-width="1.1" stroke-linecap="butt"/>
+<text x="116.763" y="230.225">63.7</text>
+<line data-segment="s46" data-length-mm="61.271" x1="88.5" y1="200.025" x2="149.771" y2="200.025" stroke="#202020" stroke-width="1.1" stroke-linecap="butt"/>
+<text x="115.536" y="197.875">61.3</text>
+<line data-segment="s10" data-length-mm="13.538" x1="183.583" y1="118.349" x2="183.583" y2="131.886" stroke="#202020" stroke-width="1.9" stroke-linecap="butt"/>
+<text x="185.333" y="125.818">13.5</text>
+<line data-segment="s11" data-length-mm="20.289" x1="183.583" y1="131.886" x2="203.872" y2="131.886" stroke="#202020" stroke-width="1.9" stroke-linecap="butt"/>
+<text x="190.127" y="129.336">20.3</text>
+<line data-segment="s12" data-length-mm="20.289" x1="183.583" y1="131.886" x2="183.583" y2="152.175" stroke="#202020" stroke-width="1.9" stroke-linecap="butt"/>
+<text x="185.333" y="142.731">20.3</text>
+<line data-segment="s58" data-length-mm="24" x1="87.937" y1="131.886" x2="111.937" y2="131.886" stroke="#202020" stroke-width="3.8" stroke-linecap="butt"/>
+<text x="96.337" y="128.386">24.0</text>
+<line data-segment="s59" data-length-mm="24" x1="111.937" y1="131.886" x2="135.937" y2="131.886" stroke="#202020" stroke-width="3.8" stroke-linecap="butt"/>
+<text x="120.337" y="128.386">24.0</text>
+<line data-segment="s6" data-length-mm="3" x1="87.937" y1="128.886" x2="87.937" y2="131.886" stroke="#202020" stroke-width="1.9" stroke-linecap="butt"/>
+<text x="89.687" y="131.086">3.0</text>
+<line data-segment="s60" data-length-mm="47.646" x1="135.937" y1="131.886" x2="183.583" y2="131.886" stroke="#202020" stroke-width="3.8" stroke-linecap="butt"/>
+<text x="156.16" y="128.386">47.6</text>
+<line data-segment="s8" data-length-mm="8.437" x1="79.5" y1="131.886" x2="87.937" y2="131.886" stroke="#202020" stroke-width="1.9" stroke-linecap="butt"/>
+<text x="81.018" y="135.836">8.4</text>
+<line data-segment="s9" data-length-mm="14.693" x1="172.328" y1="122.442" x2="183.583" y2="131.886" stroke="#202020" stroke-width="1.9" stroke-linecap="butt"/>
+<text x="177.706" y="123.871">14.7</text>
+<line data-segment="s51" data-length-mm="6.535" x1="133.346" y1="48.035" x2="133.346" y2="41.5" stroke="#202020" stroke-width="1.1" stroke-linecap="butt"/>
+<text x="126.596" y="45.468">6.5</text>
+<line data-segment="s52" data-length-mm="7.314" x1="133.346" y1="55.349" x2="133.346" y2="48.035" stroke="#202020" stroke-width="1.1" stroke-linecap="butt"/>
+<text x="126.596" y="52.392">7.3</text>
+<line data-segment="s53" data-length-mm="8.693" x1="133.346" y1="48.035" x2="142.039" y2="48.035" stroke="#202020" stroke-width="1.1" stroke-linecap="butt"/>
+<text x="134.993" y="45.885">8.7</text>
+<line data-segment="s55" data-length-mm="8.903" x1="124.443" y1="48.035" x2="133.346" y2="48.035" stroke="#202020" stroke-width="1.1" stroke-linecap="butt"/>
+<text x="126.195" y="45.885">8.9</text>
+<line data-segment="s56" data-length-mm="2.889" x1="75.9" y1="48.035" x2="78.789" y2="48.035" stroke="#202020" stroke-width="2.286" stroke-linecap="butt"/>
+<text x="74.645" y="45.292">2.9</text>
+<line data-segment="s57" data-length-mm="45.653" x1="78.789" y1="48.035" x2="124.443" y2="48.035" stroke="#202020" stroke-width="1.1" stroke-linecap="butt"/>
+<text x="98.016" y="45.885">45.7</text>
+<polygon data-connector="BK1_INN" points="192.326,475.221 195.949,488.744 203.677,486.674 200.053,473.151" fill="#dde6f5" stroke="#202020" stroke-width="0.4"/>
+<text x="164.079" y="471.022">BK1_INN Generic connector 1P</text>
+<polygon data-connector="BK1_INP" points="223.086,487.573 209.086,487.573 209.086,495.573 223.086,495.573" fill="#dde6f5" stroke="#202020" stroke-width="0.4"/>
+<text x="224.586" y="492.273">BK1_INP Generic connector 1P</text>
+<polygon data-connector="BK2_INN" points="74.308,472.915 77.932,486.438 85.659,484.368 82.036,470.845" fill="#dde6f5" stroke="#202020" stroke-width="0.4"/>
+<text x="46.061" y="468.716">BK2_INN Generic connector 1P</text>
+<polygon data-connector="BK2_INP" points="61.9,495.573 75.9,495.573 75.9,487.573 61.9,487.573" fill="#dde6f5" stroke="#202020" stroke-width="0.4"/>
+<text x="10" y="492.273">BK2_INP Generic connector 1P</text>
+<polygon data-connector="LEV_SUP_N" points="143.129,473.917 146.752,487.44 154.48,485.37 150.856,471.847" fill="#dde6f5" stroke="#202020" stroke-width="0.4"/>
+<text x="112.616" y="469.718">LEV_SUP_N Generic connector 1P</text>
+<polygon data-connector="LEV_SUP_P" points="152.51,467.875 156.134,481.398 163.861,479.328 160.237,465.805" fill="#dde6f5" stroke="#202020" stroke-width="0.4"/>
+<text x="121.997" y="463.676">LEV_SUP_P Generic connector 1P</text>
+<polygon data-connector="S1" points="175.207,499.51 166.019,488.947 159.983,494.198 169.171,504.761" fill="#dde6f5" stroke="#202020" stroke-width="0.4"/>
+<text x="166.06" y="505.853">S1 Generic connector 2P</text>
+<polygon data-connector="BK1_OUTN" points="165.223,428.726 151.223,428.726 151.223,436.726 165.223,436.726" fill="#dde6f5" stroke="#202020" stroke-width="0.4"/>
+<text x="166.723" y="433.426">BK1_OUTN Generic connector 1P</text>
+<polygon data-connector="PI_P6" points="74.5,436.726 88.5,436.726 88.5,428.726 74.5,428.726" fill="#dde6f5" stroke="#202020" stroke-width="0.4"/>
+<text x="10" y="433.426">PI_P6 0.1 in pin header / Dupont 1P</text>
+<polygon data-connector="BK1_OUTP" points="172.114,395.976 158.114,395.976 158.114,403.976 172.114,403.976" fill="#dde6f5" stroke="#202020" stroke-width="0.4"/>
+<text x="173.614" y="400.676">BK1_OUTP Generic connector 1P</text>
+<polygon data-connector="PI_P2" points="74.5,403.976 88.5,403.976 88.5,395.976 74.5,395.976" fill="#dde6f5" stroke="#202020" stroke-width="0.4"/>
+<text x="10" y="400.676">PI_P2 0.1 in pin header / Dupont 1P</text>
+<polygon data-connector="BK2_OUTN" points="112.461,371.376 126.461,371.376 126.461,363.376 112.461,363.376" fill="#dde6f5" stroke="#202020" stroke-width="0.4"/>
+<text x="58.761" y="368.076">BK2_OUTN Generic connector 1P</text>
+<polygon data-connector="BK2_OUTP" points="117.372,363.376 103.372,363.376 103.372,371.376 117.372,371.376" fill="#dde6f5" stroke="#202020" stroke-width="0.4"/>
+<text x="118.872" y="368.076">BK2_OUTP Generic connector 1P</text>
+<polygon data-connector="CAP_N" points="157.681,363.376 143.681,363.376 143.681,371.376 157.681,371.376" fill="#dde6f5" stroke="#202020" stroke-width="0.4"/>
+<text x="159.181" y="368.076">CAP_N Generic connector 1P</text>
+<polygon data-connector="CAP_P" points="58.3,371.376 72.3,371.376 72.3,363.376 58.3,363.376" fill="#dde6f5" stroke="#202020" stroke-width="0.4"/>
+<text x="10" y="368.076">CAP_P Generic connector 1P</text>
+<polygon data-connector="SERVO_EXT" points="130.386,328.039 123.386,340.163 130.314,344.163 137.314,332.039" fill="#dde6f5" stroke="#202020" stroke-width="0.4"/>
+<text x="121.1" y="327.275">SERVO_EXT Generic connector 2P</text>
+<polygon data-connector="IMU_GND" points="161.523,293.075 147.523,293.075 147.523,301.075 161.523,301.075" fill="#dde6f5" stroke="#202020" stroke-width="0.4"/>
+<text x="163.023" y="297.775">IMU_GND 0.1 in pin header / Dupont 1P</text>
+<polygon data-connector="PI_P9" points="74.5,301.075 88.5,301.075 88.5,293.075 74.5,293.075" fill="#dde6f5" stroke="#202020" stroke-width="0.4"/>
+<text x="10" y="297.775">PI_P9 0.1 in pin header / Dupont 1P</text>
+<polygon data-connector="IMU_SCL" points="163.571,260.725 149.571,260.725 149.571,268.725 163.571,268.725" fill="#dde6f5" stroke="#202020" stroke-width="0.4"/>
+<text x="165.071" y="265.425">IMU_SCL 0.1 in pin header / Dupont 1P</text>
+<polygon data-connector="PI_P5" points="74.5,268.725 88.5,268.725 88.5,260.725 74.5,260.725" fill="#dde6f5" stroke="#202020" stroke-width="0.4"/>
+<text x="10" y="265.425">PI_P5 0.1 in pin header / Dupont 1P</text>
+<polygon data-connector="IMU_SDA" points="166.226,228.375 152.226,228.375 152.226,236.375 166.226,236.375" fill="#dde6f5" stroke="#202020" stroke-width="0.4"/>
+<text x="167.726" y="233.075">IMU_SDA 0.1 in pin header / Dupont 1P</text>
+<polygon data-connector="PI_P3" points="74.5,236.375 88.5,236.375 88.5,228.375 74.5,228.375" fill="#dde6f5" stroke="#202020" stroke-width="0.4"/>
+<text x="10" y="233.075">PI_P3 0.1 in pin header / Dupont 1P</text>
+<polygon data-connector="IMU_VCC" points="163.771,196.025 149.771,196.025 149.771,204.025 163.771,204.025" fill="#dde6f5" stroke="#202020" stroke-width="0.4"/>
+<text x="165.271" y="200.725">IMU_VCC 0.1 in pin header / Dupont 1P</text>
+<polygon data-connector="PI_P1" points="74.5,204.025 88.5,204.025 88.5,196.025 74.5,196.025" fill="#dde6f5" stroke="#202020" stroke-width="0.4"/>
+<text x="10" y="200.725">PI_P1 0.1 in pin header / Dupont 1P</text>
+<polygon data-connector="JACK" points="217.872,127.886 203.872,127.886 203.872,135.886 217.872,135.886" fill="#dde6f5" stroke="#202020" stroke-width="0.4"/>
+<text x="219.372" y="132.586">JACK Generic connector 2P</text>
+<polygon data-connector="JACK_N" points="187.583,166.175 187.583,152.175 179.583,152.175 179.583,166.175" fill="#dde6f5" stroke="#202020" stroke-width="0.4"/>
+<text x="159.283" y="170.875">JACK_N Generic connector 1P</text>
+<polygon data-connector="LEV_BAT_N" points="65.5,135.886 79.5,135.886 79.5,127.886 65.5,127.886" fill="#dde6f5" stroke="#202020" stroke-width="0.4"/>
+<text x="10" y="132.586">LEV_BAT_N Generic connector 1P</text>
+<polygon data-connector="LEV_BAT_P" points="83.937,114.886 83.937,128.886 91.937,128.886 91.937,114.886" fill="#dde6f5" stroke="#202020" stroke-width="0.4"/>
+<text x="60.937" y="111.586">LEV_BAT_P Generic connector 1P</text>
+<polygon data-connector="PACK_N" points="179.583,104.349 179.583,118.349 187.583,118.349 187.583,104.349" fill="#dde6f5" stroke="#202020" stroke-width="0.4"/>
+<text x="159.283" y="101.049">PACK_N Generic connector 1P</text>
+<polygon data-connector="PACK_P" points="159.032,116.507 169.757,125.506 174.899,119.378 164.174,110.379" fill="#dde6f5" stroke="#202020" stroke-width="0.4"/>
+<text x="117.539" y="111.572">PACK_P Generic connector 1P</text>
+<polygon data-connector="SPL" points="197.828,128.87 183.861,127.896 183.305,135.877 197.271,136.851" fill="#dde6f5" stroke="#202020" stroke-width="0.4"/>
+<text x="198.993" y="133.839">SPL Generic connector 2P</text>
+<polygon data-connector="PI_P11" points="129.346,27.5 129.346,41.5 137.346,41.5 137.346,27.5" fill="#dde6f5" stroke="#202020" stroke-width="0.4"/>
+<text x="100.946" y="24.2">PI_P11 0.1 in pin header / Dupont 1P</text>
+<polygon data-connector="PI_P12" points="137.346,69.349 137.346,55.349 129.346,55.349 129.346,69.349" fill="#dde6f5" stroke="#202020" stroke-width="0.4"/>
+<text x="100.946" y="74.049">PI_P12 0.1 in pin header / Dupont 1P</text>
+<polygon data-connector="PI_P14" points="156.039,44.035 142.039,44.035 142.039,52.035 156.039,52.035" fill="#dde6f5" stroke="#202020" stroke-width="0.4"/>
+<text x="157.539" y="48.735">PI_P14 0.1 in pin header / Dupont 1P</text>
+<polygon data-connector="SIG_EXT" points="61.9,52.035 75.9,52.035 75.9,44.035 61.9,44.035" fill="#dde6f5" stroke="#202020" stroke-width="0.4"/>
+<text x="10" y="48.735">SIG_EXT Generic connector 3P</text>
+<circle data-clamp="n5" cx="100.663" cy="491.573" r="1.5" fill="#ffffff" stroke="#202020" stroke-width="0.4"/>
+<text x="102.663" y="489.573">n5</text>
+<circle data-clamp="n6" cx="113.395" cy="491.573" r="1.5" fill="#ffffff" stroke="#202020" stroke-width="0.4"/>
+<text x="115.395" y="489.573">n6</text>
+<circle data-clamp="n7" cx="113.713" cy="491.573" r="1.5" fill="#ffffff" stroke="#202020" stroke-width="0.4"/>
+<text x="115.713" y="489.573">n7</text>
+<circle data-clamp="n8" cx="127.086" cy="491.573" r="1.5" fill="#ffffff" stroke="#202020" stroke-width="0.4"/>
+<text x="129.086" y="489.573">n8</text>
+<circle data-clamp="n9" cx="128.656" cy="491.573" r="1.5" fill="#ffffff" stroke="#202020" stroke-width="0.4"/>
+<text x="130.656" y="489.573">n9</text>
+<circle data-clamp="n10" cx="143.882" cy="491.573" r="1.5" fill="#ffffff" stroke="#202020" stroke-width="0.4"/>
+<text x="145.882" y="489.573">n10</text>
+<circle data-clamp="n13" cx="167.253" cy="491.573" r="1.5" fill="#ffffff" stroke="#202020" stroke-width="0.4"/>
+<text x="169.253" y="489.573">n13</text>
+<circle data-clamp="n14" cx="178.508" cy="491.573" r="1.5" fill="#ffffff" stroke="#202020" stroke-width="0.4"/>
+<text x="180.508" y="489.573">n14</text>
+<circle data-clamp="n12" cx="179.205" cy="491.573" r="1.5" fill="#ffffff" stroke="#202020" stroke-width="0.4"/>
+<text x="181.205" y="489.573">n12</text>
+<circle data-clamp="n19" cx="111.937" cy="131.886" r="1.5" fill="#ffffff" stroke="#202020" stroke-width="0.4"/>
+<text x="113.937" y="129.886">n19</text>
+<circle data-clamp="n20" cx="135.937" cy="131.886" r="1.5" fill="#ffffff" stroke="#202020" stroke-width="0.4"/>
+<text x="137.937" y="129.886">n20</text>
+<circle data-clamp="n18" cx="78.789" cy="48.035" r="1.5" fill="#ffffff" stroke="#202020" stroke-width="0.4"/>
+<text x="80.789" y="46.035">n18</text>
+<circle data-clamp="n17" cx="124.443" cy="48.035" r="1.5" fill="#ffffff" stroke="#202020" stroke-width="0.4"/>
+<text x="126.443" y="46.035">n17</text>
+<text x="10" y="522.433" font-weight="bold">WIRE LIST (lengths mm; cut = routed + service loop + strip)</text>
+<rect x="10" y="524.053" width="142.2" height="140.4" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="527.725" font-weight="bold">Wire</text>
+<text x="37" y="527.725" font-weight="bold">From</text>
+<text x="60.4" y="527.725" font-weight="bold">To</text>
+<text x="83.8" y="527.725" font-weight="bold">Gauge</text>
+<text x="98.2" y="527.725" font-weight="bold">Color</text>
+<text x="112.6" y="527.725" font-weight="bold">Class</text>
+<text x="127" y="527.725" font-weight="bold">Routed</text>
+<text x="141.4" y="527.725" font-weight="bold">Cut</text>
+<line x1="10" y1="529.453" x2="152.2" y2="529.453" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="533.125">BATT_N_pack</text>
+<text x="37" y="533.125">PACK_N:1</text>
+<text x="60.4" y="533.125">SPL:2</text>
+<text x="83.8" y="533.125">20 AWG</text>
+<text x="98.2" y="533.125">black</text>
+<text x="112.6" y="533.125">power</text>
+<text x="127" y="533.125">13.5</text>
+<text x="141.4" y="533.125">13.5</text>
+<line x1="10" y1="534.853" x2="152.2" y2="534.853" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="538.525">JACK_P</text>
+<text x="37" y="538.525">JACK:1</text>
+<text x="60.4" y="538.525">SPL:1</text>
+<text x="83.8" y="538.525">20 AWG</text>
+<text x="98.2" y="538.525">red</text>
+<text x="112.6" y="538.525">power</text>
+<text x="127" y="538.525">20.3</text>
+<text x="141.4" y="538.525">50.3</text>
+<line x1="10" y1="540.253" x2="152.2" y2="540.253" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="543.925">BATT_P_lever</text>
+<text x="37" y="543.925">SPL:1</text>
+<text x="60.4" y="543.925">LEV_BAT_P:1</text>
+<text x="83.8" y="543.925">20 AWG</text>
+<text x="98.2" y="543.925">red</text>
+<text x="112.6" y="543.925">power</text>
+<text x="127" y="543.925">98.6</text>
+<text x="141.4" y="543.925">128.6</text>
+<line x1="10" y1="545.653" x2="152.2" y2="545.653" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="549.325">BATT_N_lever</text>
+<text x="37" y="549.325">SPL:2</text>
+<text x="60.4" y="549.325">LEV_BAT_N:1</text>
+<text x="83.8" y="549.325">20 AWG</text>
+<text x="98.2" y="549.325">black</text>
+<text x="112.6" y="549.325">power</text>
+<text x="127" y="549.325">104.1</text>
+<text x="141.4" y="549.325">134.1</text>
+<line x1="10" y1="551.053" x2="152.2" y2="551.053" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="554.725">SUP_P</text>
+<text x="37" y="554.725">LEV_SUP_P:1</text>
+<text x="60.4" y="554.725">S1:1</text>
+<text x="83.8" y="554.725">20 AWG</text>
+<text x="98.2" y="554.725">red</text>
+<text x="112.6" y="554.725">power</text>
+<text x="127" y="554.725">11.6</text>
+<text x="141.4" y="554.725">41.6</text>
+<line x1="10" y1="556.453" x2="152.2" y2="556.453" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="560.125">SUP_N</text>
+<text x="37" y="560.125">LEV_SUP_N:1</text>
+<text x="60.4" y="560.125">S1:2</text>
+<text x="83.8" y="560.125">20 AWG</text>
+<text x="98.2" y="560.125">black</text>
+<text x="112.6" y="560.125">power</text>
+<text x="127" y="560.125">16.4</text>
+<text x="141.4" y="560.125">46.4</text>
+<line x1="10" y1="561.853" x2="152.2" y2="561.853" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="565.525">B1IN_P</text>
+<text x="37" y="565.525">S1:1</text>
+<text x="60.4" y="565.525">BK1_INP:1</text>
+<text x="83.8" y="565.525">20 AWG</text>
+<text x="98.2" y="565.525">red</text>
+<text x="112.6" y="565.525">power</text>
+<text x="127" y="565.525">46.1</text>
+<text x="141.4" y="565.525">76.1</text>
+<line x1="10" y1="567.253" x2="152.2" y2="567.253" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="570.925">B1IN_N</text>
+<text x="37" y="570.925">S1:2</text>
+<text x="60.4" y="570.925">BK1_INN:1</text>
+<text x="83.8" y="570.925">20 AWG</text>
+<text x="98.2" y="570.925">black</text>
+<text x="112.6" y="570.925">power</text>
+<text x="127" y="570.925">41.8</text>
+<text x="141.4" y="570.925">71.8</text>
+<line x1="10" y1="572.653" x2="152.2" y2="572.653" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="576.325">B2IN_P</text>
+<text x="37" y="576.325">S1:1</text>
+<text x="60.4" y="576.325">BK2_INP:1</text>
+<text x="83.8" y="576.325">20 AWG</text>
+<text x="98.2" y="576.325">red</text>
+<text x="112.6" y="576.325">power</text>
+<text x="127" y="576.325">87.1</text>
+<text x="141.4" y="576.325">117.1</text>
+<line x1="10" y1="578.053" x2="152.2" y2="578.053" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="581.725">B2IN_N</text>
+<text x="37" y="581.725">S1:2</text>
+<text x="60.4" y="581.725">BK2_INN:1</text>
+<text x="83.8" y="581.725">20 AWG</text>
+<text x="98.2" y="581.725">black</text>
+<text x="112.6" y="581.725">power</text>
+<text x="127" y="581.725">85.9</text>
+<text x="141.4" y="581.725">115.9</text>
+<line x1="10" y1="583.453" x2="152.2" y2="583.453" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="587.125">PI5V_P</text>
+<text x="37" y="587.125">BK1_OUTP:1</text>
+<text x="60.4" y="587.125">PI_P2:1</text>
+<text x="83.8" y="587.125">20 AWG</text>
+<text x="98.2" y="587.125">red</text>
+<text x="112.6" y="587.125">power</text>
+<text x="127" y="587.125">69.6</text>
+<text x="141.4" y="587.125">99.6</text>
+<line x1="10" y1="588.853" x2="152.2" y2="588.853" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="592.525">PI5V_N</text>
+<text x="37" y="592.525">BK1_OUTN:1</text>
+<text x="60.4" y="592.525">PI_P6:1</text>
+<text x="83.8" y="592.525">20 AWG</text>
+<text x="98.2" y="592.525">black</text>
+<text x="112.6" y="592.525">power</text>
+<text x="127" y="592.525">62.7</text>
+<text x="141.4" y="592.525">92.7</text>
+<line x1="10" y1="594.253" x2="152.2" y2="594.253" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="597.925">SERVO_P</text>
+<text x="37" y="597.925">BK2_OUTP:1</text>
+<text x="60.4" y="597.925">SERVO_EXT:1</text>
+<text x="83.8" y="597.925">22 AWG</text>
+<text x="98.2" y="597.925">red</text>
+<text x="112.6" y="597.925">power</text>
+<text x="127" y="597.925">38.0</text>
+<text x="141.4" y="597.925">68.0</text>
+<line x1="10" y1="599.653" x2="152.2" y2="599.653" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="603.325">SERVO_N</text>
+<text x="37" y="603.325">BK2_OUTN:1</text>
+<text x="60.4" y="603.325">SERVO_EXT:2</text>
+<text x="83.8" y="603.325">22 AWG</text>
+<text x="98.2" y="603.325">black</text>
+<text x="112.6" y="603.325">power</text>
+<text x="127" y="603.325">43.3</text>
+<text x="141.4" y="603.325">73.3</text>
+<line x1="10" y1="605.053" x2="152.2" y2="605.053" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="608.725">CAP_P</text>
+<text x="37" y="608.725">CAP_P:1</text>
+<text x="60.4" y="608.725">BK2_OUTP:1</text>
+<text x="83.8" y="608.725">22 AWG</text>
+<text x="98.2" y="608.725">red</text>
+<text x="112.6" y="608.725">power</text>
+<text x="127" y="608.725">31.1</text>
+<text x="141.4" y="608.725">61.1</text>
+<line x1="10" y1="610.453" x2="152.2" y2="610.453" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="614.125">CAP_N</text>
+<text x="37" y="614.125">CAP_N:1</text>
+<text x="60.4" y="614.125">BK2_OUTN:1</text>
+<text x="83.8" y="614.125">22 AWG</text>
+<text x="98.2" y="614.125">black</text>
+<text x="112.6" y="614.125">power</text>
+<text x="127" y="614.125">17.2</text>
+<text x="141.4" y="614.125">47.2</text>
+<line x1="10" y1="615.853" x2="152.2" y2="615.853" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="619.525">IMU_VCC</text>
+<text x="37" y="619.525">PI_P1:1</text>
+<text x="60.4" y="619.525">IMU_VCC:1</text>
+<text x="83.8" y="619.525">26 AWG</text>
+<text x="98.2" y="619.525">red</text>
+<text x="112.6" y="619.525">signal</text>
+<text x="127" y="619.525">61.3</text>
+<text x="141.4" y="619.525">91.3</text>
+<line x1="10" y1="621.253" x2="152.2" y2="621.253" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="624.925">IMU_SDA</text>
+<text x="37" y="624.925">PI_P3:1</text>
+<text x="60.4" y="624.925">IMU_SDA:1</text>
+<text x="83.8" y="624.925">26 AWG</text>
+<text x="98.2" y="624.925">green</text>
+<text x="112.6" y="624.925">data</text>
+<text x="127" y="624.925">63.7</text>
+<text x="141.4" y="624.925">93.7</text>
+<line x1="10" y1="626.653" x2="152.2" y2="626.653" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="630.325">IMU_SCL</text>
+<text x="37" y="630.325">PI_P5:1</text>
+<text x="60.4" y="630.325">IMU_SCL:1</text>
+<text x="83.8" y="630.325">26 AWG</text>
+<text x="98.2" y="630.325">yellow</text>
+<text x="112.6" y="630.325">data</text>
+<text x="127" y="630.325">61.1</text>
+<text x="141.4" y="630.325">91.1</text>
+<line x1="10" y1="632.053" x2="152.2" y2="632.053" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="635.725">IMU_GND</text>
+<text x="37" y="635.725">PI_P9:1</text>
+<text x="60.4" y="635.725">IMU_GND:1</text>
+<text x="83.8" y="635.725">26 AWG</text>
+<text x="98.2" y="635.725">black</text>
+<text x="112.6" y="635.725">ground</text>
+<text x="127" y="635.725">59.0</text>
+<text x="141.4" y="635.725">89.0</text>
+<line x1="10" y1="637.453" x2="152.2" y2="637.453" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="641.125">ARM</text>
+<text x="37" y="641.125">PI_P11:1</text>
+<text x="60.4" y="641.125">SIG_EXT:1</text>
+<text x="83.8" y="641.125">26 AWG</text>
+<text x="98.2" y="641.125">white</text>
+<text x="112.6" y="641.125">signal</text>
+<text x="127" y="641.125">64.0</text>
+<text x="141.4" y="641.125">94.0</text>
+<line x1="10" y1="642.853" x2="152.2" y2="642.853" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="646.525">PWM</text>
+<text x="37" y="646.525">PI_P12:1</text>
+<text x="60.4" y="646.525">SIG_EXT:2</text>
+<text x="83.8" y="646.525">26 AWG</text>
+<text x="98.2" y="646.525">orange</text>
+<text x="112.6" y="646.525">signal</text>
+<text x="127" y="646.525">64.8</text>
+<text x="141.4" y="646.525">94.8</text>
+<line x1="10" y1="648.253" x2="152.2" y2="648.253" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="651.925">ARM_GND</text>
+<text x="37" y="651.925">PI_P14:1</text>
+<text x="60.4" y="651.925">SIG_EXT:3</text>
+<text x="83.8" y="651.925">26 AWG</text>
+<text x="98.2" y="651.925">black</text>
+<text x="112.6" y="651.925">ground</text>
+<text x="127" y="651.925">66.1</text>
+<text x="141.4" y="651.925">96.1</text>
+<line x1="10" y1="653.653" x2="152.2" y2="653.653" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="657.325">JACK_N</text>
+<text x="37" y="657.325">JACK_N:1</text>
+<text x="60.4" y="657.325">SPL:2</text>
+<text x="83.8" y="657.325">20 AWG</text>
+<text x="98.2" y="657.325">black</text>
+<text x="112.6" y="657.325">power</text>
+<text x="127" y="657.325">20.3</text>
+<text x="141.4" y="657.325">50.3</text>
+<line x1="10" y1="659.053" x2="152.2" y2="659.053" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="662.725">BATT_P_pack</text>
+<text x="37" y="662.725">PACK_P:1</text>
+<text x="60.4" y="662.725">SPL:1</text>
+<text x="83.8" y="662.725">20 AWG</text>
+<text x="98.2" y="662.725">red</text>
+<text x="112.6" y="662.725">power</text>
+<text x="127" y="662.725">14.7</text>
+<text x="141.4" y="662.725">14.7</text>
+<line x1="10" y1="664.453" x2="152.2" y2="664.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="35.2" y1="524.053" x2="35.2" y2="664.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="58.6" y1="524.053" x2="58.6" y2="664.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="82" y1="524.053" x2="82" y2="664.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="96.4" y1="524.053" x2="96.4" y2="664.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="110.8" y1="524.053" x2="110.8" y2="664.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="125.2" y1="524.053" x2="125.2" y2="664.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="139.6" y1="524.053" x2="139.6" y2="664.453" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="674.233" font-weight="bold">PINOUT PACK_P - Generic connector 1P</text>
+<rect x="10" y="675.853" width="72" height="10.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="679.525" font-weight="bold">Pin</text>
+<text x="20.8" y="679.525" font-weight="bold">Signal</text>
+<text x="35.2" y="679.525" font-weight="bold">Wire</text>
+<text x="58.6" y="679.525" font-weight="bold">To</text>
+<text x="71.2" y="679.525" font-weight="bold">Color</text>
+<line x1="10" y1="681.253" x2="82" y2="681.253" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="684.925">1</text>
+<text x="20.8" y="684.925">VBAT+</text>
+<text x="35.2" y="684.925">BATT_P_pack</text>
+<text x="58.6" y="684.925">SPL:1</text>
+<text x="71.2" y="684.925">red</text>
+<line x1="10" y1="686.653" x2="82" y2="686.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="19" y1="675.853" x2="19" y2="686.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="33.4" y1="675.853" x2="33.4" y2="686.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="56.8" y1="675.853" x2="56.8" y2="686.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="69.4" y1="675.853" x2="69.4" y2="686.653" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="690.433" font-weight="bold">FROM-TO PACK_P</text>
+<rect x="10" y="692.053" width="79.2" height="10.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="695.725" font-weight="bold">To</text>
+<text x="20.8" y="695.725" font-weight="bold">Wire</text>
+<text x="44.2" y="695.725" font-weight="bold">From pin</text>
+<text x="62.2" y="695.725" font-weight="bold">To pin</text>
+<text x="76.6" y="695.725" font-weight="bold">Signal</text>
+<line x1="10" y1="697.453" x2="89.2" y2="697.453" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="701.125">SPL</text>
+<text x="20.8" y="701.125">BATT_P_pack</text>
+<text x="44.2" y="701.125">1</text>
+<text x="62.2" y="701.125">1</text>
+<text x="76.6" y="701.125">VBAT+</text>
+<line x1="10" y1="702.853" x2="89.2" y2="702.853" stroke="#202020" stroke-width="0.2"/>
+<line x1="19" y1="692.053" x2="19" y2="702.853" stroke="#202020" stroke-width="0.2"/>
+<line x1="42.4" y1="692.053" x2="42.4" y2="702.853" stroke="#202020" stroke-width="0.2"/>
+<line x1="60.4" y1="692.053" x2="60.4" y2="702.853" stroke="#202020" stroke-width="0.2"/>
+<line x1="74.8" y1="692.053" x2="74.8" y2="702.853" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="712.633" font-weight="bold">PINOUT PACK_N - Generic connector 1P</text>
+<rect x="10" y="714.253" width="72" height="10.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="717.925" font-weight="bold">Pin</text>
+<text x="20.8" y="717.925" font-weight="bold">Signal</text>
+<text x="35.2" y="717.925" font-weight="bold">Wire</text>
+<text x="58.6" y="717.925" font-weight="bold">To</text>
+<text x="71.2" y="717.925" font-weight="bold">Color</text>
+<line x1="10" y1="719.653" x2="82" y2="719.653" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="723.325">1</text>
+<text x="20.8" y="723.325">GND</text>
+<text x="35.2" y="723.325">BATT_N_pack</text>
+<text x="58.6" y="723.325">SPL:2</text>
+<text x="71.2" y="723.325">black</text>
+<line x1="10" y1="725.053" x2="82" y2="725.053" stroke="#202020" stroke-width="0.2"/>
+<line x1="19" y1="714.253" x2="19" y2="725.053" stroke="#202020" stroke-width="0.2"/>
+<line x1="33.4" y1="714.253" x2="33.4" y2="725.053" stroke="#202020" stroke-width="0.2"/>
+<line x1="56.8" y1="714.253" x2="56.8" y2="725.053" stroke="#202020" stroke-width="0.2"/>
+<line x1="69.4" y1="714.253" x2="69.4" y2="725.053" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="728.833" font-weight="bold">FROM-TO PACK_N</text>
+<rect x="10" y="730.453" width="79.2" height="10.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="734.125" font-weight="bold">To</text>
+<text x="20.8" y="734.125" font-weight="bold">Wire</text>
+<text x="44.2" y="734.125" font-weight="bold">From pin</text>
+<text x="62.2" y="734.125" font-weight="bold">To pin</text>
+<text x="76.6" y="734.125" font-weight="bold">Signal</text>
+<line x1="10" y1="735.853" x2="89.2" y2="735.853" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="739.525">SPL</text>
+<text x="20.8" y="739.525">BATT_N_pack</text>
+<text x="44.2" y="739.525">1</text>
+<text x="62.2" y="739.525">2</text>
+<text x="76.6" y="739.525">GND</text>
+<line x1="10" y1="741.253" x2="89.2" y2="741.253" stroke="#202020" stroke-width="0.2"/>
+<line x1="19" y1="730.453" x2="19" y2="741.253" stroke="#202020" stroke-width="0.2"/>
+<line x1="42.4" y1="730.453" x2="42.4" y2="741.253" stroke="#202020" stroke-width="0.2"/>
+<line x1="60.4" y1="730.453" x2="60.4" y2="741.253" stroke="#202020" stroke-width="0.2"/>
+<line x1="74.8" y1="730.453" x2="74.8" y2="741.253" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="751.033" font-weight="bold">PINOUT SPL - Generic connector 2P</text>
+<rect x="10" y="752.653" width="84.6" height="37.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="756.325" font-weight="bold">Pin</text>
+<text x="20.8" y="756.325" font-weight="bold">Signal</text>
+<text x="35.2" y="756.325" font-weight="bold">Wire</text>
+<text x="60.4" y="756.325" font-weight="bold">To</text>
+<text x="83.8" y="756.325" font-weight="bold">Color</text>
+<line x1="10" y1="758.053" x2="94.6" y2="758.053" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="761.725">1</text>
+<text x="20.8" y="761.725">VBAT+</text>
+<text x="35.2" y="761.725">JACK_P</text>
+<text x="60.4" y="761.725">JACK:1</text>
+<text x="83.8" y="761.725">red</text>
+<line x1="10" y1="763.453" x2="94.6" y2="763.453" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="767.125">1</text>
+<text x="20.8" y="767.125">VBAT+</text>
+<text x="35.2" y="767.125">BATT_P_lever</text>
+<text x="60.4" y="767.125">LEV_BAT_P:1</text>
+<text x="83.8" y="767.125">red</text>
+<line x1="10" y1="768.853" x2="94.6" y2="768.853" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="772.525">1</text>
+<text x="20.8" y="772.525">VBAT+</text>
+<text x="35.2" y="772.525">BATT_P_pack</text>
+<text x="60.4" y="772.525">PACK_P:1</text>
+<text x="83.8" y="772.525">red</text>
+<line x1="10" y1="774.253" x2="94.6" y2="774.253" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="777.925">2</text>
+<text x="20.8" y="777.925">GND</text>
+<text x="35.2" y="777.925">BATT_N_pack</text>
+<text x="60.4" y="777.925">PACK_N:1</text>
+<text x="83.8" y="777.925">black</text>
+<line x1="10" y1="779.653" x2="94.6" y2="779.653" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="783.325">2</text>
+<text x="20.8" y="783.325">GND</text>
+<text x="35.2" y="783.325">BATT_N_lever</text>
+<text x="60.4" y="783.325">LEV_BAT_N:1</text>
+<text x="83.8" y="783.325">black</text>
+<line x1="10" y1="785.053" x2="94.6" y2="785.053" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="788.725">2</text>
+<text x="20.8" y="788.725">GND</text>
+<text x="35.2" y="788.725">JACK_N</text>
+<text x="60.4" y="788.725">JACK_N:1</text>
+<text x="83.8" y="788.725">black</text>
+<line x1="10" y1="790.453" x2="94.6" y2="790.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="19" y1="752.653" x2="19" y2="790.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="33.4" y1="752.653" x2="33.4" y2="790.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="58.6" y1="752.653" x2="58.6" y2="790.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="82" y1="752.653" x2="82" y2="790.453" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="794.233" font-weight="bold">FROM-TO SPL</text>
+<rect x="10" y="795.853" width="91.8" height="37.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="799.525" font-weight="bold">To</text>
+<text x="31.6" y="799.525" font-weight="bold">Wire</text>
+<text x="56.8" y="799.525" font-weight="bold">From pin</text>
+<text x="74.8" y="799.525" font-weight="bold">To pin</text>
+<text x="89.2" y="799.525" font-weight="bold">Signal</text>
+<line x1="10" y1="801.253" x2="101.8" y2="801.253" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="804.925">JACK</text>
+<text x="31.6" y="804.925">JACK_P</text>
+<text x="56.8" y="804.925">1</text>
+<text x="74.8" y="804.925">1</text>
+<text x="89.2" y="804.925">VBAT+</text>
+<line x1="10" y1="806.653" x2="101.8" y2="806.653" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="810.325">JACK_N</text>
+<text x="31.6" y="810.325">JACK_N</text>
+<text x="56.8" y="810.325">2</text>
+<text x="74.8" y="810.325">1</text>
+<text x="89.2" y="810.325">GND</text>
+<line x1="10" y1="812.053" x2="101.8" y2="812.053" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="815.725">LEV_BAT_N</text>
+<text x="31.6" y="815.725">BATT_N_lever</text>
+<text x="56.8" y="815.725">2</text>
+<text x="74.8" y="815.725">1</text>
+<text x="89.2" y="815.725">GND</text>
+<line x1="10" y1="817.453" x2="101.8" y2="817.453" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="821.125">LEV_BAT_P</text>
+<text x="31.6" y="821.125">BATT_P_lever</text>
+<text x="56.8" y="821.125">1</text>
+<text x="74.8" y="821.125">1</text>
+<text x="89.2" y="821.125">VBAT+</text>
+<line x1="10" y1="822.853" x2="101.8" y2="822.853" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="826.525">PACK_N</text>
+<text x="31.6" y="826.525">BATT_N_pack</text>
+<text x="56.8" y="826.525">2</text>
+<text x="74.8" y="826.525">1</text>
+<text x="89.2" y="826.525">GND</text>
+<line x1="10" y1="828.253" x2="101.8" y2="828.253" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="831.925">PACK_P</text>
+<text x="31.6" y="831.925">BATT_P_pack</text>
+<text x="56.8" y="831.925">1</text>
+<text x="74.8" y="831.925">1</text>
+<text x="89.2" y="831.925">VBAT+</text>
+<line x1="10" y1="833.653" x2="101.8" y2="833.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="29.8" y1="795.853" x2="29.8" y2="833.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="55" y1="795.853" x2="55" y2="833.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="73" y1="795.853" x2="73" y2="833.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="87.4" y1="795.853" x2="87.4" y2="833.653" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="843.433" font-weight="bold">PINOUT JACK - Generic connector 2P</text>
+<rect x="10" y="845.053" width="63" height="16.2" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="848.725" font-weight="bold">Pin</text>
+<text x="20.8" y="848.725" font-weight="bold">Signal</text>
+<text x="35.2" y="848.725" font-weight="bold">Wire</text>
+<text x="49.6" y="848.725" font-weight="bold">To</text>
+<text x="62.2" y="848.725" font-weight="bold">Color</text>
+<line x1="10" y1="850.453" x2="73" y2="850.453" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="854.125">1</text>
+<text x="20.8" y="854.125">VBAT+</text>
+<text x="35.2" y="854.125">JACK_P</text>
+<text x="49.6" y="854.125">SPL:1</text>
+<text x="62.2" y="854.125">red</text>
+<line x1="10" y1="855.853" x2="73" y2="855.853" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="859.525">2</text>
+<text x="20.8" y="859.525">GND</text>
+<text x="35.2" y="859.525">-</text>
+<text x="49.6" y="859.525">-</text>
+<text x="62.2" y="859.525">-</text>
+<line x1="10" y1="861.253" x2="73" y2="861.253" stroke="#202020" stroke-width="0.2"/>
+<line x1="19" y1="845.053" x2="19" y2="861.253" stroke="#202020" stroke-width="0.2"/>
+<line x1="33.4" y1="845.053" x2="33.4" y2="861.253" stroke="#202020" stroke-width="0.2"/>
+<line x1="47.8" y1="845.053" x2="47.8" y2="861.253" stroke="#202020" stroke-width="0.2"/>
+<line x1="60.4" y1="845.053" x2="60.4" y2="861.253" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="865.033" font-weight="bold">FROM-TO JACK</text>
+<rect x="10" y="866.653" width="70.2" height="10.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="870.325" font-weight="bold">To</text>
+<text x="20.8" y="870.325" font-weight="bold">Wire</text>
+<text x="35.2" y="870.325" font-weight="bold">From pin</text>
+<text x="53.2" y="870.325" font-weight="bold">To pin</text>
+<text x="67.6" y="870.325" font-weight="bold">Signal</text>
+<line x1="10" y1="872.053" x2="80.2" y2="872.053" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="875.725">SPL</text>
+<text x="20.8" y="875.725">JACK_P</text>
+<text x="35.2" y="875.725">1</text>
+<text x="53.2" y="875.725">1</text>
+<text x="67.6" y="875.725">VBAT+</text>
+<line x1="10" y1="877.453" x2="80.2" y2="877.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="19" y1="866.653" x2="19" y2="877.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="33.4" y1="866.653" x2="33.4" y2="877.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="51.4" y1="866.653" x2="51.4" y2="877.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="65.8" y1="866.653" x2="65.8" y2="877.453" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="887.233" font-weight="bold">PINOUT LEV_BAT_P - Generic connector 1P</text>
+<rect x="10" y="888.853" width="73.8" height="10.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="892.525" font-weight="bold">Pin</text>
+<text x="20.8" y="892.525" font-weight="bold">Signal</text>
+<text x="35.2" y="892.525" font-weight="bold">Wire</text>
+<text x="60.4" y="892.525" font-weight="bold">To</text>
+<text x="73" y="892.525" font-weight="bold">Color</text>
+<line x1="10" y1="894.253" x2="83.8" y2="894.253" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="897.925">1</text>
+<text x="20.8" y="897.925">VBAT+</text>
+<text x="35.2" y="897.925">BATT_P_lever</text>
+<text x="60.4" y="897.925">SPL:1</text>
+<text x="73" y="897.925">red</text>
+<line x1="10" y1="899.653" x2="83.8" y2="899.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="19" y1="888.853" x2="19" y2="899.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="33.4" y1="888.853" x2="33.4" y2="899.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="58.6" y1="888.853" x2="58.6" y2="899.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="71.2" y1="888.853" x2="71.2" y2="899.653" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="903.433" font-weight="bold">FROM-TO LEV_BAT_P</text>
+<rect x="10" y="905.053" width="81" height="10.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="908.725" font-weight="bold">To</text>
+<text x="20.8" y="908.725" font-weight="bold">Wire</text>
+<text x="46" y="908.725" font-weight="bold">From pin</text>
+<text x="64" y="908.725" font-weight="bold">To pin</text>
+<text x="78.4" y="908.725" font-weight="bold">Signal</text>
+<line x1="10" y1="910.453" x2="91" y2="910.453" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="914.125">SPL</text>
+<text x="20.8" y="914.125">BATT_P_lever</text>
+<text x="46" y="914.125">1</text>
+<text x="64" y="914.125">1</text>
+<text x="78.4" y="914.125">VBAT+</text>
+<line x1="10" y1="915.853" x2="91" y2="915.853" stroke="#202020" stroke-width="0.2"/>
+<line x1="19" y1="905.053" x2="19" y2="915.853" stroke="#202020" stroke-width="0.2"/>
+<line x1="44.2" y1="905.053" x2="44.2" y2="915.853" stroke="#202020" stroke-width="0.2"/>
+<line x1="62.2" y1="905.053" x2="62.2" y2="915.853" stroke="#202020" stroke-width="0.2"/>
+<line x1="76.6" y1="905.053" x2="76.6" y2="915.853" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="925.633" font-weight="bold">PINOUT LEV_BAT_N - Generic connector 1P</text>
+<rect x="10" y="927.253" width="73.8" height="10.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="930.925" font-weight="bold">Pin</text>
+<text x="20.8" y="930.925" font-weight="bold">Signal</text>
+<text x="35.2" y="930.925" font-weight="bold">Wire</text>
+<text x="60.4" y="930.925" font-weight="bold">To</text>
+<text x="73" y="930.925" font-weight="bold">Color</text>
+<line x1="10" y1="932.653" x2="83.8" y2="932.653" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="936.325">1</text>
+<text x="20.8" y="936.325">GND</text>
+<text x="35.2" y="936.325">BATT_N_lever</text>
+<text x="60.4" y="936.325">SPL:2</text>
+<text x="73" y="936.325">black</text>
+<line x1="10" y1="938.053" x2="83.8" y2="938.053" stroke="#202020" stroke-width="0.2"/>
+<line x1="19" y1="927.253" x2="19" y2="938.053" stroke="#202020" stroke-width="0.2"/>
+<line x1="33.4" y1="927.253" x2="33.4" y2="938.053" stroke="#202020" stroke-width="0.2"/>
+<line x1="58.6" y1="927.253" x2="58.6" y2="938.053" stroke="#202020" stroke-width="0.2"/>
+<line x1="71.2" y1="927.253" x2="71.2" y2="938.053" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="941.833" font-weight="bold">FROM-TO LEV_BAT_N</text>
+<rect x="10" y="943.453" width="81" height="10.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="947.125" font-weight="bold">To</text>
+<text x="20.8" y="947.125" font-weight="bold">Wire</text>
+<text x="46" y="947.125" font-weight="bold">From pin</text>
+<text x="64" y="947.125" font-weight="bold">To pin</text>
+<text x="78.4" y="947.125" font-weight="bold">Signal</text>
+<line x1="10" y1="948.853" x2="91" y2="948.853" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="952.525">SPL</text>
+<text x="20.8" y="952.525">BATT_N_lever</text>
+<text x="46" y="952.525">1</text>
+<text x="64" y="952.525">2</text>
+<text x="78.4" y="952.525">GND</text>
+<line x1="10" y1="954.253" x2="91" y2="954.253" stroke="#202020" stroke-width="0.2"/>
+<line x1="19" y1="943.453" x2="19" y2="954.253" stroke="#202020" stroke-width="0.2"/>
+<line x1="44.2" y1="943.453" x2="44.2" y2="954.253" stroke="#202020" stroke-width="0.2"/>
+<line x1="62.2" y1="943.453" x2="62.2" y2="954.253" stroke="#202020" stroke-width="0.2"/>
+<line x1="76.6" y1="943.453" x2="76.6" y2="954.253" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="964.033" font-weight="bold">PINOUT LEV_SUP_P - Generic connector 1P</text>
+<rect x="10" y="965.653" width="59.4" height="10.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="969.325" font-weight="bold">Pin</text>
+<text x="20.8" y="969.325" font-weight="bold">Signal</text>
+<text x="35.2" y="969.325" font-weight="bold">Wire</text>
+<text x="47.8" y="969.325" font-weight="bold">To</text>
+<text x="58.6" y="969.325" font-weight="bold">Color</text>
+<line x1="10" y1="971.053" x2="69.4" y2="971.053" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="974.725">1</text>
+<text x="20.8" y="974.725">VBAT+</text>
+<text x="35.2" y="974.725">SUP_P</text>
+<text x="47.8" y="974.725">S1:1</text>
+<text x="58.6" y="974.725">red</text>
+<line x1="10" y1="976.453" x2="69.4" y2="976.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="19" y1="965.653" x2="19" y2="976.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="33.4" y1="965.653" x2="33.4" y2="976.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="46" y1="965.653" x2="46" y2="976.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="56.8" y1="965.653" x2="56.8" y2="976.453" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="980.233" font-weight="bold">FROM-TO LEV_SUP_P</text>
+<rect x="10" y="981.853" width="66.6" height="10.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="985.525" font-weight="bold">To</text>
+<text x="19" y="985.525" font-weight="bold">Wire</text>
+<text x="31.6" y="985.525" font-weight="bold">From pin</text>
+<text x="49.6" y="985.525" font-weight="bold">To pin</text>
+<text x="64" y="985.525" font-weight="bold">Signal</text>
+<line x1="10" y1="987.253" x2="76.6" y2="987.253" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="990.925">S1</text>
+<text x="19" y="990.925">SUP_P</text>
+<text x="31.6" y="990.925">1</text>
+<text x="49.6" y="990.925">1</text>
+<text x="64" y="990.925">VBAT+</text>
+<line x1="10" y1="992.653" x2="76.6" y2="992.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="17.2" y1="981.853" x2="17.2" y2="992.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="29.8" y1="981.853" x2="29.8" y2="992.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="47.8" y1="981.853" x2="47.8" y2="992.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="62.2" y1="981.853" x2="62.2" y2="992.653" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="1002.433" font-weight="bold">PINOUT LEV_SUP_N - Generic connector 1P</text>
+<rect x="10" y="1004.053" width="59.4" height="10.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="1007.725" font-weight="bold">Pin</text>
+<text x="20.8" y="1007.725" font-weight="bold">Signal</text>
+<text x="35.2" y="1007.725" font-weight="bold">Wire</text>
+<text x="47.8" y="1007.725" font-weight="bold">To</text>
+<text x="58.6" y="1007.725" font-weight="bold">Color</text>
+<line x1="10" y1="1009.453" x2="69.4" y2="1009.453" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1013.125">1</text>
+<text x="20.8" y="1013.125">GND</text>
+<text x="35.2" y="1013.125">SUP_N</text>
+<text x="47.8" y="1013.125">S1:2</text>
+<text x="58.6" y="1013.125">black</text>
+<line x1="10" y1="1014.853" x2="69.4" y2="1014.853" stroke="#202020" stroke-width="0.2"/>
+<line x1="19" y1="1004.053" x2="19" y2="1014.853" stroke="#202020" stroke-width="0.2"/>
+<line x1="33.4" y1="1004.053" x2="33.4" y2="1014.853" stroke="#202020" stroke-width="0.2"/>
+<line x1="46" y1="1004.053" x2="46" y2="1014.853" stroke="#202020" stroke-width="0.2"/>
+<line x1="56.8" y1="1004.053" x2="56.8" y2="1014.853" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="1018.633" font-weight="bold">FROM-TO LEV_SUP_N</text>
+<rect x="10" y="1020.253" width="66.6" height="10.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="1023.925" font-weight="bold">To</text>
+<text x="19" y="1023.925" font-weight="bold">Wire</text>
+<text x="31.6" y="1023.925" font-weight="bold">From pin</text>
+<text x="49.6" y="1023.925" font-weight="bold">To pin</text>
+<text x="64" y="1023.925" font-weight="bold">Signal</text>
+<line x1="10" y1="1025.653" x2="76.6" y2="1025.653" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1029.325">S1</text>
+<text x="19" y="1029.325">SUP_N</text>
+<text x="31.6" y="1029.325">1</text>
+<text x="49.6" y="1029.325">2</text>
+<text x="64" y="1029.325">GND</text>
+<line x1="10" y1="1031.053" x2="76.6" y2="1031.053" stroke="#202020" stroke-width="0.2"/>
+<line x1="17.2" y1="1020.253" x2="17.2" y2="1031.053" stroke="#202020" stroke-width="0.2"/>
+<line x1="29.8" y1="1020.253" x2="29.8" y2="1031.053" stroke="#202020" stroke-width="0.2"/>
+<line x1="47.8" y1="1020.253" x2="47.8" y2="1031.053" stroke="#202020" stroke-width="0.2"/>
+<line x1="62.2" y1="1020.253" x2="62.2" y2="1031.053" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="1040.833" font-weight="bold">PINOUT S1 - Generic connector 2P</text>
+<rect x="10" y="1042.453" width="73.8" height="37.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="1046.125" font-weight="bold">Pin</text>
+<text x="20.8" y="1046.125" font-weight="bold">Signal</text>
+<text x="35.2" y="1046.125" font-weight="bold">Wire</text>
+<text x="49.6" y="1046.125" font-weight="bold">To</text>
+<text x="73" y="1046.125" font-weight="bold">Color</text>
+<line x1="10" y1="1047.853" x2="83.8" y2="1047.853" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1051.525">1</text>
+<text x="20.8" y="1051.525">VBAT+</text>
+<text x="35.2" y="1051.525">SUP_P</text>
+<text x="49.6" y="1051.525">LEV_SUP_P:1</text>
+<text x="73" y="1051.525">red</text>
+<line x1="10" y1="1053.253" x2="83.8" y2="1053.253" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1056.925">1</text>
+<text x="20.8" y="1056.925">VBAT+</text>
+<text x="35.2" y="1056.925">B1IN_P</text>
+<text x="49.6" y="1056.925">BK1_INP:1</text>
+<text x="73" y="1056.925">red</text>
+<line x1="10" y1="1058.653" x2="83.8" y2="1058.653" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1062.325">1</text>
+<text x="20.8" y="1062.325">VBAT+</text>
+<text x="35.2" y="1062.325">B2IN_P</text>
+<text x="49.6" y="1062.325">BK2_INP:1</text>
+<text x="73" y="1062.325">red</text>
+<line x1="10" y1="1064.053" x2="83.8" y2="1064.053" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1067.725">2</text>
+<text x="20.8" y="1067.725">GND</text>
+<text x="35.2" y="1067.725">SUP_N</text>
+<text x="49.6" y="1067.725">LEV_SUP_N:1</text>
+<text x="73" y="1067.725">black</text>
+<line x1="10" y1="1069.453" x2="83.8" y2="1069.453" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1073.125">2</text>
+<text x="20.8" y="1073.125">GND</text>
+<text x="35.2" y="1073.125">B1IN_N</text>
+<text x="49.6" y="1073.125">BK1_INN:1</text>
+<text x="73" y="1073.125">black</text>
+<line x1="10" y1="1074.853" x2="83.8" y2="1074.853" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1078.525">2</text>
+<text x="20.8" y="1078.525">GND</text>
+<text x="35.2" y="1078.525">B2IN_N</text>
+<text x="49.6" y="1078.525">BK2_INN:1</text>
+<text x="73" y="1078.525">black</text>
+<line x1="10" y1="1080.253" x2="83.8" y2="1080.253" stroke="#202020" stroke-width="0.2"/>
+<line x1="19" y1="1042.453" x2="19" y2="1080.253" stroke="#202020" stroke-width="0.2"/>
+<line x1="33.4" y1="1042.453" x2="33.4" y2="1080.253" stroke="#202020" stroke-width="0.2"/>
+<line x1="47.8" y1="1042.453" x2="47.8" y2="1080.253" stroke="#202020" stroke-width="0.2"/>
+<line x1="71.2" y1="1042.453" x2="71.2" y2="1080.253" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="1084.033" font-weight="bold">FROM-TO S1</text>
+<rect x="10" y="1085.653" width="81" height="37.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="1089.325" font-weight="bold">To</text>
+<text x="31.6" y="1089.325" font-weight="bold">Wire</text>
+<text x="46" y="1089.325" font-weight="bold">From pin</text>
+<text x="64" y="1089.325" font-weight="bold">To pin</text>
+<text x="78.4" y="1089.325" font-weight="bold">Signal</text>
+<line x1="10" y1="1091.053" x2="91" y2="1091.053" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1094.725">BK1_INN</text>
+<text x="31.6" y="1094.725">B1IN_N</text>
+<text x="46" y="1094.725">2</text>
+<text x="64" y="1094.725">1</text>
+<text x="78.4" y="1094.725">GND</text>
+<line x1="10" y1="1096.453" x2="91" y2="1096.453" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1100.125">BK1_INP</text>
+<text x="31.6" y="1100.125">B1IN_P</text>
+<text x="46" y="1100.125">1</text>
+<text x="64" y="1100.125">1</text>
+<text x="78.4" y="1100.125">VBAT+</text>
+<line x1="10" y1="1101.853" x2="91" y2="1101.853" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1105.525">BK2_INN</text>
+<text x="31.6" y="1105.525">B2IN_N</text>
+<text x="46" y="1105.525">2</text>
+<text x="64" y="1105.525">1</text>
+<text x="78.4" y="1105.525">GND</text>
+<line x1="10" y1="1107.253" x2="91" y2="1107.253" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1110.925">BK2_INP</text>
+<text x="31.6" y="1110.925">B2IN_P</text>
+<text x="46" y="1110.925">1</text>
+<text x="64" y="1110.925">1</text>
+<text x="78.4" y="1110.925">VBAT+</text>
+<line x1="10" y1="1112.653" x2="91" y2="1112.653" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1116.325">LEV_SUP_N</text>
+<text x="31.6" y="1116.325">SUP_N</text>
+<text x="46" y="1116.325">2</text>
+<text x="64" y="1116.325">1</text>
+<text x="78.4" y="1116.325">GND</text>
+<line x1="10" y1="1118.053" x2="91" y2="1118.053" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1121.725">LEV_SUP_P</text>
+<text x="31.6" y="1121.725">SUP_P</text>
+<text x="46" y="1121.725">1</text>
+<text x="64" y="1121.725">1</text>
+<text x="78.4" y="1121.725">VBAT+</text>
+<line x1="10" y1="1123.453" x2="91" y2="1123.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="29.8" y1="1085.653" x2="29.8" y2="1123.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="44.2" y1="1085.653" x2="44.2" y2="1123.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="62.2" y1="1085.653" x2="62.2" y2="1123.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="76.6" y1="1085.653" x2="76.6" y2="1123.453" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="1133.233" font-weight="bold">PINOUT BK1_INP - Generic connector 1P</text>
+<rect x="10" y="1134.853" width="61.2" height="10.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="1138.525" font-weight="bold">Pin</text>
+<text x="20.8" y="1138.525" font-weight="bold">Signal</text>
+<text x="35.2" y="1138.525" font-weight="bold">Wire</text>
+<text x="49.6" y="1138.525" font-weight="bold">To</text>
+<text x="60.4" y="1138.525" font-weight="bold">Color</text>
+<line x1="10" y1="1140.253" x2="71.2" y2="1140.253" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1143.925">1</text>
+<text x="20.8" y="1143.925">VBAT+</text>
+<text x="35.2" y="1143.925">B1IN_P</text>
+<text x="49.6" y="1143.925">S1:1</text>
+<text x="60.4" y="1143.925">red</text>
+<line x1="10" y1="1145.653" x2="71.2" y2="1145.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="19" y1="1134.853" x2="19" y2="1145.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="33.4" y1="1134.853" x2="33.4" y2="1145.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="47.8" y1="1134.853" x2="47.8" y2="1145.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="58.6" y1="1134.853" x2="58.6" y2="1145.653" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="1149.433" font-weight="bold">FROM-TO BK1_INP</text>
+<rect x="10" y="1151.053" width="68.4" height="10.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="1154.725" font-weight="bold">To</text>
+<text x="19" y="1154.725" font-weight="bold">Wire</text>
+<text x="33.4" y="1154.725" font-weight="bold">From pin</text>
+<text x="51.4" y="1154.725" font-weight="bold">To pin</text>
+<text x="65.8" y="1154.725" font-weight="bold">Signal</text>
+<line x1="10" y1="1156.453" x2="78.4" y2="1156.453" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1160.125">S1</text>
+<text x="19" y="1160.125">B1IN_P</text>
+<text x="33.4" y="1160.125">1</text>
+<text x="51.4" y="1160.125">1</text>
+<text x="65.8" y="1160.125">VBAT+</text>
+<line x1="10" y1="1161.853" x2="78.4" y2="1161.853" stroke="#202020" stroke-width="0.2"/>
+<line x1="17.2" y1="1151.053" x2="17.2" y2="1161.853" stroke="#202020" stroke-width="0.2"/>
+<line x1="31.6" y1="1151.053" x2="31.6" y2="1161.853" stroke="#202020" stroke-width="0.2"/>
+<line x1="49.6" y1="1151.053" x2="49.6" y2="1161.853" stroke="#202020" stroke-width="0.2"/>
+<line x1="64" y1="1151.053" x2="64" y2="1161.853" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="1171.633" font-weight="bold">PINOUT BK1_INN - Generic connector 1P</text>
+<rect x="10" y="1173.253" width="61.2" height="10.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="1176.925" font-weight="bold">Pin</text>
+<text x="20.8" y="1176.925" font-weight="bold">Signal</text>
+<text x="35.2" y="1176.925" font-weight="bold">Wire</text>
+<text x="49.6" y="1176.925" font-weight="bold">To</text>
+<text x="60.4" y="1176.925" font-weight="bold">Color</text>
+<line x1="10" y1="1178.653" x2="71.2" y2="1178.653" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1182.325">1</text>
+<text x="20.8" y="1182.325">GND</text>
+<text x="35.2" y="1182.325">B1IN_N</text>
+<text x="49.6" y="1182.325">S1:2</text>
+<text x="60.4" y="1182.325">black</text>
+<line x1="10" y1="1184.053" x2="71.2" y2="1184.053" stroke="#202020" stroke-width="0.2"/>
+<line x1="19" y1="1173.253" x2="19" y2="1184.053" stroke="#202020" stroke-width="0.2"/>
+<line x1="33.4" y1="1173.253" x2="33.4" y2="1184.053" stroke="#202020" stroke-width="0.2"/>
+<line x1="47.8" y1="1173.253" x2="47.8" y2="1184.053" stroke="#202020" stroke-width="0.2"/>
+<line x1="58.6" y1="1173.253" x2="58.6" y2="1184.053" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="1187.833" font-weight="bold">FROM-TO BK1_INN</text>
+<rect x="10" y="1189.453" width="68.4" height="10.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="1193.125" font-weight="bold">To</text>
+<text x="19" y="1193.125" font-weight="bold">Wire</text>
+<text x="33.4" y="1193.125" font-weight="bold">From pin</text>
+<text x="51.4" y="1193.125" font-weight="bold">To pin</text>
+<text x="65.8" y="1193.125" font-weight="bold">Signal</text>
+<line x1="10" y1="1194.853" x2="78.4" y2="1194.853" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1198.525">S1</text>
+<text x="19" y="1198.525">B1IN_N</text>
+<text x="33.4" y="1198.525">1</text>
+<text x="51.4" y="1198.525">2</text>
+<text x="65.8" y="1198.525">GND</text>
+<line x1="10" y1="1200.253" x2="78.4" y2="1200.253" stroke="#202020" stroke-width="0.2"/>
+<line x1="17.2" y1="1189.453" x2="17.2" y2="1200.253" stroke="#202020" stroke-width="0.2"/>
+<line x1="31.6" y1="1189.453" x2="31.6" y2="1200.253" stroke="#202020" stroke-width="0.2"/>
+<line x1="49.6" y1="1189.453" x2="49.6" y2="1200.253" stroke="#202020" stroke-width="0.2"/>
+<line x1="64" y1="1189.453" x2="64" y2="1200.253" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="1210.033" font-weight="bold">PINOUT BK1_OUTP - Generic connector 1P</text>
+<rect x="10" y="1211.653" width="66.6" height="10.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="1215.325" font-weight="bold">Pin</text>
+<text x="20.8" y="1215.325" font-weight="bold">Signal</text>
+<text x="35.2" y="1215.325" font-weight="bold">Wire</text>
+<text x="49.6" y="1215.325" font-weight="bold">To</text>
+<text x="65.8" y="1215.325" font-weight="bold">Color</text>
+<line x1="10" y1="1217.053" x2="76.6" y2="1217.053" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1220.725">1</text>
+<text x="20.8" y="1220.725">5V0</text>
+<text x="35.2" y="1220.725">PI5V_P</text>
+<text x="49.6" y="1220.725">PI_P2:1</text>
+<text x="65.8" y="1220.725">red</text>
+<line x1="10" y1="1222.453" x2="76.6" y2="1222.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="19" y1="1211.653" x2="19" y2="1222.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="33.4" y1="1211.653" x2="33.4" y2="1222.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="47.8" y1="1211.653" x2="47.8" y2="1222.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="64" y1="1211.653" x2="64" y2="1222.453" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="1226.233" font-weight="bold">FROM-TO BK1_OUTP</text>
+<rect x="10" y="1227.853" width="73.8" height="10.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="1231.525" font-weight="bold">To</text>
+<text x="24.4" y="1231.525" font-weight="bold">Wire</text>
+<text x="38.8" y="1231.525" font-weight="bold">From pin</text>
+<text x="56.8" y="1231.525" font-weight="bold">To pin</text>
+<text x="71.2" y="1231.525" font-weight="bold">Signal</text>
+<line x1="10" y1="1233.253" x2="83.8" y2="1233.253" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1236.925">PI_P2</text>
+<text x="24.4" y="1236.925">PI5V_P</text>
+<text x="38.8" y="1236.925">1</text>
+<text x="56.8" y="1236.925">1</text>
+<text x="71.2" y="1236.925">5V0</text>
+<line x1="10" y1="1238.653" x2="83.8" y2="1238.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="22.6" y1="1227.853" x2="22.6" y2="1238.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="37" y1="1227.853" x2="37" y2="1238.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="55" y1="1227.853" x2="55" y2="1238.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="69.4" y1="1227.853" x2="69.4" y2="1238.653" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="1248.433" font-weight="bold">PINOUT BK1_OUTN - Generic connector 1P</text>
+<rect x="10" y="1250.053" width="66.6" height="10.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="1253.725" font-weight="bold">Pin</text>
+<text x="20.8" y="1253.725" font-weight="bold">Signal</text>
+<text x="35.2" y="1253.725" font-weight="bold">Wire</text>
+<text x="49.6" y="1253.725" font-weight="bold">To</text>
+<text x="65.8" y="1253.725" font-weight="bold">Color</text>
+<line x1="10" y1="1255.453" x2="76.6" y2="1255.453" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1259.125">1</text>
+<text x="20.8" y="1259.125">GND</text>
+<text x="35.2" y="1259.125">PI5V_N</text>
+<text x="49.6" y="1259.125">PI_P6:1</text>
+<text x="65.8" y="1259.125">black</text>
+<line x1="10" y1="1260.853" x2="76.6" y2="1260.853" stroke="#202020" stroke-width="0.2"/>
+<line x1="19" y1="1250.053" x2="19" y2="1260.853" stroke="#202020" stroke-width="0.2"/>
+<line x1="33.4" y1="1250.053" x2="33.4" y2="1260.853" stroke="#202020" stroke-width="0.2"/>
+<line x1="47.8" y1="1250.053" x2="47.8" y2="1260.853" stroke="#202020" stroke-width="0.2"/>
+<line x1="64" y1="1250.053" x2="64" y2="1260.853" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="1264.633" font-weight="bold">FROM-TO BK1_OUTN</text>
+<rect x="10" y="1266.253" width="73.8" height="10.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="1269.925" font-weight="bold">To</text>
+<text x="24.4" y="1269.925" font-weight="bold">Wire</text>
+<text x="38.8" y="1269.925" font-weight="bold">From pin</text>
+<text x="56.8" y="1269.925" font-weight="bold">To pin</text>
+<text x="71.2" y="1269.925" font-weight="bold">Signal</text>
+<line x1="10" y1="1271.653" x2="83.8" y2="1271.653" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1275.325">PI_P6</text>
+<text x="24.4" y="1275.325">PI5V_N</text>
+<text x="38.8" y="1275.325">1</text>
+<text x="56.8" y="1275.325">1</text>
+<text x="71.2" y="1275.325">GND</text>
+<line x1="10" y1="1277.053" x2="83.8" y2="1277.053" stroke="#202020" stroke-width="0.2"/>
+<line x1="22.6" y1="1266.253" x2="22.6" y2="1277.053" stroke="#202020" stroke-width="0.2"/>
+<line x1="37" y1="1266.253" x2="37" y2="1277.053" stroke="#202020" stroke-width="0.2"/>
+<line x1="55" y1="1266.253" x2="55" y2="1277.053" stroke="#202020" stroke-width="0.2"/>
+<line x1="69.4" y1="1266.253" x2="69.4" y2="1277.053" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="1286.833" font-weight="bold">PINOUT BK2_INP - Generic connector 1P</text>
+<rect x="10" y="1288.453" width="61.2" height="10.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="1292.125" font-weight="bold">Pin</text>
+<text x="20.8" y="1292.125" font-weight="bold">Signal</text>
+<text x="35.2" y="1292.125" font-weight="bold">Wire</text>
+<text x="49.6" y="1292.125" font-weight="bold">To</text>
+<text x="60.4" y="1292.125" font-weight="bold">Color</text>
+<line x1="10" y1="1293.853" x2="71.2" y2="1293.853" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1297.525">1</text>
+<text x="20.8" y="1297.525">VBAT+</text>
+<text x="35.2" y="1297.525">B2IN_P</text>
+<text x="49.6" y="1297.525">S1:1</text>
+<text x="60.4" y="1297.525">red</text>
+<line x1="10" y1="1299.253" x2="71.2" y2="1299.253" stroke="#202020" stroke-width="0.2"/>
+<line x1="19" y1="1288.453" x2="19" y2="1299.253" stroke="#202020" stroke-width="0.2"/>
+<line x1="33.4" y1="1288.453" x2="33.4" y2="1299.253" stroke="#202020" stroke-width="0.2"/>
+<line x1="47.8" y1="1288.453" x2="47.8" y2="1299.253" stroke="#202020" stroke-width="0.2"/>
+<line x1="58.6" y1="1288.453" x2="58.6" y2="1299.253" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="1303.033" font-weight="bold">FROM-TO BK2_INP</text>
+<rect x="10" y="1304.653" width="68.4" height="10.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="1308.325" font-weight="bold">To</text>
+<text x="19" y="1308.325" font-weight="bold">Wire</text>
+<text x="33.4" y="1308.325" font-weight="bold">From pin</text>
+<text x="51.4" y="1308.325" font-weight="bold">To pin</text>
+<text x="65.8" y="1308.325" font-weight="bold">Signal</text>
+<line x1="10" y1="1310.053" x2="78.4" y2="1310.053" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1313.725">S1</text>
+<text x="19" y="1313.725">B2IN_P</text>
+<text x="33.4" y="1313.725">1</text>
+<text x="51.4" y="1313.725">1</text>
+<text x="65.8" y="1313.725">VBAT+</text>
+<line x1="10" y1="1315.453" x2="78.4" y2="1315.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="17.2" y1="1304.653" x2="17.2" y2="1315.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="31.6" y1="1304.653" x2="31.6" y2="1315.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="49.6" y1="1304.653" x2="49.6" y2="1315.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="64" y1="1304.653" x2="64" y2="1315.453" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="1325.233" font-weight="bold">PINOUT BK2_INN - Generic connector 1P</text>
+<rect x="10" y="1326.853" width="61.2" height="10.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="1330.525" font-weight="bold">Pin</text>
+<text x="20.8" y="1330.525" font-weight="bold">Signal</text>
+<text x="35.2" y="1330.525" font-weight="bold">Wire</text>
+<text x="49.6" y="1330.525" font-weight="bold">To</text>
+<text x="60.4" y="1330.525" font-weight="bold">Color</text>
+<line x1="10" y1="1332.253" x2="71.2" y2="1332.253" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1335.925">1</text>
+<text x="20.8" y="1335.925">GND</text>
+<text x="35.2" y="1335.925">B2IN_N</text>
+<text x="49.6" y="1335.925">S1:2</text>
+<text x="60.4" y="1335.925">black</text>
+<line x1="10" y1="1337.653" x2="71.2" y2="1337.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="19" y1="1326.853" x2="19" y2="1337.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="33.4" y1="1326.853" x2="33.4" y2="1337.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="47.8" y1="1326.853" x2="47.8" y2="1337.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="58.6" y1="1326.853" x2="58.6" y2="1337.653" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="1341.433" font-weight="bold">FROM-TO BK2_INN</text>
+<rect x="10" y="1343.053" width="68.4" height="10.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="1346.725" font-weight="bold">To</text>
+<text x="19" y="1346.725" font-weight="bold">Wire</text>
+<text x="33.4" y="1346.725" font-weight="bold">From pin</text>
+<text x="51.4" y="1346.725" font-weight="bold">To pin</text>
+<text x="65.8" y="1346.725" font-weight="bold">Signal</text>
+<line x1="10" y1="1348.453" x2="78.4" y2="1348.453" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1352.125">S1</text>
+<text x="19" y="1352.125">B2IN_N</text>
+<text x="33.4" y="1352.125">1</text>
+<text x="51.4" y="1352.125">2</text>
+<text x="65.8" y="1352.125">GND</text>
+<line x1="10" y1="1353.853" x2="78.4" y2="1353.853" stroke="#202020" stroke-width="0.2"/>
+<line x1="17.2" y1="1343.053" x2="17.2" y2="1353.853" stroke="#202020" stroke-width="0.2"/>
+<line x1="31.6" y1="1343.053" x2="31.6" y2="1353.853" stroke="#202020" stroke-width="0.2"/>
+<line x1="49.6" y1="1343.053" x2="49.6" y2="1353.853" stroke="#202020" stroke-width="0.2"/>
+<line x1="64" y1="1343.053" x2="64" y2="1353.853" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="1363.633" font-weight="bold">PINOUT BK2_OUTP - Generic connector 1P</text>
+<rect x="10" y="1365.253" width="75.6" height="16.2" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="1368.925" font-weight="bold">Pin</text>
+<text x="20.8" y="1368.925" font-weight="bold">Signal</text>
+<text x="35.2" y="1368.925" font-weight="bold">Wire</text>
+<text x="51.4" y="1368.925" font-weight="bold">To</text>
+<text x="74.8" y="1368.925" font-weight="bold">Color</text>
+<line x1="10" y1="1370.653" x2="85.6" y2="1370.653" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1374.325">1</text>
+<text x="20.8" y="1374.325">V7V0</text>
+<text x="35.2" y="1374.325">SERVO_P</text>
+<text x="51.4" y="1374.325">SERVO_EXT:1</text>
+<text x="74.8" y="1374.325">red</text>
+<line x1="10" y1="1376.053" x2="85.6" y2="1376.053" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1379.725">1</text>
+<text x="20.8" y="1379.725">V7V0</text>
+<text x="35.2" y="1379.725">CAP_P</text>
+<text x="51.4" y="1379.725">CAP_P:1</text>
+<text x="74.8" y="1379.725">red</text>
+<line x1="10" y1="1381.453" x2="85.6" y2="1381.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="19" y1="1365.253" x2="19" y2="1381.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="33.4" y1="1365.253" x2="33.4" y2="1381.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="49.6" y1="1365.253" x2="49.6" y2="1381.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="73" y1="1365.253" x2="73" y2="1381.453" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="1385.233" font-weight="bold">FROM-TO BK2_OUTP</text>
+<rect x="10" y="1386.853" width="82.8" height="16.2" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="1390.525" font-weight="bold">To</text>
+<text x="31.6" y="1390.525" font-weight="bold">Wire</text>
+<text x="47.8" y="1390.525" font-weight="bold">From pin</text>
+<text x="65.8" y="1390.525" font-weight="bold">To pin</text>
+<text x="80.2" y="1390.525" font-weight="bold">Signal</text>
+<line x1="10" y1="1392.253" x2="92.8" y2="1392.253" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1395.925">CAP_P</text>
+<text x="31.6" y="1395.925">CAP_P</text>
+<text x="47.8" y="1395.925">1</text>
+<text x="65.8" y="1395.925">1</text>
+<text x="80.2" y="1395.925">V7V0</text>
+<line x1="10" y1="1397.653" x2="92.8" y2="1397.653" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1401.325">SERVO_EXT</text>
+<text x="31.6" y="1401.325">SERVO_P</text>
+<text x="47.8" y="1401.325">1</text>
+<text x="65.8" y="1401.325">1</text>
+<text x="80.2" y="1401.325">V7V0</text>
+<line x1="10" y1="1403.053" x2="92.8" y2="1403.053" stroke="#202020" stroke-width="0.2"/>
+<line x1="29.8" y1="1386.853" x2="29.8" y2="1403.053" stroke="#202020" stroke-width="0.2"/>
+<line x1="46" y1="1386.853" x2="46" y2="1403.053" stroke="#202020" stroke-width="0.2"/>
+<line x1="64" y1="1386.853" x2="64" y2="1403.053" stroke="#202020" stroke-width="0.2"/>
+<line x1="78.4" y1="1386.853" x2="78.4" y2="1403.053" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="1412.833" font-weight="bold">PINOUT BK2_OUTN - Generic connector 1P</text>
+<rect x="10" y="1414.453" width="75.6" height="16.2" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="1418.125" font-weight="bold">Pin</text>
+<text x="20.8" y="1418.125" font-weight="bold">Signal</text>
+<text x="35.2" y="1418.125" font-weight="bold">Wire</text>
+<text x="51.4" y="1418.125" font-weight="bold">To</text>
+<text x="74.8" y="1418.125" font-weight="bold">Color</text>
+<line x1="10" y1="1419.853" x2="85.6" y2="1419.853" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1423.525">1</text>
+<text x="20.8" y="1423.525">GND</text>
+<text x="35.2" y="1423.525">SERVO_N</text>
+<text x="51.4" y="1423.525">SERVO_EXT:2</text>
+<text x="74.8" y="1423.525">black</text>
+<line x1="10" y1="1425.253" x2="85.6" y2="1425.253" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1428.925">1</text>
+<text x="20.8" y="1428.925">GND</text>
+<text x="35.2" y="1428.925">CAP_N</text>
+<text x="51.4" y="1428.925">CAP_N:1</text>
+<text x="74.8" y="1428.925">black</text>
+<line x1="10" y1="1430.653" x2="85.6" y2="1430.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="19" y1="1414.453" x2="19" y2="1430.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="33.4" y1="1414.453" x2="33.4" y2="1430.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="49.6" y1="1414.453" x2="49.6" y2="1430.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="73" y1="1414.453" x2="73" y2="1430.653" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="1434.433" font-weight="bold">FROM-TO BK2_OUTN</text>
+<rect x="10" y="1436.053" width="82.8" height="16.2" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="1439.725" font-weight="bold">To</text>
+<text x="31.6" y="1439.725" font-weight="bold">Wire</text>
+<text x="47.8" y="1439.725" font-weight="bold">From pin</text>
+<text x="65.8" y="1439.725" font-weight="bold">To pin</text>
+<text x="80.2" y="1439.725" font-weight="bold">Signal</text>
+<line x1="10" y1="1441.453" x2="92.8" y2="1441.453" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1445.125">CAP_N</text>
+<text x="31.6" y="1445.125">CAP_N</text>
+<text x="47.8" y="1445.125">1</text>
+<text x="65.8" y="1445.125">1</text>
+<text x="80.2" y="1445.125">GND</text>
+<line x1="10" y1="1446.853" x2="92.8" y2="1446.853" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1450.525">SERVO_EXT</text>
+<text x="31.6" y="1450.525">SERVO_N</text>
+<text x="47.8" y="1450.525">1</text>
+<text x="65.8" y="1450.525">2</text>
+<text x="80.2" y="1450.525">GND</text>
+<line x1="10" y1="1452.253" x2="92.8" y2="1452.253" stroke="#202020" stroke-width="0.2"/>
+<line x1="29.8" y1="1436.053" x2="29.8" y2="1452.253" stroke="#202020" stroke-width="0.2"/>
+<line x1="46" y1="1436.053" x2="46" y2="1452.253" stroke="#202020" stroke-width="0.2"/>
+<line x1="64" y1="1436.053" x2="64" y2="1452.253" stroke="#202020" stroke-width="0.2"/>
+<line x1="78.4" y1="1436.053" x2="78.4" y2="1452.253" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="1462.033" font-weight="bold">PINOUT CAP_P - Generic connector 1P</text>
+<rect x="10" y="1463.653" width="70.2" height="10.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="1467.325" font-weight="bold">Pin</text>
+<text x="20.8" y="1467.325" font-weight="bold">Signal</text>
+<text x="35.2" y="1467.325" font-weight="bold">Wire</text>
+<text x="47.8" y="1467.325" font-weight="bold">To</text>
+<text x="69.4" y="1467.325" font-weight="bold">Color</text>
+<line x1="10" y1="1469.053" x2="80.2" y2="1469.053" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1472.725">1</text>
+<text x="20.8" y="1472.725">V7V0</text>
+<text x="35.2" y="1472.725">CAP_P</text>
+<text x="47.8" y="1472.725">BK2_OUTP:1</text>
+<text x="69.4" y="1472.725">red</text>
+<line x1="10" y1="1474.453" x2="80.2" y2="1474.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="19" y1="1463.653" x2="19" y2="1474.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="33.4" y1="1463.653" x2="33.4" y2="1474.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="46" y1="1463.653" x2="46" y2="1474.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="67.6" y1="1463.653" x2="67.6" y2="1474.453" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="1478.233" font-weight="bold">FROM-TO CAP_P</text>
+<rect x="10" y="1479.853" width="77.4" height="10.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="1483.525" font-weight="bold">To</text>
+<text x="29.8" y="1483.525" font-weight="bold">Wire</text>
+<text x="42.4" y="1483.525" font-weight="bold">From pin</text>
+<text x="60.4" y="1483.525" font-weight="bold">To pin</text>
+<text x="74.8" y="1483.525" font-weight="bold">Signal</text>
+<line x1="10" y1="1485.253" x2="87.4" y2="1485.253" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1488.925">BK2_OUTP</text>
+<text x="29.8" y="1488.925">CAP_P</text>
+<text x="42.4" y="1488.925">1</text>
+<text x="60.4" y="1488.925">1</text>
+<text x="74.8" y="1488.925">V7V0</text>
+<line x1="10" y1="1490.653" x2="87.4" y2="1490.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="28" y1="1479.853" x2="28" y2="1490.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="40.6" y1="1479.853" x2="40.6" y2="1490.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="58.6" y1="1479.853" x2="58.6" y2="1490.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="73" y1="1479.853" x2="73" y2="1490.653" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="1500.433" font-weight="bold">PINOUT CAP_N - Generic connector 1P</text>
+<rect x="10" y="1502.053" width="70.2" height="10.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="1505.725" font-weight="bold">Pin</text>
+<text x="20.8" y="1505.725" font-weight="bold">Signal</text>
+<text x="35.2" y="1505.725" font-weight="bold">Wire</text>
+<text x="47.8" y="1505.725" font-weight="bold">To</text>
+<text x="69.4" y="1505.725" font-weight="bold">Color</text>
+<line x1="10" y1="1507.453" x2="80.2" y2="1507.453" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1511.125">1</text>
+<text x="20.8" y="1511.125">GND</text>
+<text x="35.2" y="1511.125">CAP_N</text>
+<text x="47.8" y="1511.125">BK2_OUTN:1</text>
+<text x="69.4" y="1511.125">black</text>
+<line x1="10" y1="1512.853" x2="80.2" y2="1512.853" stroke="#202020" stroke-width="0.2"/>
+<line x1="19" y1="1502.053" x2="19" y2="1512.853" stroke="#202020" stroke-width="0.2"/>
+<line x1="33.4" y1="1502.053" x2="33.4" y2="1512.853" stroke="#202020" stroke-width="0.2"/>
+<line x1="46" y1="1502.053" x2="46" y2="1512.853" stroke="#202020" stroke-width="0.2"/>
+<line x1="67.6" y1="1502.053" x2="67.6" y2="1512.853" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="1516.633" font-weight="bold">FROM-TO CAP_N</text>
+<rect x="10" y="1518.253" width="77.4" height="10.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="1521.925" font-weight="bold">To</text>
+<text x="29.8" y="1521.925" font-weight="bold">Wire</text>
+<text x="42.4" y="1521.925" font-weight="bold">From pin</text>
+<text x="60.4" y="1521.925" font-weight="bold">To pin</text>
+<text x="74.8" y="1521.925" font-weight="bold">Signal</text>
+<line x1="10" y1="1523.653" x2="87.4" y2="1523.653" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1527.325">BK2_OUTN</text>
+<text x="29.8" y="1527.325">CAP_N</text>
+<text x="42.4" y="1527.325">1</text>
+<text x="60.4" y="1527.325">1</text>
+<text x="74.8" y="1527.325">GND</text>
+<line x1="10" y1="1529.053" x2="87.4" y2="1529.053" stroke="#202020" stroke-width="0.2"/>
+<line x1="28" y1="1518.253" x2="28" y2="1529.053" stroke="#202020" stroke-width="0.2"/>
+<line x1="40.6" y1="1518.253" x2="40.6" y2="1529.053" stroke="#202020" stroke-width="0.2"/>
+<line x1="58.6" y1="1518.253" x2="58.6" y2="1529.053" stroke="#202020" stroke-width="0.2"/>
+<line x1="73" y1="1518.253" x2="73" y2="1529.053" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="1538.833" font-weight="bold">PINOUT PI_P1 - 0.1 in pin header / Dupont 1P</text>
+<rect x="10" y="1540.453" width="72" height="10.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="1544.125" font-weight="bold">Pin</text>
+<text x="20.8" y="1544.125" font-weight="bold">Signal</text>
+<text x="35.2" y="1544.125" font-weight="bold">Wire</text>
+<text x="51.4" y="1544.125" font-weight="bold">To</text>
+<text x="71.2" y="1544.125" font-weight="bold">Color</text>
+<line x1="10" y1="1545.853" x2="82" y2="1545.853" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1549.525">1</text>
+<text x="20.8" y="1549.525">3V3</text>
+<text x="35.2" y="1549.525">IMU_VCC</text>
+<text x="51.4" y="1549.525">IMU_VCC:1</text>
+<text x="71.2" y="1549.525">red</text>
+<line x1="10" y1="1551.253" x2="82" y2="1551.253" stroke="#202020" stroke-width="0.2"/>
+<line x1="19" y1="1540.453" x2="19" y2="1551.253" stroke="#202020" stroke-width="0.2"/>
+<line x1="33.4" y1="1540.453" x2="33.4" y2="1551.253" stroke="#202020" stroke-width="0.2"/>
+<line x1="49.6" y1="1540.453" x2="49.6" y2="1551.253" stroke="#202020" stroke-width="0.2"/>
+<line x1="69.4" y1="1540.453" x2="69.4" y2="1551.253" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="1555.033" font-weight="bold">FROM-TO PI_P1</text>
+<rect x="10" y="1556.653" width="79.2" height="10.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="1560.325" font-weight="bold">To</text>
+<text x="28" y="1560.325" font-weight="bold">Wire</text>
+<text x="44.2" y="1560.325" font-weight="bold">From pin</text>
+<text x="62.2" y="1560.325" font-weight="bold">To pin</text>
+<text x="76.6" y="1560.325" font-weight="bold">Signal</text>
+<line x1="10" y1="1562.053" x2="89.2" y2="1562.053" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1565.725">IMU_VCC</text>
+<text x="28" y="1565.725">IMU_VCC</text>
+<text x="44.2" y="1565.725">1</text>
+<text x="62.2" y="1565.725">1</text>
+<text x="76.6" y="1565.725">3V3</text>
+<line x1="10" y1="1567.453" x2="89.2" y2="1567.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="26.2" y1="1556.653" x2="26.2" y2="1567.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="42.4" y1="1556.653" x2="42.4" y2="1567.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="60.4" y1="1556.653" x2="60.4" y2="1567.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="74.8" y1="1556.653" x2="74.8" y2="1567.453" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="1577.233" font-weight="bold">PINOUT PI_P2 - 0.1 in pin header / Dupont 1P</text>
+<rect x="10" y="1578.853" width="72" height="10.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="1582.525" font-weight="bold">Pin</text>
+<text x="20.8" y="1582.525" font-weight="bold">Signal</text>
+<text x="35.2" y="1582.525" font-weight="bold">Wire</text>
+<text x="49.6" y="1582.525" font-weight="bold">To</text>
+<text x="71.2" y="1582.525" font-weight="bold">Color</text>
+<line x1="10" y1="1584.253" x2="82" y2="1584.253" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1587.925">1</text>
+<text x="20.8" y="1587.925">5V0</text>
+<text x="35.2" y="1587.925">PI5V_P</text>
+<text x="49.6" y="1587.925">BK1_OUTP:1</text>
+<text x="71.2" y="1587.925">red</text>
+<line x1="10" y1="1589.653" x2="82" y2="1589.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="19" y1="1578.853" x2="19" y2="1589.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="33.4" y1="1578.853" x2="33.4" y2="1589.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="47.8" y1="1578.853" x2="47.8" y2="1589.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="69.4" y1="1578.853" x2="69.4" y2="1589.653" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="1593.433" font-weight="bold">FROM-TO PI_P2</text>
+<rect x="10" y="1595.053" width="79.2" height="10.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="1598.725" font-weight="bold">To</text>
+<text x="29.8" y="1598.725" font-weight="bold">Wire</text>
+<text x="44.2" y="1598.725" font-weight="bold">From pin</text>
+<text x="62.2" y="1598.725" font-weight="bold">To pin</text>
+<text x="76.6" y="1598.725" font-weight="bold">Signal</text>
+<line x1="10" y1="1600.453" x2="89.2" y2="1600.453" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1604.125">BK1_OUTP</text>
+<text x="29.8" y="1604.125">PI5V_P</text>
+<text x="44.2" y="1604.125">1</text>
+<text x="62.2" y="1604.125">1</text>
+<text x="76.6" y="1604.125">5V0</text>
+<line x1="10" y1="1605.853" x2="89.2" y2="1605.853" stroke="#202020" stroke-width="0.2"/>
+<line x1="28" y1="1595.053" x2="28" y2="1605.853" stroke="#202020" stroke-width="0.2"/>
+<line x1="42.4" y1="1595.053" x2="42.4" y2="1605.853" stroke="#202020" stroke-width="0.2"/>
+<line x1="60.4" y1="1595.053" x2="60.4" y2="1605.853" stroke="#202020" stroke-width="0.2"/>
+<line x1="74.8" y1="1595.053" x2="74.8" y2="1605.853" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="1615.633" font-weight="bold">PINOUT PI_P3 - 0.1 in pin header / Dupont 1P</text>
+<rect x="10" y="1617.253" width="72" height="10.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="1620.925" font-weight="bold">Pin</text>
+<text x="20.8" y="1620.925" font-weight="bold">Signal</text>
+<text x="35.2" y="1620.925" font-weight="bold">Wire</text>
+<text x="51.4" y="1620.925" font-weight="bold">To</text>
+<text x="71.2" y="1620.925" font-weight="bold">Color</text>
+<line x1="10" y1="1622.653" x2="82" y2="1622.653" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1626.325">1</text>
+<text x="20.8" y="1626.325">SDA</text>
+<text x="35.2" y="1626.325">IMU_SDA</text>
+<text x="51.4" y="1626.325">IMU_SDA:1</text>
+<text x="71.2" y="1626.325">green</text>
+<line x1="10" y1="1628.053" x2="82" y2="1628.053" stroke="#202020" stroke-width="0.2"/>
+<line x1="19" y1="1617.253" x2="19" y2="1628.053" stroke="#202020" stroke-width="0.2"/>
+<line x1="33.4" y1="1617.253" x2="33.4" y2="1628.053" stroke="#202020" stroke-width="0.2"/>
+<line x1="49.6" y1="1617.253" x2="49.6" y2="1628.053" stroke="#202020" stroke-width="0.2"/>
+<line x1="69.4" y1="1617.253" x2="69.4" y2="1628.053" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="1631.833" font-weight="bold">FROM-TO PI_P3</text>
+<rect x="10" y="1633.453" width="79.2" height="10.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="1637.125" font-weight="bold">To</text>
+<text x="28" y="1637.125" font-weight="bold">Wire</text>
+<text x="44.2" y="1637.125" font-weight="bold">From pin</text>
+<text x="62.2" y="1637.125" font-weight="bold">To pin</text>
+<text x="76.6" y="1637.125" font-weight="bold">Signal</text>
+<line x1="10" y1="1638.853" x2="89.2" y2="1638.853" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1642.525">IMU_SDA</text>
+<text x="28" y="1642.525">IMU_SDA</text>
+<text x="44.2" y="1642.525">1</text>
+<text x="62.2" y="1642.525">1</text>
+<text x="76.6" y="1642.525">SDA</text>
+<line x1="10" y1="1644.253" x2="89.2" y2="1644.253" stroke="#202020" stroke-width="0.2"/>
+<line x1="26.2" y1="1633.453" x2="26.2" y2="1644.253" stroke="#202020" stroke-width="0.2"/>
+<line x1="42.4" y1="1633.453" x2="42.4" y2="1644.253" stroke="#202020" stroke-width="0.2"/>
+<line x1="60.4" y1="1633.453" x2="60.4" y2="1644.253" stroke="#202020" stroke-width="0.2"/>
+<line x1="74.8" y1="1633.453" x2="74.8" y2="1644.253" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="1654.033" font-weight="bold">PINOUT PI_P5 - 0.1 in pin header / Dupont 1P</text>
+<rect x="10" y="1655.653" width="73.8" height="10.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="1659.325" font-weight="bold">Pin</text>
+<text x="20.8" y="1659.325" font-weight="bold">Signal</text>
+<text x="35.2" y="1659.325" font-weight="bold">Wire</text>
+<text x="51.4" y="1659.325" font-weight="bold">To</text>
+<text x="71.2" y="1659.325" font-weight="bold">Color</text>
+<line x1="10" y1="1661.053" x2="83.8" y2="1661.053" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1664.725">1</text>
+<text x="20.8" y="1664.725">SCL</text>
+<text x="35.2" y="1664.725">IMU_SCL</text>
+<text x="51.4" y="1664.725">IMU_SCL:1</text>
+<text x="71.2" y="1664.725">yellow</text>
+<line x1="10" y1="1666.453" x2="83.8" y2="1666.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="19" y1="1655.653" x2="19" y2="1666.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="33.4" y1="1655.653" x2="33.4" y2="1666.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="49.6" y1="1655.653" x2="49.6" y2="1666.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="69.4" y1="1655.653" x2="69.4" y2="1666.453" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="1670.233" font-weight="bold">FROM-TO PI_P5</text>
+<rect x="10" y="1671.853" width="79.2" height="10.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="1675.525" font-weight="bold">To</text>
+<text x="28" y="1675.525" font-weight="bold">Wire</text>
+<text x="44.2" y="1675.525" font-weight="bold">From pin</text>
+<text x="62.2" y="1675.525" font-weight="bold">To pin</text>
+<text x="76.6" y="1675.525" font-weight="bold">Signal</text>
+<line x1="10" y1="1677.253" x2="89.2" y2="1677.253" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1680.925">IMU_SCL</text>
+<text x="28" y="1680.925">IMU_SCL</text>
+<text x="44.2" y="1680.925">1</text>
+<text x="62.2" y="1680.925">1</text>
+<text x="76.6" y="1680.925">SCL</text>
+<line x1="10" y1="1682.653" x2="89.2" y2="1682.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="26.2" y1="1671.853" x2="26.2" y2="1682.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="42.4" y1="1671.853" x2="42.4" y2="1682.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="60.4" y1="1671.853" x2="60.4" y2="1682.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="74.8" y1="1671.853" x2="74.8" y2="1682.653" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="1692.433" font-weight="bold">PINOUT PI_P6 - 0.1 in pin header / Dupont 1P</text>
+<rect x="10" y="1694.053" width="72" height="10.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="1697.725" font-weight="bold">Pin</text>
+<text x="20.8" y="1697.725" font-weight="bold">Signal</text>
+<text x="35.2" y="1697.725" font-weight="bold">Wire</text>
+<text x="49.6" y="1697.725" font-weight="bold">To</text>
+<text x="71.2" y="1697.725" font-weight="bold">Color</text>
+<line x1="10" y1="1699.453" x2="82" y2="1699.453" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1703.125">1</text>
+<text x="20.8" y="1703.125">GND</text>
+<text x="35.2" y="1703.125">PI5V_N</text>
+<text x="49.6" y="1703.125">BK1_OUTN:1</text>
+<text x="71.2" y="1703.125">black</text>
+<line x1="10" y1="1704.853" x2="82" y2="1704.853" stroke="#202020" stroke-width="0.2"/>
+<line x1="19" y1="1694.053" x2="19" y2="1704.853" stroke="#202020" stroke-width="0.2"/>
+<line x1="33.4" y1="1694.053" x2="33.4" y2="1704.853" stroke="#202020" stroke-width="0.2"/>
+<line x1="47.8" y1="1694.053" x2="47.8" y2="1704.853" stroke="#202020" stroke-width="0.2"/>
+<line x1="69.4" y1="1694.053" x2="69.4" y2="1704.853" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="1708.633" font-weight="bold">FROM-TO PI_P6</text>
+<rect x="10" y="1710.253" width="79.2" height="10.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="1713.925" font-weight="bold">To</text>
+<text x="29.8" y="1713.925" font-weight="bold">Wire</text>
+<text x="44.2" y="1713.925" font-weight="bold">From pin</text>
+<text x="62.2" y="1713.925" font-weight="bold">To pin</text>
+<text x="76.6" y="1713.925" font-weight="bold">Signal</text>
+<line x1="10" y1="1715.653" x2="89.2" y2="1715.653" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1719.325">BK1_OUTN</text>
+<text x="29.8" y="1719.325">PI5V_N</text>
+<text x="44.2" y="1719.325">1</text>
+<text x="62.2" y="1719.325">1</text>
+<text x="76.6" y="1719.325">GND</text>
+<line x1="10" y1="1721.053" x2="89.2" y2="1721.053" stroke="#202020" stroke-width="0.2"/>
+<line x1="28" y1="1710.253" x2="28" y2="1721.053" stroke="#202020" stroke-width="0.2"/>
+<line x1="42.4" y1="1710.253" x2="42.4" y2="1721.053" stroke="#202020" stroke-width="0.2"/>
+<line x1="60.4" y1="1710.253" x2="60.4" y2="1721.053" stroke="#202020" stroke-width="0.2"/>
+<line x1="74.8" y1="1710.253" x2="74.8" y2="1721.053" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="1730.833" font-weight="bold">PINOUT PI_P9 - 0.1 in pin header / Dupont 1P</text>
+<rect x="10" y="1732.453" width="72" height="10.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="1736.125" font-weight="bold">Pin</text>
+<text x="20.8" y="1736.125" font-weight="bold">Signal</text>
+<text x="35.2" y="1736.125" font-weight="bold">Wire</text>
+<text x="51.4" y="1736.125" font-weight="bold">To</text>
+<text x="71.2" y="1736.125" font-weight="bold">Color</text>
+<line x1="10" y1="1737.853" x2="82" y2="1737.853" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1741.525">1</text>
+<text x="20.8" y="1741.525">GND</text>
+<text x="35.2" y="1741.525">IMU_GND</text>
+<text x="51.4" y="1741.525">IMU_GND:1</text>
+<text x="71.2" y="1741.525">black</text>
+<line x1="10" y1="1743.253" x2="82" y2="1743.253" stroke="#202020" stroke-width="0.2"/>
+<line x1="19" y1="1732.453" x2="19" y2="1743.253" stroke="#202020" stroke-width="0.2"/>
+<line x1="33.4" y1="1732.453" x2="33.4" y2="1743.253" stroke="#202020" stroke-width="0.2"/>
+<line x1="49.6" y1="1732.453" x2="49.6" y2="1743.253" stroke="#202020" stroke-width="0.2"/>
+<line x1="69.4" y1="1732.453" x2="69.4" y2="1743.253" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="1747.033" font-weight="bold">FROM-TO PI_P9</text>
+<rect x="10" y="1748.653" width="79.2" height="10.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="1752.325" font-weight="bold">To</text>
+<text x="28" y="1752.325" font-weight="bold">Wire</text>
+<text x="44.2" y="1752.325" font-weight="bold">From pin</text>
+<text x="62.2" y="1752.325" font-weight="bold">To pin</text>
+<text x="76.6" y="1752.325" font-weight="bold">Signal</text>
+<line x1="10" y1="1754.053" x2="89.2" y2="1754.053" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1757.725">IMU_GND</text>
+<text x="28" y="1757.725">IMU_GND</text>
+<text x="44.2" y="1757.725">1</text>
+<text x="62.2" y="1757.725">1</text>
+<text x="76.6" y="1757.725">GND</text>
+<line x1="10" y1="1759.453" x2="89.2" y2="1759.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="26.2" y1="1748.653" x2="26.2" y2="1759.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="42.4" y1="1748.653" x2="42.4" y2="1759.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="60.4" y1="1748.653" x2="60.4" y2="1759.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="74.8" y1="1748.653" x2="74.8" y2="1759.453" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="1769.233" font-weight="bold">PINOUT PI_P11 - 0.1 in pin header / Dupont 1P</text>
+<rect x="10" y="1770.853" width="72" height="10.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="1774.525" font-weight="bold">Pin</text>
+<text x="20.8" y="1774.525" font-weight="bold">Signal</text>
+<text x="40.6" y="1774.525" font-weight="bold">Wire</text>
+<text x="51.4" y="1774.525" font-weight="bold">To</text>
+<text x="71.2" y="1774.525" font-weight="bold">Color</text>
+<line x1="10" y1="1776.253" x2="82" y2="1776.253" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1779.925">1</text>
+<text x="20.8" y="1779.925">ARM_BCM17</text>
+<text x="40.6" y="1779.925">ARM</text>
+<text x="51.4" y="1779.925">SIG_EXT:1</text>
+<text x="71.2" y="1779.925">white</text>
+<line x1="10" y1="1781.653" x2="82" y2="1781.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="19" y1="1770.853" x2="19" y2="1781.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="38.8" y1="1770.853" x2="38.8" y2="1781.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="49.6" y1="1770.853" x2="49.6" y2="1781.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="69.4" y1="1770.853" x2="69.4" y2="1781.653" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="1785.433" font-weight="bold">FROM-TO PI_P11</text>
+<rect x="10" y="1787.053" width="79.2" height="10.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="1790.725" font-weight="bold">To</text>
+<text x="28" y="1790.725" font-weight="bold">Wire</text>
+<text x="38.8" y="1790.725" font-weight="bold">From pin</text>
+<text x="56.8" y="1790.725" font-weight="bold">To pin</text>
+<text x="71.2" y="1790.725" font-weight="bold">Signal</text>
+<line x1="10" y1="1792.453" x2="89.2" y2="1792.453" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1796.125">SIG_EXT</text>
+<text x="28" y="1796.125">ARM</text>
+<text x="38.8" y="1796.125">1</text>
+<text x="56.8" y="1796.125">1</text>
+<text x="71.2" y="1796.125">ARM_BCM17</text>
+<line x1="10" y1="1797.853" x2="89.2" y2="1797.853" stroke="#202020" stroke-width="0.2"/>
+<line x1="26.2" y1="1787.053" x2="26.2" y2="1797.853" stroke="#202020" stroke-width="0.2"/>
+<line x1="37" y1="1787.053" x2="37" y2="1797.853" stroke="#202020" stroke-width="0.2"/>
+<line x1="55" y1="1787.053" x2="55" y2="1797.853" stroke="#202020" stroke-width="0.2"/>
+<line x1="69.4" y1="1787.053" x2="69.4" y2="1797.853" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="1807.633" font-weight="bold">PINOUT PI_P12 - 0.1 in pin header / Dupont 1P</text>
+<rect x="10" y="1809.253" width="73.8" height="10.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="1812.925" font-weight="bold">Pin</text>
+<text x="20.8" y="1812.925" font-weight="bold">Signal</text>
+<text x="40.6" y="1812.925" font-weight="bold">Wire</text>
+<text x="51.4" y="1812.925" font-weight="bold">To</text>
+<text x="71.2" y="1812.925" font-weight="bold">Color</text>
+<line x1="10" y1="1814.653" x2="83.8" y2="1814.653" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1818.325">1</text>
+<text x="20.8" y="1818.325">PWM_BCM18</text>
+<text x="40.6" y="1818.325">PWM</text>
+<text x="51.4" y="1818.325">SIG_EXT:2</text>
+<text x="71.2" y="1818.325">orange</text>
+<line x1="10" y1="1820.053" x2="83.8" y2="1820.053" stroke="#202020" stroke-width="0.2"/>
+<line x1="19" y1="1809.253" x2="19" y2="1820.053" stroke="#202020" stroke-width="0.2"/>
+<line x1="38.8" y1="1809.253" x2="38.8" y2="1820.053" stroke="#202020" stroke-width="0.2"/>
+<line x1="49.6" y1="1809.253" x2="49.6" y2="1820.053" stroke="#202020" stroke-width="0.2"/>
+<line x1="69.4" y1="1809.253" x2="69.4" y2="1820.053" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="1823.833" font-weight="bold">FROM-TO PI_P12</text>
+<rect x="10" y="1825.453" width="79.2" height="10.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="1829.125" font-weight="bold">To</text>
+<text x="28" y="1829.125" font-weight="bold">Wire</text>
+<text x="38.8" y="1829.125" font-weight="bold">From pin</text>
+<text x="56.8" y="1829.125" font-weight="bold">To pin</text>
+<text x="71.2" y="1829.125" font-weight="bold">Signal</text>
+<line x1="10" y1="1830.853" x2="89.2" y2="1830.853" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1834.525">SIG_EXT</text>
+<text x="28" y="1834.525">PWM</text>
+<text x="38.8" y="1834.525">1</text>
+<text x="56.8" y="1834.525">2</text>
+<text x="71.2" y="1834.525">PWM_BCM18</text>
+<line x1="10" y1="1836.253" x2="89.2" y2="1836.253" stroke="#202020" stroke-width="0.2"/>
+<line x1="26.2" y1="1825.453" x2="26.2" y2="1836.253" stroke="#202020" stroke-width="0.2"/>
+<line x1="37" y1="1825.453" x2="37" y2="1836.253" stroke="#202020" stroke-width="0.2"/>
+<line x1="55" y1="1825.453" x2="55" y2="1836.253" stroke="#202020" stroke-width="0.2"/>
+<line x1="69.4" y1="1825.453" x2="69.4" y2="1836.253" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="1846.033" font-weight="bold">PINOUT PI_P14 - 0.1 in pin header / Dupont 1P</text>
+<rect x="10" y="1847.653" width="72" height="10.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="1851.325" font-weight="bold">Pin</text>
+<text x="20.8" y="1851.325" font-weight="bold">Signal</text>
+<text x="35.2" y="1851.325" font-weight="bold">Wire</text>
+<text x="51.4" y="1851.325" font-weight="bold">To</text>
+<text x="71.2" y="1851.325" font-weight="bold">Color</text>
+<line x1="10" y1="1853.053" x2="82" y2="1853.053" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1856.725">1</text>
+<text x="20.8" y="1856.725">GND</text>
+<text x="35.2" y="1856.725">ARM_GND</text>
+<text x="51.4" y="1856.725">SIG_EXT:3</text>
+<text x="71.2" y="1856.725">black</text>
+<line x1="10" y1="1858.453" x2="82" y2="1858.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="19" y1="1847.653" x2="19" y2="1858.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="33.4" y1="1847.653" x2="33.4" y2="1858.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="49.6" y1="1847.653" x2="49.6" y2="1858.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="69.4" y1="1847.653" x2="69.4" y2="1858.453" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="1862.233" font-weight="bold">FROM-TO PI_P14</text>
+<rect x="10" y="1863.853" width="79.2" height="10.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="1867.525" font-weight="bold">To</text>
+<text x="28" y="1867.525" font-weight="bold">Wire</text>
+<text x="44.2" y="1867.525" font-weight="bold">From pin</text>
+<text x="62.2" y="1867.525" font-weight="bold">To pin</text>
+<text x="76.6" y="1867.525" font-weight="bold">Signal</text>
+<line x1="10" y1="1869.253" x2="89.2" y2="1869.253" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1872.925">SIG_EXT</text>
+<text x="28" y="1872.925">ARM_GND</text>
+<text x="44.2" y="1872.925">1</text>
+<text x="62.2" y="1872.925">3</text>
+<text x="76.6" y="1872.925">GND</text>
+<line x1="10" y1="1874.653" x2="89.2" y2="1874.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="26.2" y1="1863.853" x2="26.2" y2="1874.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="42.4" y1="1863.853" x2="42.4" y2="1874.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="60.4" y1="1863.853" x2="60.4" y2="1874.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="74.8" y1="1863.853" x2="74.8" y2="1874.653" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="1884.433" font-weight="bold">PINOUT IMU_VCC - 0.1 in pin header / Dupont 1P</text>
+<rect x="10" y="1886.053" width="68.4" height="10.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="1889.725" font-weight="bold">Pin</text>
+<text x="20.8" y="1889.725" font-weight="bold">Signal</text>
+<text x="35.2" y="1889.725" font-weight="bold">Wire</text>
+<text x="51.4" y="1889.725" font-weight="bold">To</text>
+<text x="67.6" y="1889.725" font-weight="bold">Color</text>
+<line x1="10" y1="1891.453" x2="78.4" y2="1891.453" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1895.125">1</text>
+<text x="20.8" y="1895.125">3V3</text>
+<text x="35.2" y="1895.125">IMU_VCC</text>
+<text x="51.4" y="1895.125">PI_P1:1</text>
+<text x="67.6" y="1895.125">red</text>
+<line x1="10" y1="1896.853" x2="78.4" y2="1896.853" stroke="#202020" stroke-width="0.2"/>
+<line x1="19" y1="1886.053" x2="19" y2="1896.853" stroke="#202020" stroke-width="0.2"/>
+<line x1="33.4" y1="1886.053" x2="33.4" y2="1896.853" stroke="#202020" stroke-width="0.2"/>
+<line x1="49.6" y1="1886.053" x2="49.6" y2="1896.853" stroke="#202020" stroke-width="0.2"/>
+<line x1="65.8" y1="1886.053" x2="65.8" y2="1896.853" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="1900.633" font-weight="bold">FROM-TO IMU_VCC</text>
+<rect x="10" y="1902.253" width="75.6" height="10.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="1905.925" font-weight="bold">To</text>
+<text x="24.4" y="1905.925" font-weight="bold">Wire</text>
+<text x="40.6" y="1905.925" font-weight="bold">From pin</text>
+<text x="58.6" y="1905.925" font-weight="bold">To pin</text>
+<text x="73" y="1905.925" font-weight="bold">Signal</text>
+<line x1="10" y1="1907.653" x2="85.6" y2="1907.653" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1911.325">PI_P1</text>
+<text x="24.4" y="1911.325">IMU_VCC</text>
+<text x="40.6" y="1911.325">1</text>
+<text x="58.6" y="1911.325">1</text>
+<text x="73" y="1911.325">3V3</text>
+<line x1="10" y1="1913.053" x2="85.6" y2="1913.053" stroke="#202020" stroke-width="0.2"/>
+<line x1="22.6" y1="1902.253" x2="22.6" y2="1913.053" stroke="#202020" stroke-width="0.2"/>
+<line x1="38.8" y1="1902.253" x2="38.8" y2="1913.053" stroke="#202020" stroke-width="0.2"/>
+<line x1="56.8" y1="1902.253" x2="56.8" y2="1913.053" stroke="#202020" stroke-width="0.2"/>
+<line x1="71.2" y1="1902.253" x2="71.2" y2="1913.053" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="1922.833" font-weight="bold">PINOUT IMU_GND - 0.1 in pin header / Dupont 1P</text>
+<rect x="10" y="1924.453" width="68.4" height="10.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="1928.125" font-weight="bold">Pin</text>
+<text x="20.8" y="1928.125" font-weight="bold">Signal</text>
+<text x="35.2" y="1928.125" font-weight="bold">Wire</text>
+<text x="51.4" y="1928.125" font-weight="bold">To</text>
+<text x="67.6" y="1928.125" font-weight="bold">Color</text>
+<line x1="10" y1="1929.853" x2="78.4" y2="1929.853" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1933.525">1</text>
+<text x="20.8" y="1933.525">GND</text>
+<text x="35.2" y="1933.525">IMU_GND</text>
+<text x="51.4" y="1933.525">PI_P9:1</text>
+<text x="67.6" y="1933.525">black</text>
+<line x1="10" y1="1935.253" x2="78.4" y2="1935.253" stroke="#202020" stroke-width="0.2"/>
+<line x1="19" y1="1924.453" x2="19" y2="1935.253" stroke="#202020" stroke-width="0.2"/>
+<line x1="33.4" y1="1924.453" x2="33.4" y2="1935.253" stroke="#202020" stroke-width="0.2"/>
+<line x1="49.6" y1="1924.453" x2="49.6" y2="1935.253" stroke="#202020" stroke-width="0.2"/>
+<line x1="65.8" y1="1924.453" x2="65.8" y2="1935.253" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="1939.033" font-weight="bold">FROM-TO IMU_GND</text>
+<rect x="10" y="1940.653" width="75.6" height="10.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="1944.325" font-weight="bold">To</text>
+<text x="24.4" y="1944.325" font-weight="bold">Wire</text>
+<text x="40.6" y="1944.325" font-weight="bold">From pin</text>
+<text x="58.6" y="1944.325" font-weight="bold">To pin</text>
+<text x="73" y="1944.325" font-weight="bold">Signal</text>
+<line x1="10" y1="1946.053" x2="85.6" y2="1946.053" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1949.725">PI_P9</text>
+<text x="24.4" y="1949.725">IMU_GND</text>
+<text x="40.6" y="1949.725">1</text>
+<text x="58.6" y="1949.725">1</text>
+<text x="73" y="1949.725">GND</text>
+<line x1="10" y1="1951.453" x2="85.6" y2="1951.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="22.6" y1="1940.653" x2="22.6" y2="1951.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="38.8" y1="1940.653" x2="38.8" y2="1951.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="56.8" y1="1940.653" x2="56.8" y2="1951.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="71.2" y1="1940.653" x2="71.2" y2="1951.453" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="1961.233" font-weight="bold">PINOUT IMU_SCL - 0.1 in pin header / Dupont 1P</text>
+<rect x="10" y="1962.853" width="70.2" height="10.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="1966.525" font-weight="bold">Pin</text>
+<text x="20.8" y="1966.525" font-weight="bold">Signal</text>
+<text x="35.2" y="1966.525" font-weight="bold">Wire</text>
+<text x="51.4" y="1966.525" font-weight="bold">To</text>
+<text x="67.6" y="1966.525" font-weight="bold">Color</text>
+<line x1="10" y1="1968.253" x2="80.2" y2="1968.253" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1971.925">1</text>
+<text x="20.8" y="1971.925">SCL</text>
+<text x="35.2" y="1971.925">IMU_SCL</text>
+<text x="51.4" y="1971.925">PI_P5:1</text>
+<text x="67.6" y="1971.925">yellow</text>
+<line x1="10" y1="1973.653" x2="80.2" y2="1973.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="19" y1="1962.853" x2="19" y2="1973.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="33.4" y1="1962.853" x2="33.4" y2="1973.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="49.6" y1="1962.853" x2="49.6" y2="1973.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="65.8" y1="1962.853" x2="65.8" y2="1973.653" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="1977.433" font-weight="bold">FROM-TO IMU_SCL</text>
+<rect x="10" y="1979.053" width="75.6" height="10.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="1982.725" font-weight="bold">To</text>
+<text x="24.4" y="1982.725" font-weight="bold">Wire</text>
+<text x="40.6" y="1982.725" font-weight="bold">From pin</text>
+<text x="58.6" y="1982.725" font-weight="bold">To pin</text>
+<text x="73" y="1982.725" font-weight="bold">Signal</text>
+<line x1="10" y1="1984.453" x2="85.6" y2="1984.453" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="1988.125">PI_P5</text>
+<text x="24.4" y="1988.125">IMU_SCL</text>
+<text x="40.6" y="1988.125">1</text>
+<text x="58.6" y="1988.125">1</text>
+<text x="73" y="1988.125">SCL</text>
+<line x1="10" y1="1989.853" x2="85.6" y2="1989.853" stroke="#202020" stroke-width="0.2"/>
+<line x1="22.6" y1="1979.053" x2="22.6" y2="1989.853" stroke="#202020" stroke-width="0.2"/>
+<line x1="38.8" y1="1979.053" x2="38.8" y2="1989.853" stroke="#202020" stroke-width="0.2"/>
+<line x1="56.8" y1="1979.053" x2="56.8" y2="1989.853" stroke="#202020" stroke-width="0.2"/>
+<line x1="71.2" y1="1979.053" x2="71.2" y2="1989.853" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="1999.633" font-weight="bold">PINOUT IMU_SDA - 0.1 in pin header / Dupont 1P</text>
+<rect x="10" y="2001.253" width="68.4" height="10.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="2004.925" font-weight="bold">Pin</text>
+<text x="20.8" y="2004.925" font-weight="bold">Signal</text>
+<text x="35.2" y="2004.925" font-weight="bold">Wire</text>
+<text x="51.4" y="2004.925" font-weight="bold">To</text>
+<text x="67.6" y="2004.925" font-weight="bold">Color</text>
+<line x1="10" y1="2006.653" x2="78.4" y2="2006.653" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="2010.325">1</text>
+<text x="20.8" y="2010.325">SDA</text>
+<text x="35.2" y="2010.325">IMU_SDA</text>
+<text x="51.4" y="2010.325">PI_P3:1</text>
+<text x="67.6" y="2010.325">green</text>
+<line x1="10" y1="2012.053" x2="78.4" y2="2012.053" stroke="#202020" stroke-width="0.2"/>
+<line x1="19" y1="2001.253" x2="19" y2="2012.053" stroke="#202020" stroke-width="0.2"/>
+<line x1="33.4" y1="2001.253" x2="33.4" y2="2012.053" stroke="#202020" stroke-width="0.2"/>
+<line x1="49.6" y1="2001.253" x2="49.6" y2="2012.053" stroke="#202020" stroke-width="0.2"/>
+<line x1="65.8" y1="2001.253" x2="65.8" y2="2012.053" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="2015.833" font-weight="bold">FROM-TO IMU_SDA</text>
+<rect x="10" y="2017.453" width="75.6" height="10.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="2021.125" font-weight="bold">To</text>
+<text x="24.4" y="2021.125" font-weight="bold">Wire</text>
+<text x="40.6" y="2021.125" font-weight="bold">From pin</text>
+<text x="58.6" y="2021.125" font-weight="bold">To pin</text>
+<text x="73" y="2021.125" font-weight="bold">Signal</text>
+<line x1="10" y1="2022.853" x2="85.6" y2="2022.853" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="2026.525">PI_P3</text>
+<text x="24.4" y="2026.525">IMU_SDA</text>
+<text x="40.6" y="2026.525">1</text>
+<text x="58.6" y="2026.525">1</text>
+<text x="73" y="2026.525">SDA</text>
+<line x1="10" y1="2028.253" x2="85.6" y2="2028.253" stroke="#202020" stroke-width="0.2"/>
+<line x1="22.6" y1="2017.453" x2="22.6" y2="2028.253" stroke="#202020" stroke-width="0.2"/>
+<line x1="38.8" y1="2017.453" x2="38.8" y2="2028.253" stroke="#202020" stroke-width="0.2"/>
+<line x1="56.8" y1="2017.453" x2="56.8" y2="2028.253" stroke="#202020" stroke-width="0.2"/>
+<line x1="71.2" y1="2017.453" x2="71.2" y2="2028.253" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="2038.033" font-weight="bold">PINOUT SERVO_EXT - Generic connector 2P</text>
+<rect x="10" y="2039.653" width="73.8" height="16.2" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="2043.325" font-weight="bold">Pin</text>
+<text x="20.8" y="2043.325" font-weight="bold">Signal</text>
+<text x="35.2" y="2043.325" font-weight="bold">Wire</text>
+<text x="51.4" y="2043.325" font-weight="bold">To</text>
+<text x="73" y="2043.325" font-weight="bold">Color</text>
+<line x1="10" y1="2045.053" x2="83.8" y2="2045.053" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="2048.725">1</text>
+<text x="20.8" y="2048.725">V7V0</text>
+<text x="35.2" y="2048.725">SERVO_P</text>
+<text x="51.4" y="2048.725">BK2_OUTP:1</text>
+<text x="73" y="2048.725">red</text>
+<line x1="10" y1="2050.453" x2="83.8" y2="2050.453" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="2054.125">2</text>
+<text x="20.8" y="2054.125">GND</text>
+<text x="35.2" y="2054.125">SERVO_N</text>
+<text x="51.4" y="2054.125">BK2_OUTN:1</text>
+<text x="73" y="2054.125">black</text>
+<line x1="10" y1="2055.853" x2="83.8" y2="2055.853" stroke="#202020" stroke-width="0.2"/>
+<line x1="19" y1="2039.653" x2="19" y2="2055.853" stroke="#202020" stroke-width="0.2"/>
+<line x1="33.4" y1="2039.653" x2="33.4" y2="2055.853" stroke="#202020" stroke-width="0.2"/>
+<line x1="49.6" y1="2039.653" x2="49.6" y2="2055.853" stroke="#202020" stroke-width="0.2"/>
+<line x1="71.2" y1="2039.653" x2="71.2" y2="2055.853" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="2059.633" font-weight="bold">FROM-TO SERVO_EXT</text>
+<rect x="10" y="2061.253" width="81" height="16.2" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="2064.925" font-weight="bold">To</text>
+<text x="29.8" y="2064.925" font-weight="bold">Wire</text>
+<text x="46" y="2064.925" font-weight="bold">From pin</text>
+<text x="64" y="2064.925" font-weight="bold">To pin</text>
+<text x="78.4" y="2064.925" font-weight="bold">Signal</text>
+<line x1="10" y1="2066.653" x2="91" y2="2066.653" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="2070.325">BK2_OUTN</text>
+<text x="29.8" y="2070.325">SERVO_N</text>
+<text x="46" y="2070.325">2</text>
+<text x="64" y="2070.325">1</text>
+<text x="78.4" y="2070.325">GND</text>
+<line x1="10" y1="2072.053" x2="91" y2="2072.053" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="2075.725">BK2_OUTP</text>
+<text x="29.8" y="2075.725">SERVO_P</text>
+<text x="46" y="2075.725">1</text>
+<text x="64" y="2075.725">1</text>
+<text x="78.4" y="2075.725">V7V0</text>
+<line x1="10" y1="2077.453" x2="91" y2="2077.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="28" y1="2061.253" x2="28" y2="2077.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="44.2" y1="2061.253" x2="44.2" y2="2077.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="62.2" y1="2061.253" x2="62.2" y2="2077.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="76.6" y1="2061.253" x2="76.6" y2="2077.453" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="2087.233" font-weight="bold">PINOUT SIG_EXT - Generic connector 3P</text>
+<rect x="10" y="2088.853" width="77.4" height="21.6" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="2092.525" font-weight="bold">Pin</text>
+<text x="20.8" y="2092.525" font-weight="bold">Signal</text>
+<text x="40.6" y="2092.525" font-weight="bold">Wire</text>
+<text x="56.8" y="2092.525" font-weight="bold">To</text>
+<text x="74.8" y="2092.525" font-weight="bold">Color</text>
+<line x1="10" y1="2094.253" x2="87.4" y2="2094.253" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="2097.925">1</text>
+<text x="20.8" y="2097.925">ARM_BCM17</text>
+<text x="40.6" y="2097.925">ARM</text>
+<text x="56.8" y="2097.925">PI_P11:1</text>
+<text x="74.8" y="2097.925">white</text>
+<line x1="10" y1="2099.653" x2="87.4" y2="2099.653" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="2103.325">2</text>
+<text x="20.8" y="2103.325">PWM_BCM18</text>
+<text x="40.6" y="2103.325">PWM</text>
+<text x="56.8" y="2103.325">PI_P12:1</text>
+<text x="74.8" y="2103.325">orange</text>
+<line x1="10" y1="2105.053" x2="87.4" y2="2105.053" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="2108.725">3</text>
+<text x="20.8" y="2108.725">GND</text>
+<text x="40.6" y="2108.725">ARM_GND</text>
+<text x="56.8" y="2108.725">PI_P14:1</text>
+<text x="74.8" y="2108.725">black</text>
+<line x1="10" y1="2110.453" x2="87.4" y2="2110.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="19" y1="2088.853" x2="19" y2="2110.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="38.8" y1="2088.853" x2="38.8" y2="2110.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="55" y1="2088.853" x2="55" y2="2110.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="73" y1="2088.853" x2="73" y2="2110.453" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="2114.233" font-weight="bold">FROM-TO SIG_EXT</text>
+<rect x="10" y="2115.853" width="82.8" height="21.6" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="2119.525" font-weight="bold">To</text>
+<text x="26.2" y="2119.525" font-weight="bold">Wire</text>
+<text x="42.4" y="2119.525" font-weight="bold">From pin</text>
+<text x="60.4" y="2119.525" font-weight="bold">To pin</text>
+<text x="74.8" y="2119.525" font-weight="bold">Signal</text>
+<line x1="10" y1="2121.253" x2="92.8" y2="2121.253" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="2124.925">PI_P11</text>
+<text x="26.2" y="2124.925">ARM</text>
+<text x="42.4" y="2124.925">1</text>
+<text x="60.4" y="2124.925">1</text>
+<text x="74.8" y="2124.925">ARM_BCM17</text>
+<line x1="10" y1="2126.653" x2="92.8" y2="2126.653" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="2130.325">PI_P12</text>
+<text x="26.2" y="2130.325">PWM</text>
+<text x="42.4" y="2130.325">2</text>
+<text x="60.4" y="2130.325">1</text>
+<text x="74.8" y="2130.325">PWM_BCM18</text>
+<line x1="10" y1="2132.053" x2="92.8" y2="2132.053" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="2135.725">PI_P14</text>
+<text x="26.2" y="2135.725">ARM_GND</text>
+<text x="42.4" y="2135.725">3</text>
+<text x="60.4" y="2135.725">1</text>
+<text x="74.8" y="2135.725">GND</text>
+<line x1="10" y1="2137.453" x2="92.8" y2="2137.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="24.4" y1="2115.853" x2="24.4" y2="2137.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="40.6" y1="2115.853" x2="40.6" y2="2137.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="58.6" y1="2115.853" x2="58.6" y2="2137.453" stroke="#202020" stroke-width="0.2"/>
+<line x1="73" y1="2115.853" x2="73" y2="2137.453" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="2147.233" font-weight="bold">PINOUT JACK_N - Generic connector 1P</text>
+<rect x="10" y="2148.853" width="63" height="10.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="2152.525" font-weight="bold">Pin</text>
+<text x="20.8" y="2152.525" font-weight="bold">Signal</text>
+<text x="35.2" y="2152.525" font-weight="bold">Wire</text>
+<text x="49.6" y="2152.525" font-weight="bold">To</text>
+<text x="62.2" y="2152.525" font-weight="bold">Color</text>
+<line x1="10" y1="2154.253" x2="73" y2="2154.253" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="2157.925">1</text>
+<text x="20.8" y="2157.925">GND</text>
+<text x="35.2" y="2157.925">JACK_N</text>
+<text x="49.6" y="2157.925">SPL:2</text>
+<text x="62.2" y="2157.925">black</text>
+<line x1="10" y1="2159.653" x2="73" y2="2159.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="19" y1="2148.853" x2="19" y2="2159.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="33.4" y1="2148.853" x2="33.4" y2="2159.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="47.8" y1="2148.853" x2="47.8" y2="2159.653" stroke="#202020" stroke-width="0.2"/>
+<line x1="60.4" y1="2148.853" x2="60.4" y2="2159.653" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="2163.433" font-weight="bold">FROM-TO JACK_N</text>
+<rect x="10" y="2165.053" width="70.2" height="10.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="2168.725" font-weight="bold">To</text>
+<text x="20.8" y="2168.725" font-weight="bold">Wire</text>
+<text x="35.2" y="2168.725" font-weight="bold">From pin</text>
+<text x="53.2" y="2168.725" font-weight="bold">To pin</text>
+<text x="67.6" y="2168.725" font-weight="bold">Signal</text>
+<line x1="10" y1="2170.453" x2="80.2" y2="2170.453" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="2174.125">SPL</text>
+<text x="20.8" y="2174.125">JACK_N</text>
+<text x="35.2" y="2174.125">1</text>
+<text x="53.2" y="2174.125">2</text>
+<text x="67.6" y="2174.125">GND</text>
+<line x1="10" y1="2175.853" x2="80.2" y2="2175.853" stroke="#202020" stroke-width="0.2"/>
+<line x1="19" y1="2165.053" x2="19" y2="2175.853" stroke="#202020" stroke-width="0.2"/>
+<line x1="33.4" y1="2165.053" x2="33.4" y2="2175.853" stroke="#202020" stroke-width="0.2"/>
+<line x1="51.4" y1="2165.053" x2="51.4" y2="2175.853" stroke="#202020" stroke-width="0.2"/>
+<line x1="65.8" y1="2165.053" x2="65.8" y2="2175.853" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="2185.633" font-weight="bold">CLAMPS (position = adjacent segment lengths, mm)</text>
+<rect x="10" y="2187.253" width="48.6" height="75.6" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="2190.925" font-weight="bold">Clamp</text>
+<text x="24.4" y="2190.925" font-weight="bold">Segments</text>
+<line x1="10" y1="2192.653" x2="58.6" y2="2192.653" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="2196.325">n10</text>
+<text x="24.4" y="2196.325">s29=8.1, s30=15.2</text>
+<line x1="10" y1="2198.053" x2="58.6" y2="2198.053" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="2201.725">n12</text>
+<text x="24.4" y="2201.725">s34=21.6, s37=0.7</text>
+<line x1="10" y1="2203.453" x2="58.6" y2="2203.453" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="2207.125">n13</text>
+<text x="24.4" y="2207.125">s38=11.3, s36=4.3</text>
+<line x1="10" y1="2208.853" x2="58.6" y2="2208.853" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="2212.525">n14</text>
+<text x="24.4" y="2212.525">s37=0.7, s38=11.3</text>
+<line x1="10" y1="2214.253" x2="58.6" y2="2214.253" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="2217.925">n17</text>
+<text x="24.4" y="2217.925">s57=45.7, s55=8.9</text>
+<line x1="10" y1="2219.653" x2="58.6" y2="2219.653" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="2223.325">n18</text>
+<text x="24.4" y="2223.325">s56=2.9, s57=45.7</text>
+<line x1="10" y1="2225.053" x2="58.6" y2="2225.053" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="2228.725">n19</text>
+<text x="24.4" y="2228.725">s58=24.0, s59=24.0</text>
+<line x1="10" y1="2230.453" x2="58.6" y2="2230.453" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="2234.125">n20</text>
+<text x="24.4" y="2234.125">s59=24.0, s60=47.6</text>
+<line x1="10" y1="2235.853" x2="58.6" y2="2235.853" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="2239.525">n5</text>
+<text x="24.4" y="2239.525">s22=12.7, s20=17.2</text>
+<line x1="10" y1="2241.253" x2="58.6" y2="2241.253" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="2244.925">n6</text>
+<text x="24.4" y="2244.925">s24=0.3, s22=12.7</text>
+<line x1="10" y1="2246.653" x2="58.6" y2="2246.653" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="2250.325">n7</text>
+<text x="24.4" y="2250.325">s26=13.4, s24=0.3</text>
+<line x1="10" y1="2252.053" x2="58.6" y2="2252.053" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="2255.725">n8</text>
+<text x="24.4" y="2255.725">s28=1.6, s26=13.4</text>
+<line x1="10" y1="2257.453" x2="58.6" y2="2257.453" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="2261.125">n9</text>
+<text x="24.4" y="2261.125">s30=15.2, s28=1.6</text>
+<line x1="10" y1="2262.853" x2="58.6" y2="2262.853" stroke="#202020" stroke-width="0.2"/>
+<line x1="22.6" y1="2187.253" x2="22.6" y2="2262.853" stroke="#202020" stroke-width="0.2"/>
+<text x="10" y="2272.633" font-weight="bold">BREAKOUT ANGLES (degrees relative to inherited heading)</text>
+<rect x="10" y="2274.253" width="41.4" height="64.8" fill="none" stroke="#202020" stroke-width="0.3"/>
+<text x="11.8" y="2277.925" font-weight="bold">Node</text>
+<text x="22.6" y="2277.925" font-weight="bold">Segment</text>
+<text x="38.8" y="2277.925" font-weight="bold">Angle</text>
+<line x1="10" y1="2279.653" x2="51.4" y2="2279.653" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="2283.325">n1</text>
+<text x="22.6" y="2283.325">s5</text>
+<text x="38.8" y="2283.325">+105.0</text>
+<line x1="10" y1="2285.053" x2="51.4" y2="2285.053" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="2288.725">n3</text>
+<text x="22.6" y="2288.725">s15</text>
+<text x="38.8" y="2288.725">+105.0</text>
+<line x1="10" y1="2290.453" x2="51.4" y2="2290.453" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="2294.125">S1</text>
+<text x="22.6" y="2294.125">s2</text>
+<text x="38.8" y="2294.125">+105.0</text>
+<line x1="10" y1="2295.853" x2="51.4" y2="2295.853" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="2299.525">n11</text>
+<text x="22.6" y="2299.525">s33</text>
+<text x="38.8" y="2299.525">+105.0</text>
+<line x1="10" y1="2301.253" x2="51.4" y2="2301.253" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="2304.925">n15</text>
+<text x="22.6" y="2304.925">s43</text>
+<text x="38.8" y="2304.925">+60.0</text>
+<line x1="10" y1="2306.653" x2="51.4" y2="2306.653" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="2310.325">n2</text>
+<text x="22.6" y="2310.325">s6</text>
+<text x="38.8" y="2310.325">+90.0</text>
+<line x1="10" y1="2312.053" x2="51.4" y2="2312.053" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="2315.725">SPL</text>
+<text x="22.6" y="2315.725">s10</text>
+<text x="38.8" y="2315.725">+90.0</text>
+<line x1="10" y1="2317.453" x2="51.4" y2="2317.453" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="2321.125">SPL</text>
+<text x="22.6" y="2321.125">s12</text>
+<text x="38.8" y="2321.125">-90.0</text>
+<line x1="10" y1="2322.853" x2="51.4" y2="2322.853" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="2326.525">SPL</text>
+<text x="22.6" y="2326.525">s9</text>
+<text x="38.8" y="2326.525">+140.0</text>
+<line x1="10" y1="2328.253" x2="51.4" y2="2328.253" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="2331.925">n16</text>
+<text x="22.6" y="2331.925">s51</text>
+<text x="38.8" y="2331.925">+90.0</text>
+<line x1="10" y1="2333.653" x2="51.4" y2="2333.653" stroke="#202020" stroke-width="0.2"/>
+<text x="11.8" y="2337.325">n16</text>
+<text x="22.6" y="2337.325">s52</text>
+<text x="38.8" y="2337.325">-90.0</text>
+<line x1="10" y1="2339.053" x2="51.4" y2="2339.053" stroke="#202020" stroke-width="0.2"/>
+<line x1="20.8" y1="2274.253" x2="20.8" y2="2339.053" stroke="#202020" stroke-width="0.2"/>
+<line x1="37" y1="2274.253" x2="37" y2="2339.053" stroke="#202020" stroke-width="0.2"/>
+</svg>

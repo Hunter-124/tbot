@@ -1,0 +1,26 @@
+wire,circuit,from,to,awg,colour,net,routed_module_mm,routed_external_mm,service_loop_mm,termination_mm,sum_mm,CUT_mm,min_bend_R_mm
+BATT_P_pack,Battery pack lead,PACK_P:1,SPL:1,20,red,VBAT+,14.7,0,0,0,14.7,pack lead,2.5
+BATT_N_pack,Battery pack lead,PACK_N:1,SPL:2,20,black,GND,13.5,0,0,0,13.5,pack lead,2.5
+JACK_P,Charge jack,JACK:1,SPL:1,20,red,VBAT+,20.3,0,30,10,60.3,65,2.5
+JACK_N,Charge jack,JACK_N:1,SPL:2,20,black,GND,20.3,0,30,10,60.3,65,2.5
+BATT_P_lever,Battery -> lever,SPL:1,LEV_BAT_P:1,20,red,VBAT+,98.6,0,30,10,138.6,140,1.5
+BATT_N_lever,Battery -> lever,SPL:2,LEV_BAT_N:1,20,black,GND,104.1,0,30,10,144.1,145,1.5
+SUP_P,Lever -> S1,LEV_SUP_P:1,S1:1,20,red,VBAT+,11.6,0,30,10,51.6,55,2
+SUP_N,Lever -> S1,LEV_SUP_N:1,S1:2,20,black,GND,16.4,0,30,10,56.4,60,2
+B1IN_P,Buck #1 IN,S1:1,BK1_INP:1,20,red,VBAT+,46.1,0,30,10,86.1,90,2
+B1IN_N,Buck #1 IN,S1:2,BK1_INN:1,20,black,GND,41.8,0,30,10,81.8,85,2
+B2IN_P,Buck #2 IN,S1:1,BK2_INP:1,20,red,VBAT+,87.1,0,30,10,127.1,130,2
+B2IN_N,Buck #2 IN,S1:2,BK2_INN:1,20,black,GND,85.9,0,30,10,125.9,130,1.5
+PI5V_P,Pi 5 V,BK1_OUTP:1,PI_P2:1,20,red,5V0,69.6,0,30,10,109.6,110,2.5
+PI5V_N,Pi 5 V,BK1_OUTN:1,PI_P6:1,20,black,GND,62.7,0,30,10,102.7,105,2.5
+CAP_P,1000uF cap,CAP_P:1,BK2_OUTP:1,22,red,V7V0,31.1,0,30,10,71.1,75,2.5
+CAP_N,1000uF cap,CAP_N:1,BK2_OUTN:1,22,black,GND,17.2,0,30,10,57.2,60,2.5
+SERVO_P,Servo 7 V (to trigger set),BK2_OUTP:1,MG996R red (splice),22,red,V7V0,38.0,573.0,60,10,681.0,685,2.5 / ext 8
+SERVO_N,Servo 7 V (to trigger set),BK2_OUTN:1,MG996R brown (splice),22,black,GND,43.3,573.0,60,10,686.2,690,2.5 / ext 8
+IMU_VCC,IMU,PI_P1:1,IMU_VCC:1,26,red,3V3,61.3,0,30,10,101.3,105,1.5
+IMU_SDA,IMU,PI_P3:1,IMU_SDA:1,26,green,SDA,63.7,0,30,10,103.7,105,2
+IMU_SCL,IMU,PI_P5:1,IMU_SCL:1,26,yellow,SCL,61.1,0,30,10,101.1,105,2
+IMU_GND,IMU,PI_P9:1,IMU_GND:1,26,black,GND,59.0,0,30,10,99.0,100,2
+ARM,Arming (to trigger set),PI_P11:1,Arm button lead 1 (splice),26,white,ARM_BCM17,64.0,495.4,60,10,629.4,630,1.5 / ext 6
+PWM,Servo PWM (to trigger set),PI_P12:1,MG996R orange (splice),26,orange,PWM_BCM18,64.8,500.3,60,10,635.0,640,1.5 / ext 6
+ARM_GND,Arming GND (to trigger set),PI_P14:1,Arm button lead 2 (splice),26,black,GND,66.1,495.4,60,10,631.5,635,1.5 / ext 6
