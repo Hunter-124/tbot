@@ -87,9 +87,32 @@ def _unpack_imu(msg: bytes) -> list[ImuSample]:
     return [ImuSample(int(t[i]), a[i, 0:3].copy(), a[i, 3:6].copy(), float(a[i, 6])) for i in range(n)]
 
 
-def _child(conn, cfg, calib, spec: str, want_imu: bool, stop_evt, parent_pid: int) -> None:
+class _StopFlag:
+    """The child's stop request: SIGTERM, or an S message from the parent on the pipe. (A multiprocessing
+    Event is a named semaphore, and at every service stop their cleanup raced the resource tracker and
+    filled the log with tracebacks.)"""
+
+    def __init__(self, conn) -> None:
+        self._conn = conn
+        self._set = False
+
+    def set(self) -> None:
+        self._set = True
+
+    def is_set(self) -> bool:
+        if not self._set:
+            try:
+                if self._conn.poll(0) and self._conn.recv_bytes() == b"S":
+                    self._set = True
+            except (EOFError, OSError):
+                self._set = True  # the parent is gone
+        return self._set
+
+
+def _child(conn, cfg, calib, spec: str, want_imu: bool, parent_pid: int) -> None:
     """Child process body: acquire, publish, until told to stop or the parent is gone."""
     signal.signal(signal.SIGINT, signal.SIG_IGN)  # Ctrl-C reaches the whole process group: the parent decides
+    stop_evt = _StopFlag(conn)
     try:
         signal.signal(signal.SIGTERM, lambda *_: stop_evt.set())
     except (ValueError, OSError):
@@ -113,6 +136,8 @@ def _child(conn, cfg, calib, spec: str, want_imu: bool, stop_evt, parent_pid: in
             "pid": os.getpid(),
         }))
         shm_name = conn.recv_bytes().decode()
+        if shm_name == "S":  # told to stop before it was given the ring
+            return
         try:
             shm = shared_memory.SharedMemory(name=shm_name, track=False)  # 3.13+: the parent owns the segment
         except TypeError:
@@ -280,10 +305,9 @@ class SensorProcess(SourceBase):
     # ----------------------------------------------------------------------------- the child
     def _spawn(self) -> None:
         self._conn, child_conn = self._ctx.Pipe(duplex=True)
-        self._stop_evt = self._ctx.Event()
         self._proc = self._ctx.Process(target=_child, name="tbot-sensors", daemon=True,
                                        args=(child_conn, self._cfg, self._calib, self.spec, self._want_imu,
-                                             self._stop_evt, os.getpid()))
+                                             os.getpid()))
         self._proc.start()
         child_conn.close()
         self._poller = None
@@ -321,8 +345,14 @@ class SensorProcess(SourceBase):
         self._state = "running"
         self._last_msg_t = self._last_frame_t = time.monotonic()
 
+    def _request_stop(self) -> None:
+        try:
+            self._conn.send_bytes(b"S")
+        except (OSError, ValueError):
+            pass
+
     def _abort(self) -> None:
-        self._stop_evt.set()
+        self._request_stop()
         self._proc.join(timeout=3.0)
         if self._proc.is_alive():
             self._proc.terminate()
@@ -330,7 +360,7 @@ class SensorProcess(SourceBase):
     def _kill_child(self, polite: bool = True) -> None:
         """End the current child, politely first unless it is hung; never returns with it holding the camera."""
         proc = self._proc
-        self._stop_evt.set()
+        self._request_stop()
         deadline = time.monotonic() + (1.5 if polite else 0.0)
         while proc.is_alive() and time.monotonic() < deadline:
             self._pump(0.05)  # keep the pipe drained so the child is never stuck in send()
@@ -475,7 +505,7 @@ class SensorProcess(SourceBase):
         self._closed = True
         if self._state != "down":
             self._state = "stopping"
-            self._stop_evt.set()
+            self._request_stop()
             deadline = time.monotonic() + 6.0   # the camera's own stop can take 3 s on a stalled link
             while self._proc.is_alive() and time.monotonic() < deadline:
                 self._pump(0.05)                # keep the pipe drained so the child is never stuck in send()

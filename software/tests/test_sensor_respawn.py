@@ -72,7 +72,7 @@ def test_child_without_frames_is_replaced(tmp_path):
     proc = SensorProcess(cfg, Calibration(dir=tmp_path / "calib"), "synthetic:static_gun", respawn_s=1.0)
     try:
         _frames(proc, 3)
-        proc._stop_evt.set()  # the child stops reading its camera ... and here exits, which is also covered
+        proc._request_stop()  # the child stops reading its camera ... and here exits, which is also covered
         _wait_respawn(proc, 1)
         _frames(proc, 3)
     finally:
