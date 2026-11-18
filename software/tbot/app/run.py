@@ -267,7 +267,11 @@ class Pipeline:
             self.server = DebugServer(self.cfg)
             self.server.clips_dir = resolve_path(self.cfg.record.dir)
             self.server.renders_on_demand = True  # frames are drawn only while somebody is watching (_publish)
-            self.server.start()
+            try:
+                self.server.start()
+            except OSError as exc:  # port taken (a stale instance): the gun works without its debug page
+                log.error("debug stream not started on port %s: %s", self.cfg.stream.port, exc)
+                self.server = None
         self._open_recorder()
         if self.actuator is not None and self.cfg.fire.live:
             self.actuator.rest()  # known state before the first frame; dry run never commands the actuator
@@ -546,6 +550,15 @@ class Pipeline:
                       others_max=int(getattr(self.cfg.detector, "followed_others_max", 0)))
         self.detector.candidate_filter = clutter.filter
 
+    def _imu_age_ms(self, now_ns: int) -> float | None:
+        """Age of the newest IMU sample the attitude has, on the source clock; None without a real IMU."""
+        if isinstance(self.attitude, FixedAttitude):
+            return None
+        last = getattr(self.attitude, "_last_t_ns", None)
+        if last is None:
+            return float("inf")
+        return max(0.0, (int(now_ns) - int(last)) / 1e6)
+
     # ------------------------------------------------------------------ one frame
     def step(self) -> dict | None:
         """Process the next frame. None = no frame (timeout or end of stream)."""
@@ -617,6 +630,12 @@ class Pipeline:
         if decision.fire and not self.engagement.spacing_ok(now):
             decision.fire = False
             decision.reason = "shot spacing"
+        imu_age_ms = self._imu_age_ms(now)
+        if decision.fire and imu_age_ms is not None and imu_age_ms > float(getattr(cfg.fire, "max_imu_age_ms", 0.0)) > 0:
+            # the IMU stream has stopped (I2C fault, sensor process being replaced): the attitude, and the swing
+            # the solver extrapolates over the trigger delay, are frozen
+            decision.fire = False
+            decision.reason = f"IMU stale ({imu_age_ms:.0f} ms)"
         if decision.fire and self.actuator is not None and cfg.fire.live and bool(getattr(self.actuator, "busy", False)):
             decision.fire = False  # the trigger has not reset yet: do not spend a shot of this press on a refusal
             decision.reason = "actuator busy"
@@ -680,11 +699,16 @@ class Pipeline:
             "age_ms": (now - int(frame.t_exposure_ns)) / 1e6,
             "fps": float(self.fps),
             "dropped": int(getattr(self.source, "dropped", 0)),
+            # frames the sensor sent that never arrived (CSI/ISP trouble; `dropped` also counts frames merely
+            # skipped because a newer one was there, e.g. while the button is up), and camera restarts
+            "lost": int(getattr(self.source, "lost", 0) or 0),
+            "cam_restarts": int(getattr(self.source, "restarts", 0) or 0),
             "armed": armed,
             "shots": int(self.shots),
             "fired": bool(fired),
             "live": bool(cfg.fire.live),
             "imu_ready": bool(self.attitude.ready),
+            "imu_age_ms": None if imu_age_ms is None or not math.isfinite(imu_age_ms) else round(imu_age_ms, 1),
             "n_detections": len(self.detections),
             "exposure_us": float(frame.exposure_us),
             "gain": float(frame.gain),
@@ -825,13 +849,20 @@ class Pipeline:
         if ae is not None:  # exposure the light asked for; flagged when the scene is outside the camera's range
             flag = {"too_bright": " !BRIGHT", "too_dark": " !DARK"}.get(ae["state"], "")
             hstr += f"  exp {tele['exposure_us']:.0f}us x{tele['gain']:.1f}{flag}"
-        print(
+        if tele.get("lost"):
+            hstr += f"  lost {tele['lost']}"
+        if tele.get("cam_restarts"):
+            hstr += f"  CAMERA RESTARTS {tele['cam_restarts']}"
+        line = (
             f"[{self.frames:6d}] {tele['fps']:5.1f} fps  age {tele['age_ms']:5.1f} ms  "
             f"cpu {tele['stage_ms']['total']:5.1f} ms  det {tele['n_detections']}  trk {len(tele['tracks'])}  "
             f"{'ARMED' if tele['armed'] else 'SAFE '}  shots {self.shots}  drop {tele['dropped']}{hstr}  "
-            f"{'FIRE' if d['fire'] else d['reason']}",
-            flush=True,
+            f"{'FIRE' if d['fire'] else d['reason']}"
         )
+        print(line, flush=True)
+        self._status_n = getattr(self, "_status_n", 0) + 1
+        if self._status_n % STATUS_FILE_EVERY == 1:
+            logging.getLogger("tbot.status").info("%s", line)
 
     def run(
         self,
@@ -923,6 +954,31 @@ class Pipeline:
 
 
 # --------------------------------------------------------------------------------------------- CLI
+STATUS_FILE_EVERY = 10  # every Nth status line (one a second) also goes to the log file
+
+
+def _log_to_file(path: str | None) -> None:
+    """Also write the log, and a status line every STATUS_FILE_EVERY s, to a rotating file (5 MB x 4) that
+    outlives a power cycle (the Pi's journal is in RAM). The service sets TBOT_LOG_FILE (scripts/tbot-run.sh)."""
+    if not path:
+        return
+    from logging.handlers import RotatingFileHandler  # noqa: PLC0415
+
+    try:
+        p = resolve_path(path)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        handler = RotatingFileHandler(p, maxBytes=5 * 1024 * 1024, backupCount=3)
+    except OSError as exc:
+        log.warning("log file %s: %s", path, exc)
+        return
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+    logging.getLogger().addHandler(handler)
+    status = logging.getLogger("tbot.status")
+    status.propagate = False  # the status line is printed already; the file gets one in STATUS_FILE_EVERY
+    status.addHandler(handler)
+    status.setLevel(logging.INFO)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="tbot run",
@@ -943,6 +999,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    _log_to_file(os.environ.get("TBOT_LOG_FILE"))
     cfg, calib = load_from_args(args)
     if args.live:
         cfg.fire.live = True

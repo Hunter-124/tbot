@@ -12,6 +12,9 @@ mode=dry
 case "$mode" in dry|live|test) ;; *) echo "tbot-run: unknown mode '$mode' -> dry"; mode=dry ;; esac
 cd "$(dirname -- "${BASH_SOURCE[0]}")/.." || exit 1
 mkdir -p logs sessions
+# the log (and a status line every 10 s) also goes to logs/tbot-run.log: the Pi's journal is lost at every
+# power cycle, this file is not (5 MB x 4, rotated)
+export TBOT_LOG_FILE=${TBOT_LOG_FILE:-logs/tbot-run.log}
 # Every held press of the arming button is saved under sessions/ (raw frames, IMU, per-frame telemetry, summary
 # and an annotated clip.mp4; browse them at http://<pi>:8080/clips). No continuous per-frame log: at 100 fps it
 # cost a millisecond a frame and 350 MB an hour for data the press recordings already hold.

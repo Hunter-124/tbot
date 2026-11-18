@@ -194,6 +194,8 @@ class PicamSource(SourceBase):
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._seq = 0
+        self.lost = 0  # frames the sensor sent that never arrived here (gaps in SensorTimestamp)
+        self._prev_sensor_ts: int | None = None
         self._clock_warned = False
         self._camera_closed = False
         self.start_probe = None  # linkcheck.LinkDiagnosis of the last start (Pi only), see _probe_link
@@ -408,6 +410,7 @@ class PicamSource(SourceBase):
                     file=sys.stderr,
                 )
             t_exposure_ns = exposure_mid_ns(int(sensor_ts), exposure_us, self._offset_ns)
+            self._count_lost(int(sensor_ts))
         self._seq += 1
         return Frame(
             image=image,
@@ -417,6 +420,18 @@ class PicamSource(SourceBase):
             exposure_us=exposure_us,
             gain=gain,
         )
+
+    def _count_lost(self, sensor_ts: int) -> None:
+        """A gap of more than 1.5 frame periods between two sensor timestamps is frames lost on the way (CSI
+        errors, the ISP or this thread falling behind): unlike `dropped` (frames that arrived and were
+        replaced by a newer one before anybody read them), these were never seen."""
+        prev, self._prev_sensor_ts = self._prev_sensor_ts, sensor_ts
+        if prev is None or self.nominal_fps <= 0.0:
+            return
+        period = 1e9 / self.nominal_fps
+        dt = sensor_ts - prev
+        if dt > 1.5 * period:
+            self.lost += max(1, int(round(dt / period)) - 1)
 
     def _publish(self, frame: Frame) -> None:
         with self._cond:

@@ -19,8 +19,12 @@ RestartSec=3
 # every 2 s (app/run.py _sd_notify). Long enough for a cold start on a Pi 3B (imports ~12 s, camera, IMU).
 WatchdogSec=60
 NotifyAccess=all
-# SIGTERM -> the pipeline aborts the actuator and goes limp before exiting
+# SIGTERM -> the pipeline aborts the actuator and goes limp before exiting. Only the main process gets it
+# (mixed): the pipeline then stops its sensor process itself, in order; whatever is left after
+# TimeoutStopSec is killed. (control-group sent it to every process at once, and the multiprocessing helper
+# died before the pipeline had cleaned up.)
 KillSignal=SIGTERM
+KillMode=mixed
 TimeoutStopSec=10
 RuntimeDirectory=tbot
 RuntimeDirectoryPreserve=yes

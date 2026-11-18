@@ -53,6 +53,7 @@ class RecoveringSource:
         self.last_error: str | None = None
         self.gap_after_restart = False   # the next frame is the first after a restart
         self._dropped_before = 0         # drops counted by earlier source instances
+        self._lost_before = 0            # sensor frames lost, by earlier source instances
         self._seq_next = 0
         self._inner = factory()          # the first open raises: no camera at start-up is a real error
         self._started = False
@@ -73,6 +74,11 @@ class RecoveringSource:
     def dropped(self) -> int:
         inner = self._inner
         return self._dropped_before + (int(getattr(inner, "dropped", 0)) if inner is not None else 0)
+
+    @property
+    def lost(self) -> int:
+        inner = self._inner
+        return self._lost_before + (int(getattr(inner, "lost", 0) or 0) if inner is not None else 0)
 
     @property
     def clock(self):
@@ -119,6 +125,7 @@ class RecoveringSource:
         if inner is None:
             return
         self._dropped_before += int(getattr(inner, "dropped", 0))
+        self._lost_before += int(getattr(inner, "lost", 0) or 0)
         done = threading.Event()
 
         def _stop() -> None:

@@ -35,6 +35,7 @@ class CameraConfig:
     emulate_mono: str
     buffer_count: int
     stall_s: float = 0.5
+    respawn_s: float = 8.0
     reopen_timeout_s: float = 5.0
     process: bool = True
     idle_fps: float = 30.0
@@ -180,6 +181,7 @@ class FireConfig:
     max_range_m: float
     min_elevation_deg: float
     watchdog_ms: float
+    max_imu_age_ms: float = 100.0
     gun_accel_sigma_frac: float = 0.6
     gun_rate_sigma_dps: float = 0.0
     gun_rate_change_sigma_frac: float = 0.1

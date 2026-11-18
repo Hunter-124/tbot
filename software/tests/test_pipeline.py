@@ -373,3 +373,39 @@ def test_overlay_draw_skips_unprojectable_directions():
         bore_px=(float("nan"), 3.0),
     )
     assert out.shape == (40, 60, 3)
+
+
+def test_no_shot_while_the_imu_stream_is_stopped(tmp_path):
+    """An IMU that stops delivering (I2C fault, sensor process being replaced) freezes the attitude and the
+    swing the solver extrapolates: the pipeline must refuse to fire rather than shoot on stale motion."""
+    from tbot.camera.synthetic import SyntheticSource
+    from tbot.hw.gpio import open_gpio
+
+    cfg, calib = base_cfg(tmp_path)
+    cfg.camera.fps = 50.0
+    cfg.fire.live = False
+    cfg.fire.min_hit_probability = 0.05
+    source = SyntheticSource(cfg, calib, scenario="skeet_crossing", seed=1)
+    gpio = open_gpio(cfg)
+    pipe = Pipeline(cfg, calib, source, gpio=gpio, actuator=FakeActuator())
+    gpio.inject(int(cfg.arming.pin), 0 if cfg.arming.active_low else 1)
+    real_read = pipe.imu.read
+    frames = [0]
+
+    def read():
+        samples = real_read()
+        return samples if frames[0] < 15 else []   # the stream stops before the clay can be shot at
+
+    pipe.imu.read = read
+    fired, stale = 0, 0
+    try:
+        while (tele := pipe.step()) is not None:
+            frames[0] += 1
+            fired += int(tele["fired"])
+            stale += int(tele["decision"]["reason"].startswith("IMU stale"))
+            if frames[0] > 15:
+                assert tele["imu_age_ms"] is None or tele["imu_age_ms"] > 0
+    finally:
+        pipe.close()
+    assert fired == 0
+    assert stale >= 1, "the solver never wanted to fire, so the check proves nothing"

@@ -30,6 +30,8 @@ emulate_mono = "none"         # cv/video sources only: none | luma | red (red = 
 buffer_count = 4
 stall_s = 0.5                 # live picam (tbot run / record): no frame this long = stalled -> close and reopen the camera
 reopen_timeout_s = 5.0        # a reopened camera with no first frame within this is stalled again (retries back off to 5 s)
+respawn_s = 8.0               # tbot run, camera.process: no frame this long although the camera was reopened -> replace
+                              # the whole sensor process (fresh libcamera; ~5 s). Also when it dies or hangs (no heartbeat 3 s)
 idle_fps = 15.0               # tbot run, live sources: frames processed per second while the arming button is UP (0 = all).
                               # (15 since 2026-11-17: resting on a rack the gun looks at trees or the ground, a frame
                               # costs 50 ms and at 30 the loop never rests: 80 C indoors. A press is noticed within 67 ms)
@@ -217,6 +219,8 @@ gun_rate_change_window_ms = 100.0
 gun_accel_sigma_frac = 0.6    # plus this share of the acceleration term itself,
 gun_rate_sigma_dps = 0.0      # and a constant rate error x delay (0: the gyro re-zeroes whenever the gun rests)
 watchdog_ms = 250.0
+max_imu_age_ms = 100.0        # no shot while the newest IMU sample is older than this (IMU stream stopped: the attitude
+                              # and the swing it extrapolates are frozen). Normal age is 5-25 ms. 0 = no check
 
 [arming]
 pin = 17
