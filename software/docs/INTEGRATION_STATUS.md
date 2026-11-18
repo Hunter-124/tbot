@@ -1,7 +1,7 @@
 # Integration status (handoff)
 
 Living notes on bench integration of the real rig: what is calibrated, what is still open, and where the
-per-rig values live. Last updated 2026-11-15 (IMU calibrated, multi-shot, speed-ups). The Pi keeps its own
+per-rig values live. Last updated 2026-11-17 (after the first range day: see the last section). The Pi keeps its own
 `config/local.toml` and `calib/` (git-ignored; `scripts/deploy.sh push` never overwrites them), so the values
 below are a record, not something a checkout restores.
 
@@ -34,7 +34,7 @@ below are a record, not something a checkout restores.
 |---|---|---|---|
 | camera timestamp offset | +0.03 ms | `latency-camera`, 4000 us exposure (a later 500 us run could not measure it and kept this value) | no (sensor) |
 | exposure end -> user space | ~9.2 ms at 500 us | `latency-camera` | no |
-| servo command -> break | **95 ms** (std 2.5 assumed) | video: LED at the fire command, lever motion centre 92 +/- 10 ms; mic 161 ms incl. USB latency | no |
+| servo command -> break | **155 ms** (the file still says 95, an estimate; its own microphone measurement, 161.3 ms to the bang, is what is used: see the last section) | microphone, 10 shots; confirmed by the recoil of 2 live shots (160.2, 162.0 ms) | **yes, after the mount rebuild** (`tbot latency-recoil`) |
 | IMU gyro bias | +0.82 / +6.45 / +0.48 deg/s | `calib-imu bias`; drifts with temperature (z 0.48 -> 0.84 between 24 and 22 C) | no, but redo at the range |
 | IMU axis map | `R_gun_imu` = [[0,-1,0],[-1,0,0],[0,0,-1]] (chip face-down, X/Y swapped) | `calib-imu axes --auto`, 3 hand-held poses, fit within 0.8 deg; also the default now | no |
 | camera-IMU time offset | -6.31 ms (added to IMU stamps) | `calib-imu sync` on a 15 s hand-held swing, correlation 0.971 | no |
@@ -329,8 +329,8 @@ Set up with `tbotctl boot live`: the gun comes up **LIVE at every power-up** unt
 
 ## Simulator notes
 
-- `tbot sim` is not repeatable run to run (SimClock adds real processing time): ~1/3 of shots differ between
-  runs of the same code, so +/-2 hits out of ~20 is noise. Compare code changes frame by frame instead.
+- `tbot sim` repeats exactly since 2026-11-17 evening (`sim.process_ms`: the gun's work time is modelled, the
+  clock no longer runs on this computer's). Before that ~1/3 of shots differed between runs of the same code.
 - Doubles (`skeet_doubles`, `trap_doubles`), clay breaks with fragments and debris-shot counting exist. Latest
   (95-100 ms delay, 6 seeds): singles outgoing 6/6, trap 6/6, incoming 3/3 of shots taken; **0 debris shots**;
   doubles mostly get one shot (second clay not in the solution before the run ends).
@@ -368,3 +368,181 @@ live day:
   confirm with `tbot latency-recoil`.
 - **Armed frame rate** was 19-43 fps, not 100.
 - **Gun extrapolation error** (p50 0.82 deg) is now larger than the pattern radius (0.75 deg).
+
+## After the first range day (2026-11-17, evening): delay, swing model, firing rule, test benches
+
+Everything below was worked out on the laptop from the range-day recordings; the gun was off. **Nothing here
+has been on the gun yet.** `scripts/deploy.sh push` brings it there; the first presses should be dry.
+
+### Trigger delay: 155 ms command to break (164 ms to the muzzle)
+
+- `latency.servo_cmd_to_break_ms` 115 -> **155** (recoil of the two live shots, 160.2 and 162.0 ms to ignition,
+  and the ten bench shots by microphone, 161.3 +/- 1.0 ms; minus the 6 ms lock time). `latency.jitter_ms`
+  6 -> 2 (measured 1.0 and 1.4 ms: the PWM starts with the command, the 50 Hz frame does not quantise it).
+- **The gun's own `calib/latency.json` needs no edit.** It holds the 95 ms video estimate and, beside it, the
+  microphone measurement that was set aside. A measurement kept beside an estimate now wins over the estimate
+  (`config.LatencyBudget`): that file reads 155.3 ms as it is. `tbot latency-report` shows the source as
+  `measured (microphone)`.
+- The servo mount has been rebuilt since, which can move the delay. Every live shot is still timed by its
+  recoil, and a shot more than 15 ms from the assumed delay now logs `TRIGGER DELAY is off by ...`. After a
+  few shots with the new mount: `tbot latency-recoil --write` (`--min-shots 2` if they agree).
+- What a wrong delay costs (virtual clays, below): 10 ms off 0.4 points of clays hit, 20 ms 1 point, 60 ms
+  (the range day) 6 points. Within 10 ms is good enough.
+- The two real shots judged at the time the charge really left (recoil, not the plan): both passed **1.04 deg**
+  from the clay, against a 0.75 deg break radius, and both clays broke. On those two targets the extra 60 ms
+  moved the bore little against the clay (1.14 -> 1.04 and 0.78 -> 1.04 deg), which is why the wrong delay did
+  not show. Two breaks at 1.0 deg say the break radius for Modified may be nearer 1 deg than 0.75; pattern
+  the gun ([PATTERN.md](PATTERN.md)) before changing `shot.pattern_radius_ref_m`.
+
+### The swing over the delay: the acceleration term was hurting
+
+Over 164 ms the solver's constant-acceleration extrapolation of the swing is **worse than no acceleration term at
+all**. Range-day IMU, the 135 frames of 9 presses that had a target (gun turning 10-30 deg/s), error of the
+predicted bore at exit:
+
+| extrapolation | p50 | p90 | rms |
+|---|---|---|---|
+| rate + constant acceleration (as it was) | 1.10 deg | 2.98 deg | 2.19 deg |
+| rate only | 0.69 | 1.64 | 1.03 |
+| rate + acceleration fading with 0.02 s (`fire.gun_accel_decay_s`, now) | 0.70 | 1.60 | 1.00 |
+
+(The pattern is 0.75 deg. At the 104 ms the gun believed it had, the fading term is also the better one:
+0.41 / 1.23 / 0.84 -> 0.31 / 0.78 / 0.48 deg.) A hand does not keep an acceleration for 160 ms. A decay of the
+rate as well fits the whole press better, but that is the gun being mounted and lowered (100-190 deg/s at the
+ends of a press); on a target it is within the noise, so it is not in.
+
+The uncertainty that goes with it is refitted. The error grows with the **square** of the time ahead (p50 0.31
+deg at 104 ms, 0.70 at 164, 0.85 at 190), so every term now does: a floor (`gun_accel_floor_dps2` 20), a share
+of the swing rate (`gun_rate_drift_per_s` 1.0), 0.6 of the acceleration term, 0.1 of the mean acceleration of
+the last 100 ms. Error / sigma on those frames: p50 1.11, p90 2.29, p99 3.27 at 164 ms (a perfect model reads
+1.18 / 2.15 / 3.03), the same at 104 and 190 ms.
+
+Consequence worth knowing: **the trigger delay is the largest lever on the whole gun.** Virtual clays, clays
+hit, at a trigger delay (command to muzzle) of 220 ms 42 %, 164 ms (now) 62 %, 100 ms 81 %, 60 ms 88 %. The
+bench notes say part of the 155 ms is the servo waking from limp. Holding the rest position while the button
+is held would remove that part, but it is a change to how the servo is driven, against the standing rule that
+no pulse is ever held, and it needs a measurement with the lever on the gun. Not done, not prepared in code:
+a decision for the bench.
+
+### Three errors in the timing of a shot (fixed)
+
+1. **Every fire command of the range day went out 7-11 ms later than the solver had planned.** The solver
+   decided for "now + the average time a solution takes" (1.4-3.7 ms), and the frame that fires is the dearest
+   of all (look-ahead and all: 10-15 ms on the Pi). It now plans for the worst case (`FireSolver.worst_case_work`
+   x the measured cost of one solution) and the command waits for the planned instant
+   (`clock.sleep_until`); telemetry has `cmd_t_ns` and `fire_at_ns` to check it.
+2. **The solver extrapolated the swing from an IMU sample 20-25 ms old** (read at the start of the frame,
+   before detection and tracking). While the button is held the IMU is now read again just before the solver
+   (`stage_ms.imu2` is what that costs). The two together: 58.7 -> 62.3 % of virtual clays.
+3. **Waiting always looked worse than it would be.** The look-ahead ("is a later frame better?") gave later
+   frames the uncertainty of an extrapolation from now, which grows with the square of the wait; a later
+   frame will have its own fresh look. The look-ahead now uses the uncertainty of a decision made then.
+
+Also: P(hit) is a closed series instead of a 16 x 32-point quadrature (same value to 2e-8, 18x faster here;
+it was 0.9 ms a call on the Pi, three or four calls on a firing frame).
+
+### P(hit) that means what it says, and a bar that follows the engagement
+
+**P(hit) was far too pessimistic near the top of a pass.** Frames the solver gave 0.1-0.2 really hit 44 %, and
+0.3-0.4 hit 65 % (virtual clays); the range-day frames said the same (0.2-0.4: 7 of 7). The predicted miss is
+the true miss plus an error, and the true miss is not just anything: a solution exists because a shooter is
+swinging through the target. `fire.aim_prior_deg` (1.0) is that knowledge, as a prior on the true miss; the
+predicted miss is shrunk accordingly. A prior is not a measurement, so it only counts as far as the
+measurement supports a shot by itself (`fire.aim_prior_evidence` 0.2: below that plain P(hit), the result is
+scaled down). Without that guard a track three frames old read 0.36 with nothing known, and going-away
+clays in `tbot sim` fell from 4/6 to 0/6. Now, 58 000 virtual-clay frames scored as if fired:
+
+| P(hit) given | 0.05-0.1 | 0.1-0.2 | 0.2-0.3 | 0.3-0.4 | 0.4-0.5 | 0.5-0.6 | 0.6-0.8 |
+|---|---|---|---|---|---|---|---|
+| really hit | 27 % | 37 % | 46 % | 52 % | 62 % | 72 % | 81 % |
+
+(a little careful at the low end, right at the top). The 81 real frames of the range day with a solution,
+replayed: under 0.1: 12 % (57 frames), 0.1-0.3: 31 % (13), 0.3-0.7: 55 % (11).
+
+**The bar** (`tbot/fire/policy.py`, `fire.adaptive`). With the right delay the old bars were far out of
+reach: on the real frames of the range day, replayed with 164 ms, the old rule (0.40, 0.30 after 0.7 s, old
+P) fires on **1 press of 9**. The bar now starts at `min_hit_probability` (0.40) and is lowered to
+- `adaptive_reach` (0.85) x what a perfect aim would be worth right now: a rough swing cannot give 0.40,
+- `adaptive_regret` (0.9) x a chance this target already offered and lost,
+- the settled bar (0.25) as the track ages from 0.2 to 0.7 s,
+and never below `min_hit_probability_floor` (0.20). Clays hit, 1500 virtual clays:
+
+| rule | clays hit | shot at | hits per shot |
+|---|---|---|---|
+| fixed 0.50 | 38 % | 48 % | 79 % |
+| fixed 0.40 | 57 % | 78 % | 73 % |
+| 0.40, then 0.30 from 0.7 s | 58 % | 79 % | 73 % |
+| fixed 0.30 | 62 % | 86 % | 72 % |
+| fixed 0.25 | 64 % | 89 % | 72 % |
+| adaptive from 0.40 (as shipped) | 63 % | 87 % | 72 % |
+| ... reach only / regret only / relax only | 61 / 61 / 60 % | | |
+
+Read it honestly: the adaptive bar is not better than the best fixed bar, it **is** the best fixed bar without
+knowing which one that is. Started at 0.35, 0.40, 0.50 or 0.60 it lands on 63, 63, 62 and 61 %; a fixed bar of
+0.40 loses 6 points to it and a fixed 0.50 loses 25. `reach` does most of it. The same change in `tbot sim` (6 seeds x 8 scenarios, Pi timing):
+old rule 11 shots, 6 of 54 clays; now 24 shots, **17 of 54** (hit rate per shot 55 -> 71 %).
+
+### Two test benches on real data, and a simulator that repeats
+
+- **`tbot vclay <presses>`: virtual clays through recorded gun motion.** Keeps the real swing (IMU) and the
+  real frame times of a press and replaces only the target: a clay built to be where a charge of some moment
+  of the press would arrive, flying at clay speed, as fast across the sky as the gun was really swinging
+  times a swing-through factor (set from the range day: bore and clay moved against each other at 2.3 / 7 /
+  20 deg/s, p10 / p50 / p90). Its detections go through the real tracker and solver, which see the attitude
+  only as the live loop does; every shot is judged against the true bore at the TRUE delay. Hundreds of clays
+  a minute. `--policies` (rules on the same clays), `--calibration` (is P honest), `--delay-error-ms`,
+  `--cmd-late-ms`, `--imu-lag-ms`, `--fps N --age-ms M` (what a faster loop is worth). It is a relative test:
+  the clays are built around the path the bore took, so a chance always exists.
+- **`tbot rescore <presses>`: the recorded frames through today's software.** Real frames, real IMU, the
+  button held when the shooter held it, the gun's lens / mount / load / calibration from the press itself;
+  scored like `tbot score` (planned shot against where bore and target really were), `--every` for all frames
+  with a solution. 5 s for the nine presses. Range day at 164 ms: **6 shots, 3 planned hits** (old rule: 1
+  shot, 0). This is the regression test for anything that touches the decision.
+- **`tbot sim` now runs on the gun's time and repeats exactly.** `sim.process_ms` (22) is the Pi's work per
+  frame: the simulated loop takes the newest frame each time round (42 of the camera's 100-120 a second),
+  the solver runs on a frame ~40 ms old, on a clock that only moves when the simulation moves it. Before, it
+  ran at this computer's speed (every frame, 3 ms old: 19 of 54 clays against 17 on the gun's time) and a
+  third of the shots changed from run to run. `sim.process_ms = 0` is the old behaviour. `actuator.sim.delay_ms`
+  and `latency.sim_cmd_to_break_ms` are 155.
+- Tests: `tests/test_policy.py`, `tests/test_vclay.py` (needs the range-day press; the frames are LFS),
+  `tests/test_timing.py`.
+
+### What each lever is worth (1500 virtual clays, clays hit; 62.3 % as the software is now)
+
+| | clays hit |
+|---|---|
+| IMU read once per frame, as on the range day | 60.0 % |
+| ... and the commands 9 ms late, as on the range day | 58.7 % |
+| trigger delay wrong by 60 ms, as on the range day | 56.6 % |
+| loop at 25 frames/s, frames 55 ms old (trees in view) | 54.1 % |
+| loop at 40 frames/s, 40 ms old (about the range day) | 63.9 % |
+| loop at 60 frames/s, 25 ms old | 67.3 % |
+| loop at 100 frames/s, 20 ms old | 70.6 % |
+| trigger delay 100 ms instead of 164 | 81.0 % |
+| trigger delay 60 ms | 88.5 % |
+
+### Would a rewrite in Rust / C / C++ / Bend help?
+
+Measured, not guessed (range-day telemetry, Pi 3B, button held, a clay in view): 18-25 ms of work a frame, of
+which detection 15-20 ms. Inside detection: OpenCV calls (background, threshold, labelling) ~5.6 ms, already
+native code; the scenery filter 2.5 ms and the measurement of each candidate ~6 ms (4.3 ms of window
+arithmetic + 1.8 ms adaptive moments), in NumPy, where every call costs 15-50 us on this CPU whatever it
+computes. Tracker 1.5, attitude 1.3, solver 0.2 (10-15 on the frame that fires, before today), everything else
+~2 ms.
+
+- **The garbage collector is not in it.** `gc.freeze()` at start already takes the whole heap out of its
+  sight; no full collection runs in the frame loop. The cost is the interpreter's per-call overhead in the
+  parts that loop over small arrays.
+- **Bend: no.** It is a research language for massively parallel pure functions; it has no ARM camera, GPIO
+  or OpenCV story, and no real-time one. Nothing here is that kind of problem.
+- **A full rewrite (Rust or C++, libcamera + OpenCV bindings): ~6-8 ms a frame is plausible, so 100 frames/s.**
+  Worth at most the table's last loop row: 62 -> 71 % of clays, +8 points. Cost: 30 000 lines of working,
+  tested Python, the calibration tools, the recorder, the simulators, and every hour of field debugging so
+  far; weeks without a gun that shoots better. It would hurt now.
+- **One native kernel gets about half of that for a few percent of the work.** The per-candidate measurement
+  (`ClayDetector._measure`'s loop and `_adaptive_moments`, ~250 lines) is 6 ms x 1-3 candidates of every
+  frame with a target. In C behind `ctypes` (one file, built by `scripts/pi_setup.sh` with the Pi's own gcc,
+  the Python kept as the fallback and as the reference in `tests/test_fast_paths.py`) it is tens of
+  microseconds: by that arithmetic ~22 -> ~13 ms a frame, 40 -> 60+ frames/s, about +4-5 points (an estimate
+  until it is timed on the Pi). That is the next software step for speed. The scenery filter is the one after it.
+- **And both are small beside the trigger delay** (+19 points for the first 60 ms), which no language touches.

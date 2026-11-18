@@ -70,8 +70,10 @@ What the day also showed, stated plainly:
 
 - **The trigger delay in the config was wrong by 60 ms** (95 ms assumed, 161 ms real). A bench microphone
   measurement two days earlier had read 161.3 ms and I discounted it in favour of a video estimate. The
-  microphone was right. Both clays broke despite the error, so the next step is to understand why before
-  trusting the result.
+  microphone was right. Both clays broke despite the error: judged at the moment the charge really left,
+  both shots passed 1.04° from the clay, fringe hits on targets where the extra 60 ms moved the bore little.
+  The delay is corrected in the software since, along with what it exposed (see
+  [software/docs/INTEGRATION_STATUS.md](software/docs/INTEGRATION_STATUS.md), last section).
 - **Frame rate under load was 19 to 43 fps, not 100.** The detector takes 15 to 20 ms per frame on the Pi 3B.
 - **The servo mount failed after two shots.** It has since been redesigned twice (through-bolted with trapped
   nuts, then an anti-slide lock on the guard).

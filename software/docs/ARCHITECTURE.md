@@ -239,14 +239,16 @@ blur, unthresholded) filtered over the track, sigma floored at size_range_bias_f
 size errors). AttitudeLike = anything with `R_wg(t_ns) -> (3,3)` and
 `omega_g(t_ns) -> (3,)` (AttitudeEstimator or a fixed identity).
 Solver: t_exit = now + latency.fire_delay_s(actuator type) ; bore at t_exit = R_wg(now) extrapolated with
-omega_g(now) over the delay; clay at t_exit + ToF(range) from the track; miss angle between the clay
+omega_g(now) over the delay, plus the angular acceleration fading with cfg.fire.gun_accel_decay_s; clay at t_exit + ToF(range) from the track; miss angle between the clay
 direction as seen from the muzzle (camera->muzzle parallax, shot drop included) and the predicted bore;
 sigma = combined 1-sigma angular uncertainty sqrt(sig_track^2 + (w_clay*jitter)^2 + (w_clay*dtof_dr*sigma_r)^2);
 pattern = shot.pattern_radius(dist)/dist; p_hit = P(|e + miss| < pattern) for an isotropic 2-D Gaussian e with sigma
-(fixed polar quadrature over the pattern disc, no scipy). Fire when armed, track confirmed with
->= cfg.fire.min_track_hits, range within [min_range_m, max_range_m], elevation >= min_elevation_deg,
-p_hit >= cfg.fire.min_hit_probability AND p_hit(now) >= p_hit(now + k*frame_period) for k = 1..horizon_frames
-(i.e. now is the best moment). `FireDecision.reason` always says why not when fire is False; when armed is False
+(a noncentral chi-square series; polar quadrature outside its range; no scipy), with the predicted miss shrunk
+by the prior cfg.fire.aim_prior_deg as far as the measurement supports it (FireSolver._p_hit). Fire when armed,
+track confirmed with >= cfg.fire.min_track_hits, range within [min_range_m, max_range_m], elevation >=
+min_elevation_deg, p_hit >= the bar of fire/policy.py (cfg.fire.min_hit_probability, lowered by FirePolicy when
+cfg.fire.adaptive) AND p_hit(now) >= p_hit(now + k*frame_period) for k = 1..horizon_frames (i.e. now is the best
+moment). decision.extra["fire_at_ns"] is when the command is to go out (now, or later inside the frame period). `FireDecision.reason` always says why not when fire is False; when armed is False
 the reason contains "not armed" (consumers match with `in`, never equality).
 
 ### tbot/imu/mpu6050.py, tbot/imu/attitude.py, tbot/tools/calib_imu.py [imu]

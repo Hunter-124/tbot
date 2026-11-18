@@ -62,4 +62,17 @@ Replay a press through the live loop:
     tbot run --source replay:field_data/2026-11-17-range/presses/20261117-104806-press --record off \
         --set gpio.backend=sim --sim-armed --set actuator.type=sim
 
+## What was done with it (the same evening)
+
+Worked through in [docs/INTEGRATION_STATUS.md](../../docs/INTEGRATION_STATUS.md), last section: the trigger
+delay is 155 ms in the defaults (and the gun's own latency file now reads that way), the swing extrapolation
+and its uncertainty are refitted to these presses, every command no longer goes out 7-11 ms late, P(hit) is
+calibrated and the bar follows the engagement. These presses are also the stage for two test benches:
+
+    tbot rescore field_data/2026-11-17-range/presses/*            # these frames through today's software
+    tbot vclay field_data/2026-11-17-range/presses/* --policies   # virtual clays through these swings
+
+`score.txt` and `score_every.txt` are the software of the day at the delay it believed (95 + 6 ms); `tbot rescore`
+is today's software at the real one: 6 shots on these nine presses, 3 planned hits.
+
 The journal of the service from the range was not kept (the Pi's journal did not survive the power cycle).

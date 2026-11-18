@@ -70,16 +70,18 @@ Bring: laptop + Ethernet cable, charged pack + spare, the mic is not needed. Len
    replay:sessions/<one>` says which gate stopped it.
 4. **Live**: `tbotctl start live` (asks you to type LIVE). One clay, one shell in the gun at first.
    After each shot the log prints
-   `shot N: recoil 104.2 ms after the command (budget 101.0 ms, +3.2)` — the measured trigger delay — or
-   `NO RECOIL` if the command did not fire the gun (lever slipped, safety on).
-5. After ~5 live shots: `tbotctl stop`, then
+   `shot N: recoil 162.0 ms after the command (budget 161.3 ms, +0.7)` — the measured trigger delay — or
+   `NO RECOIL` if the command did not fire the gun (lever slipped, safety on). A shot more than 15 ms from
+   the budget also prints `TRIGGER DELAY is off by ...`: the lever or its mount has changed.
+5. After ~5 live shots (or at once after that warning): `tbotctl stop`, then
 
    ```bash
    tbot latency-recoil            # shows the measured delay vs the calibration
-   tbot latency-recoil --write    # stores it (needs 5 shots); then tbotctl start live again
+   tbot latency-recoil --write    # stores it (needs 5 shots; --min-shots 2 if they agree); then tbotctl start live
    ```
 
-   10 ms of delay error is 20 cm on a crossing clay, so do this early.
+   The budget is 155 ms command to break since the first range day (it was 95: 6 clays in a hundred). Within
+   10 ms is good enough (0.4 clays in a hundred); the servo mount has been rebuilt since, so check it.
 6. `tbotctl stop` before powering off (lets the last session finish writing). A power cycle comes back in
    dry run, unless the gun was put in field mode (below).
 

@@ -96,7 +96,10 @@ tbot calib-detector --session sessions/20261026-141230-rec --gui    # tune on re
 | Command | What it does |
 |---|---|
 | `tbot run` | Live pipeline: camera → detect → track → fire solver. Dry run unless `--live`. `--stream`/`--port` HTTP overlay, `--display` local window, `--record off\|armed\|continuous`, `--log-jsonl`, `--max-frames`, `--sim-armed`. |
-| `tbot sim` | Closed-loop evaluation on the synthetic scenarios (`--scenarios`, `--seeds N`, `--not-armed`, `--out JSON`): detection rate, track latency, shots, predicted miss, hit rate. |
+| `tbot sim` | Closed-loop evaluation on the synthetic scenarios (`--scenarios`, `--seeds N`, `--not-armed`, `--out JSON`): detection rate, track latency, shots, predicted miss, hit rate. Runs on the gun's time (`sim.process_ms`) and repeats exactly. |
+| `tbot vclay` | Virtual clays through recorded gun motion: the real swing and frame times of recorded presses, a synthetic target, the real tracker and solver, judged at the true trigger delay. Clays hit per firing rule (`--policies`), per frame rate (`--fps`), per delay error (`--delay-error-ms`); `--calibration` checks P(hit). |
+| `tbot rescore` | Recorded presses through today's software (real frames, real IMU, the button as it was held), scored like `tbot score`. The regression test for the decision chain. |
+| `tbot score` | Would each shot of a recorded press have hit? Bore at the exit time against the target at the arrival time, from the frames after the shot; `--every` scores every frame with a solution, `--image` draws the arrival frame. |
 | `tbot doctor` | Offline configuration, calibration and layout checks; fix FAILs before assembly. |
 | `tbot sensitivity` | MG996R error budget, isolated tolerance table and measurement-priority ranking. |
 | `tbot explain` | Per-frame decision funnel, reasons, sigma budget and biggest blocker for a synthetic or recorded source. |
@@ -154,8 +157,19 @@ python3 -m pytest              # laptop (venv) or Pi (apt python3-pytest); no ha
 python3 -m pytest tests/test_solver.py -q
 ```
 
-The suite is hardware-free: GPIO, PWM, camera and IMU all have simulated backends. `tbot sim` is the end-to-end
-regression on top of it — run both after changing anything in the detect → track → fire chain.
+The suite is hardware-free: GPIO, PWM, camera and IMU all have simulated backends. After changing anything in
+the detect → track → fire chain, run the three benches on top of it; each answers a different question and
+all three repeat exactly:
+
+```bash
+tbot sim --seeds 6                                            # invented shooter, rendered frames: the whole pipeline
+tbot rescore field_data/2026-11-17-range/presses/*            # the real frames of the range day through today's code
+tbot vclay field_data/2026-11-17-range/presses/* --policies   # hundreds of virtual clays through the real swings
+```
+
+Reference results (2026-11-17, trigger delay 164 ms): `sim` 17 of 54 clays, `rescore` 6 shots / 3 planned hits,
+`vclay` 63 % of 1500 clays. What they mean and what each lever is worth:
+[docs/INTEGRATION_STATUS.md](docs/INTEGRATION_STATUS.md), last section.
 
 ## Documentation
 
