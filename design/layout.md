@@ -816,6 +816,53 @@ contacts and connector seating remain open.
     unanchored outer-wall run where the new round meets the unsupported
     pocket roof); look at the nut pocket roof in the PrusaSlicer preview.
 
+### `trig_plug` — guard-opening plug and jack (rev AG)
+
+Why: in use the trigger set slid around on the guard. The plates squeeze a
+tapered guard (9.3 → 15.7 wide), so the clamp force itself pushes the set
+toward the narrow end, back toward the trigger. The cradle saddle was shaped
+to a photo-derived guard (±10%) and never really locked. Rev AG adds one small
+printed part and one screw; the bracket, clamp and button are unchanged.
+
+- PLA block in the front of the guard opening, X 15.5..33.5, Z floor..8.5,
+  sides on the two taper lands |Y| = 4.443 + 0.0842·X (0.05 inside the land
+  planes, so the printed part closes onto them). The U18 and U28 M3 × 30
+  through-bolts pass through it (D3.4). With the bolts tight, the plates
+  clamp the plug, not the guard taper, so the squeeze can no longer push the
+  set rearward. The 1 mm liners on the guard faces still take up side play.
+- Lower and front faces are the modelled guard inner surface offset 0.7.
+  The wall between U28 and the guard is 0.9 (the bolt is only 3.3 from the
+  modelled guard surface). If it binds on the real guard, sand there.
+- Jack: an M3 × 18 countersunk screw on an X-parallel axis at (Y 0, Z 3.5),
+  driven from the plug's rear face. It runs in a D6.4 teardrop counterbore
+  (to X 24.5), then a D2.8 thread-forming section (X 24.5..27, the prevailing
+  torque is the lock), then a trapped M3 nut (pocket X 27.3..30, drop-in
+  from the top, flats facing ±Y), then D3.4 to the flat front face at X
+  33.5. The tip bears on the steep front inside wall of the guard, modelled
+  at X 36.45 at Z 3.5. Its stroke runs from flush (head flush with the rear
+  face) to 7.3 out, so it covers a wall anywhere from X 33.5 to 40.8. Do not
+  use a longer screw: backed out, its head would reach the lever.
+- Load path: the jack pushes the guard's front leg forward and pulls the
+  whole set back and up onto the clamp cradle, which lies under the bow and
+  up its front outer ramp. The front leg is then clamped between the jack tip
+  inside and the cradle outside. The trigger reaction and recoil push the set
+  forward, into the jack. Nothing relies on friction on the taper.
+- Clearances (model): lever 1.94 at rest. Swung toward the pull it only gets
+  further away (7.6 at −30°). In the opposite, non-firing direction it meets
+  the plug at about 7.7° past rest, so the plug is also a hard stop for
+  overtravel there. The guard is 0.70 away everywhere except the jack, and
+  the clamp and bracket lands are 0.05 away. Checked with
+  `design/cad_src/trig_plug.py` geometry against the current part exports.
+- Source: `design/cad_src/trig_plug.py` (build123d; regenerate, then import
+  into `parts/trig_plug.step+`). Print lying on a land face (build up ≈ +Y),
+  no supports: 3.4 g, 0.54 h, strength profile. Slicer printability flags
+  only the 0.9 U28 wall and about 21 mm² of small bore crowns; the G-code
+  check warns about one 8.2 mm air run.
+- Install, safety: after the jack is tight, put the servo at REST and confirm
+  daylight between the lever and the trigger before anything else. The jack
+  moves the set rearward by whatever gap the cradle had. If the lever touches
+  the trigger, back the jack off and do not fire.
+
 ## Printing and materials
 
 All ten printed parts are PLA (`chin_lid` is obsolete). Do not leave them in a hot car: PLA can

@@ -41,6 +41,7 @@ them from `export/<part>.step` with the settings above.
 | servo_lever | −Z, top face on the bed | none | ~3.2 g |
 | servo_bracket_L | +Z, ear-block bottoms (Z −21.7) on the bed (rev AA: was +Y; clamp-screw axis now lies in the layer plane) | build plate only, organic | ~10.8 g |
 | trig_clamp_R | +Z | none (D7.4 switch-hole and D7 access-bore crowns bridge; ream 7.4 if the switch hole sags) | 8.7 g |
+| trig_plug (rev AG) | lying on a land face (≈ +Y up) | none | 3.4 g; sliced: `print/creality_ender_3_0_4_mm_nozzle/trig_plug.gcode` |
 
 ### Lens lock nut
 
@@ -85,7 +86,8 @@ Pi bores are one feature each in carrier_L (`PiM2Insert_*`).
 | 2 | M3 × 6 SHCS | GY-521 → nose_clamp_R (M3 × 10 does not fit) |
 | 3 | M3 × 30 ISO 10642 countersunk | trig_clamp_R_v2 → servo_bracket_L: U18, U28, L40 through D3.5 holes into trapped M3 hex nuts (seats Y 12.9 / 12.9 / 13.3); heads flush with the clamp hole pad at Y −13.9, tips Y 16.1 (rev AA: was M3 × 25 into inserts, heads 2.4 deep in a counterbore) |
 | 1 | M3 × 35 ISO 10642 countersunk | servo_bracket_L → trig_clamp_R_v2 rear (X −15.5, Z −17.0), from the bracket back face through the whole rear ear block into a trapped M3 hex nut in the clamp's guard cradle (seat Y −4.0); head flush at Y 27.5, tip Y −7.5 (rev AB: replaces the rev AA M3 × 16 + spacer nub, which snapped) |
-| 4 | M3 hex nut (ISO 4032, 5.5 AF × 2.4) | servo_bracket_L: U18 and L40 slide in from the side slots, U28 drops into its top slot (vertex down); trig_clamp_R_v2: rear nut slides into the cradle side slot from −X. Slots stop the nuts turning |
+| 1 | M3 × 18 ISO 10642 countersunk | trig_plug jack screw, driven +X from the plug rear face into the guard's front inside wall. No longer: a longer screw backed out reaches the lever |
+| 5 | M3 hex nut (ISO 4032, 5.5 AF × 2.4) | trig_plug: 1 drops into the top pocket, flats facing ±Y. Rest as before: | servo_bracket_L: U18 and L40 slide in from the side slots, U28 drops into its top slot (vertex down); trig_clamp_R_v2: rear nut slides into the cradle side slot from −X. Slots stop the nuts turning |
 | 4 | M3 × 10 ISO 10642 countersunk | servo ears RI / RO / FI / FO, up into the bracket |
 | 1 | M3 × 12 ISO 10642 countersunk | lever + horn → servo output shaft (M3 × 14 bottoms out) |
 | 4 | M2 × 5 machine screw, pan head (ISO 7045) or SHCS | Pi 3B → M2 inserts, from the component side |

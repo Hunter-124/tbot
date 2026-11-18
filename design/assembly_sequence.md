@@ -88,14 +88,18 @@ T2. Servo into the bracket from below, 4 × M3 × 10 up through the ears. Cable 
 T3. Arming button, on the bench: nut off, push the button thread-first from behind the trig_clamp_R panel through the
     D7.4 hole until the flange seats on the panel back; nut on the panel front, flats horizontal, tighten with a 9.5 mm
     open-end wrench from outboard.
-T4. Bracket on the gun-left side of the guard, trig_clamp_R on the right, a 1 mm liner on each plate's guard face;
-    the guard bow must sit down in the clamp's cradle (the cradle's rising front face against the bow's outer
-    surface is what stops the set sliding back toward the trigger). 3 × M3 × 30 from the right (U18, U28, L40, heads
-    flush in the hole pad), then 1 × M3 × 35 from the LEFT at the rear (X −15.5, Z −17.0: in through the bracket's
-    back-face countersink, through the whole rear ear block, into the nut in the cradle).
-    Snug evenly: the plates are tapered to the 9.3 → 15.7 mm guard, so they close parallel — if the front still gaps,
-    the taper location is off. Check the servo case against the bow's bottom edge ~25–29 mm ahead of the trigger face
-    (layout.md "Open checks").
+T4. Bracket on the gun-left side of the guard, trig_clamp_R on the right, a 1 mm liner on each plate's guard face.
+    Drop an M3 nut into trig_plug's top pocket and start the M3 × 18 jack from the plug's rear face until the tip is
+    flush with the front face. Set the plug in the front of the guard opening, jack pointing forward. The guard bow must
+    sit down in the clamp's cradle. 3 × M3 × 30 from the right (U18 and U28 go through the plug, L40 below the guard;
+    heads flush in the hole pad), then 1 × M3 × 35 from the LEFT at the rear (X −15.5, Z −17.0: in through the
+    bracket's back-face countersink, through the whole rear ear block, into the nut in the cradle). Snug the four bolts.
+T4a. Jack: 2 mm hex key through the finger hole, short arm in the screw head, long arm out sideways. Screw in until the
+    tip meets the guard's front inside wall and the whole set pulls back onto the cradle, then about a quarter turn
+    more. Firm, not cranked: an M3 can make about 500 N. Now tighten the four through-bolts fully.
+T4b. SAFETY CHECK before connecting the lever: with the servo at REST, there must be visible daylight between the lever
+    and the trigger. If they touch, back the jack off and fix the fit (or move the firmware REST angle away from the
+    trigger). The plug stops the lever about 7.7° past REST, the other way from firing.
 T5. Leads: button lead straight out of the tail, bend down/forward (R ≥ 6); servo cable rearward out of the grommet,
     bend up (R ≥ 8). The printed parts carry no tie points; harness both leads separately to the module: servo power
     to the pair from the carrier_R rear-wall exit, servo signal (PWM, GND) and button to the 3-wire exit from B_R (BOM
