@@ -107,7 +107,14 @@ def test_pipeline_press_becomes_a_session_with_an_annotated_clip(tmp_path):
     assert any(armed) and not armed[0] and not armed[-1]  # preroll and postroll around the held frames
     seen = [r for r in tele if r["dets"]]
     assert seen, "the clay was detected during the press"
-    u, v, d, snr, _c, x, y, w, h, _a = seen[0]["dets"][0]
+    # centroid inside its box: for a clay clear of the frame edge (one cut by the edge has a weighted centroid
+    # that can sit a pixel or two outside the part that passed the threshold; OpenCV 4.10 on the Pi finds one)
+    W, H = cfg.camera.width, cfg.camera.height
+    inner = [(r, dt) for r in seen for dt in r["dets"]
+             if dt[5] >= 8 and dt[6] >= 8 and dt[5] + dt[7] <= W - 8 and dt[6] + dt[8] <= H - 8]
+    assert inner, "the clay was detected clear of the frame edge"
+    seen = [inner[0][0]]
+    u, v, d, snr, _c, x, y, w, h, _a = inner[0][1]
     assert x - 1 <= u <= x + w + 1 and y - 1 <= v <= y + h + 1 and d > 0 and snr > 0
     assert len(seen[0]["R_wg"]) == 9 and "detector" in seen[0]
     clips = [p for p in s.iterdir() if p.stem == "clip"]
