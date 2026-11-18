@@ -1,0 +1,2 @@
+bore pixel (475.74, 461.52)  r 22.1 px  scatter 4.3 px  bootstrap sd 0.3 / 0.3 px
+frames: 599 read, 551 clean dot, 551 on the ring; 30-deg sectors covered 12/12
