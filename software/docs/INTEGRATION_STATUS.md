@@ -607,7 +607,7 @@ waiting, e.g. 85 a second while the button is up, so it never said whether anyth
 
 **No shot on a stale IMU** (`fire.max_imu_age_ms` = 100): when the IMU stream stops (I2C fault, the sensor
 process being replaced) the attitude and the swing the solver extrapolates are frozen; the decision is then
-`IMU stale (N ms)`. Normal age is 5-25 ms.
+`IMU stale (N ms)`. On the range presses replayed armed: p50 7 ms, max 21 ms, so it never blocks a real shot.
 
 ### The sensor process was losing frames (fixed)
 
@@ -618,7 +618,11 @@ three threads behind one interpreter lock) and lost ~15 frames every 20 s. Now:
   ctypes buffer (iterating smbus2's message cost 0.6 ms a poll): 3.0 -> 2.05 ms a poll; the rest is I2C bus
   time (400 kHz already).
 - Auto-exposure meters every 2nd frame (`camera.ae_every = 2`, 50 Hz control).
-- **91 %** of a core, and **0 frames lost** in 2.5 minutes of service. Frames are still lost when something
+- The Y plane is copied once, straight out of the mapped camera buffer (`make_array` copied the whole YUV
+  buffer first).
+- **86 %** of a core (was 107 %). Lost frames in service, 40 minutes logged: ~2-3 a minute (0.05 %); one
+  5-minute stretch earlier in the night lost ~2 a second for no reason found (no throttling, 66 C, nothing
+  else running) and stopped with the service restart. Frames are still lost when something
   else loads the Pi (a few while `top` and two SSH sessions ran): don't run tools on the gun while shooting.
 
 ### Restarts and power cycles
