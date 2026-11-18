@@ -2,7 +2,9 @@
 # because the calibration tools need the camera to themselves).
 [Unit]
 Description=TBOT pipeline (camera -> detect -> track -> fire solver)
-After=multi-user.target
+# No After=multi-user.target: waiting for the rest of the boot (network and all) cost ~10 s of every power-up.
+# The default dependencies (local filesystems, udev) are all the camera and the IMU need; a camera not yet
+# probed is a failed start, retried 3 s later.
 # never give up restarting (the default stops after 5 starts in 10 s)
 StartLimitIntervalSec=0
 

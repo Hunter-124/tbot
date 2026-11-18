@@ -246,7 +246,7 @@ class SensorProcess(SourceBase):
     """
 
     def __init__(self, cfg, calib, spec: str | None = None, want_imu: bool = True,
-                 respawn_s: float | None = None, hang_s: float = HANG_S) -> None:
+                 respawn_s: float | None = None, hang_s: float = HANG_S, wait: bool = True) -> None:
         super().__init__()
         self.clock = MonotonicClock()
         self.spec = spec or str(cfg.camera.source)
@@ -283,6 +283,16 @@ class SensorProcess(SourceBase):
         self._backoff_i = 0
         self._next_spawn_t = 0.0
         self._spawn()
+        self._ready_done = False
+        if wait:
+            self.finish_start()
+
+    def finish_start(self) -> "SensorProcess":
+        """Wait for the child to describe its camera and hand it the ring (done by __init__ unless wait=False:
+        then the child opens the camera while the caller does something else, e.g. import the pipeline)."""
+        if self._ready_done:
+            return self
+        self._ready_done = True
         info = self._wait_info()
         self.width, self.height = int(info["width"]), int(info["height"])
         self._channels = int(info["channels"])
@@ -301,6 +311,7 @@ class SensorProcess(SourceBase):
         self._shape = (self.height, self.width) if self._channels == 1 else (self.height, self.width, 3)
         self._attach(info)
         self._imu = _ImuProxy(self) if self.has_imu else None
+        return self
 
     # ----------------------------------------------------------------------------- the child
     def _spawn(self) -> None:
@@ -578,3 +589,28 @@ class SensorProcess(SourceBase):
 
     def imu(self):
         return self._imu
+
+
+# ------------------------------------------------------------------------------------------- early start
+_early: SensorProcess | None = None
+
+
+def start_early(cfg, calib) -> None:
+    """Spawn the sensor process now, without waiting for it (`tbot run` calls this before importing the
+    pipeline: on a Pi 3B both take 6-10 s to import OpenCV and the rest, one after the other they took ~20 s
+    of every power-up). `take_early` picks it up."""
+    global _early
+    if _early is None and str(cfg.camera.source).partition(":")[0] == "picam" and bool(cfg.camera.process):
+        _early = SensorProcess(cfg, calib, wait=False)
+
+
+def take_early(spec: str) -> SensorProcess | None:
+    """The process start_early spawned for this source spec, started; None if there is none."""
+    global _early
+    early, _early = _early, None
+    if early is None:
+        return None
+    if early.spec != str(spec):
+        early._abort()
+        return None
+    return early.finish_start()

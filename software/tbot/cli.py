@@ -56,8 +56,28 @@ def main(argv: list[str] | None = None) -> int:
         print(f"tbot: unknown command {cmd!r}\n\n{_usage()}", file=sys.stderr)
         return 2
     _interruptible()
+    if cmd == "run":
+        _start_sensors_early(rest)
     module = importlib.import_module(COMMANDS[cmd][0])
     return int(module.main(rest) or 0)
+
+
+def _start_sensors_early(argv: list[str]) -> None:
+    """`tbot run` with the live camera: spawn the sensor process before the pipeline's imports, so the two
+    load in parallel (camera/proc.py start_early). Anything unusual (help, a bad option, an error) leaves it
+    to the normal path."""
+    if any(a in ("-h", "--help") for a in argv):
+        return
+    try:
+        import argparse
+
+        from tbot.camera.proc import start_early
+        from tbot.config import add_common_args, load_from_args
+
+        args, _ = add_common_args(argparse.ArgumentParser(add_help=False)).parse_known_args(argv)
+        start_early(*load_from_args(args))
+    except Exception:  # noqa: BLE001 - the pipeline opens the camera itself, and reports what is wrong
+        pass
 
 
 def _interruptible() -> None:

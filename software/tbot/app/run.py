@@ -1011,9 +1011,10 @@ def main(argv: list[str] | None = None) -> int:
         cfg.record.mode = args.record
 
     if cfg.camera.source.partition(":")[0] == "picam" and bool(cfg.camera.process):
-        from tbot.camera.proc import SensorProcess
+        from tbot.camera.proc import SensorProcess, take_early
 
-        source = SensorProcess(cfg, calib)  # camera + IMU in their own process (see camera/proc.py for why)
+        # camera + IMU in their own process (see camera/proc.py for why); usually already started by the CLI
+        source = take_early(cfg.camera.source) or SensorProcess(cfg, calib)
         log.info("sensor process %d: %s%s", source.child_pid, source.name, " + IMU" if source.has_imu else "")
     else:
         source = open_live_source(cfg.camera.source, cfg, calib)
