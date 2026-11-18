@@ -816,56 +816,47 @@ contacts and connector seating remain open.
     unanchored outer-wall run where the new round meets the unsupported
     pocket roof); look at the nut pocket roof in the PrusaSlicer preview.
 
-### `trig_plug` — guard-opening plug and jack (rev AG)
+### Rev AG — front jack, rigid spacers, M3 × 30 rear (anti-slide)
 
-Why: in use the trigger set slid around on the guard. The plates squeeze a
-tapered guard (9.3 → 15.7 wide), so the clamp force itself pushes the set
-toward the narrow end, back toward the trigger. The cradle saddle was shaped
-to a photo-derived guard (±10%) and never really locked. Rev AG adds one small
-printed part and one screw; the bracket, clamp and button are unchanged.
+Problem: on the gun the trigger set crept back toward the trigger. The plates
+squeeze a guard that narrows toward the rear (9.3 → 15.7), so the clamp force
+itself pushes the set rearward. The cradle's front face sits under the
+bottom-front slope of the guard, which is only about 22° from horizontal, so
+the set could ride down and back off it.
 
-- PLA block in the front of the guard opening, X 15.5..33.5, Z floor..8.5,
-  sides on the two taper lands |Y| = 4.443 + 0.0842·X (0.05 inside the land
-  planes, so the printed part closes onto them). The U18 and U28 M3 × 30
-  through-bolts pass through it (D3.4). With the bolts tight, the plates
-  clamp the plug, not the guard taper, so the squeeze can no longer push the
-  set rearward. The 1 mm liners on the guard faces still take up side play.
-- Lower and front faces are the modelled guard inner surface offset 0.7.
-  The wall between U28 and the guard is 0.9 (the bolt is only 3.3 from the
-  modelled guard surface). If it binds on the real guard, sand there.
-- Jack: an M3 × 18 countersunk screw on an X-parallel axis at (Y 0, Z 3.5),
-  driven from the plug's rear face. It runs in a D6.4 teardrop counterbore
-  (to X 24.5), then a D2.8 thread-forming section (X 24.5..27, the prevailing
-  torque is the lock), then a trapped M3 nut (pocket X 27.3..30, drop-in
-  from the top, flats facing ±Y), then D3.4 to the flat front face at X
-  33.5. The tip bears on the steep front inside wall of the guard, modelled
-  at X 36.45 at Z 3.5. Its stroke runs from flush (head flush with the rear
-  face) to 7.3 out, so it covers a wall anywhere from X 33.5 to 40.8. Do not
-  use a longer screw: backed out, its head would reach the lever.
-- Load path: the jack pushes the guard's front leg forward and pulls the
-  whole set back and up onto the clamp cradle, which lies under the bow and
-  up its front outer ramp. The front leg is then clamped between the jack tip
-  inside and the cradle outside. The trigger reaction and recoil push the set
-  forward, into the jack. Nothing relies on friction on the taper.
-- Clearances (model): lever 1.94 at rest. Swung toward the pull it only gets
-  further away (7.6 at −30°). In the opposite, non-firing direction it meets
-  the plug at about 7.7° past rest, so the plug is also a hard stop for
-  overtravel there. The guard is 0.70 away everywhere except the jack, and
-  the clamp and bracket lands are 0.05 away. Checked with
-  `design/cad_src/trig_plug.py` geometry against the current part exports.
-- Source: `design/cad_src/trig_plug.py` (build123d; regenerate, then import
-  into `parts/trig_plug.step+`). Print lying on a land face (build up ≈ +Y),
-  no supports: 3.4 g, 0.54 h, strength profile. Slicer printability flags
-  only the 0.9 U28 wall and about 21 mm² of small bore crowns; the G-code
-  check warns about one 8.2 mm air run.
-- Assembly: `asm/tbot_full.step+` components `trig_plug` (identity, gun
-  frame), `fhcs_m3x18_jack` (tip X 35.8, 0.08 short of the modelled wall)
-  and `nut_m3_jack` (X 27.3..29.7, against the pocket's rear wall). The 2.55
-  mm³ jack/plug overlap is the screw in the D2.8 thread-forming section.
-- Install, safety: after the jack is tight, put the servo at REST and confirm
-  daylight between the lever and the trigger before anything else. The jack
-  moves the set rearward by whatever gap the cradle had. If the lever touches
-  the trigger, back the jack off and do not fire.
+- Front jack (`trig_clamp_R_v2` f65, `RevAG_FrontJack_D2_8`): a D2.8
+  thread-forming bore through the cradle. Its axis is normal to the guard's
+  outer front slope at (X 34, Y −4, Z −11.5), direction (0.378, 0, −0.926).
+  An M3 × 12 countersunk screw goes in from the clamp's curved front-bottom
+  face (2 mm hex, from under the gun). The thread it cuts in the PLA is the
+  lock. The tip pushes back and up into the guard's forward-facing slope, so
+  the reaction drives the whole set forward and down, away from the trigger.
+  The set stops when U28 meets the front inside wall of the guard opening
+  and the U18 spacer meets the opening floor. The bottom-front of the guard
+  ends up clamped between those two (inside) and the screw tip (outside). To
+  move rearward, the set would have to push the screw into the guard. The
+  bore clears the L40 hole by 2.4. The head stands about 2
+  proud of the face.
+- `u18_spacer` (new part): a D5 × 11.6 tube, bore D3.3, on the U18 bolt
+  between the two taper lands (X 18.5, Z −7.75). With the rear boss below,
+  it fixes the plate-to-bracket gap, so tightening the bolts no longer
+  squeezes the tapered guard. The 1 mm liners take up side play. Lever at
+  rest: 2.4 clear.
+- Rear joint M3 × 35 → M3 × 30. `RevAG_RearSpacerBoss` (f62) fills the cradle
+  from Y 0.3 to 5.4 (0.1 short of the bracket) over X −19..−11.5, Z bed..−12.5.
+  The nut moves to a new side slot (f64, open to −X, nut Y −2.5..−0.1), with
+  5.5 of solid plastic behind it to the bracket. The old nut pocket is filled
+  (f61). The bracket is unchanged: head flush in its existing back-face
+  countersink at Y 27.5, tip at Y −2.5.
+- The servo and lever move with the set (about 0.4 forward, 1 down once
+  jacked). Re-run the servo REST/FIRE endpoint calibration after installing.
+- Assembly: `fhcs_m3x12_front_jack` (tip 0.06 off the modelled slope),
+  `u18_spacer`, `fhcs_m3x30_rear`, `nut_m3_rear`. The only overlaps are the
+  jack screw in its D2.8 bore (8.5 mm³, the thread it cuts) and the existing
+  `gun_body`/`guard_measured` pair. Clamp 14.1 cm³; slice 14.0 g / 1.8 h. The
+  G-code check flags a 13.6 mm anchored overhang perimeter at 0.4 mm on the
+  existing shallow R25.4 front-bottom arc, a cosmetic edge. Spacer 0.3 g,
+  printed standing up with a brim.
 
 ## Printing and materials
 

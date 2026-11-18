@@ -41,7 +41,7 @@ them from `export/<part>.step` with the settings above.
 | servo_lever | −Z, top face on the bed | none | ~3.2 g |
 | servo_bracket_L | +Z, ear-block bottoms (Z −21.7) on the bed (rev AA: was +Y; clamp-screw axis now lies in the layer plane) | build plate only, organic | ~10.8 g |
 | trig_clamp_R | +Z | none (D7.4 switch-hole and D7 access-bore crowns bridge; ream 7.4 if the switch hole sags) | 8.7 g |
-| trig_plug (rev AG) | lying on a land face (≈ +Y up) | none | 3.4 g; sliced: `print/creality_ender_3_0_4_mm_nozzle/trig_plug.gcode` |
+| u18_spacer (rev AG) | standing on an end (axis up), 5 mm brim | none | 0.3 g |
 
 ### Lens lock nut
 
@@ -85,9 +85,9 @@ Pi bores are one feature each in carrier_L (`PiM2Insert_*`).
 | 13 | M3 × 8 ISO 10642 countersunk | carrier_L / carrier_R → nose_clamp_L / R front screw, 1 per side, along ∓Y at (X 495.5, Z 3.2), head flush in the carrier inner wall (Pi / battery side; remove Pi or pack to reach it), tip 5.0 into the clamp insert; batt_retainer → carrier_R along +Y at A (447.4, Z 35.0), B (447.4, Z −13.0), C (525.55, Z 11.6), heads flush in the plate; belly → carriers from below at (433, ±21.5), (518.9, −21.5); cover_R → carrier_R vertical at (433.4, −43.5) top + bottom and (401.4, −43.75) bottom (bay); cover_L → carrier_L through the flank along −Y at (X 433.4, Z 30.0 / −11.0) |
 | 2 | M3 × 6 SHCS | GY-521 → nose_clamp_R (M3 × 10 does not fit) |
 | 3 | M3 × 30 ISO 10642 countersunk | trig_clamp_R_v2 → servo_bracket_L: U18, U28, L40 through D3.5 holes into trapped M3 hex nuts (seats Y 12.9 / 12.9 / 13.3); heads flush with the clamp hole pad at Y −13.9, tips Y 16.1 (rev AA: was M3 × 25 into inserts, heads 2.4 deep in a counterbore) |
-| 1 | M3 × 35 ISO 10642 countersunk | servo_bracket_L → trig_clamp_R_v2 rear (X −15.5, Z −17.0), from the bracket back face through the whole rear ear block into a trapped M3 hex nut in the clamp's guard cradle (seat Y −4.0); head flush at Y 27.5, tip Y −7.5 (rev AB: replaces the rev AA M3 × 16 + spacer nub, which snapped) |
-| 1 | M3 × 18 ISO 10642 countersunk | trig_plug jack screw, driven +X from the plug rear face into the guard's front inside wall. No longer: a longer screw backed out reaches the lever |
-| 5 | M3 hex nut (ISO 4032, 5.5 AF × 2.4) | trig_plug: 1 drops into the top pocket, flats facing ±Y. Rest as before: | servo_bracket_L: U18 and L40 slide in from the side slots, U28 drops into its top slot (vertex down); trig_clamp_R_v2: rear nut slides into the cradle side slot from −X. Slots stop the nuts turning |
+| 1 | M3 × 30 ISO 10642 countersunk | servo_bracket_L → trig_clamp_R_v2 rear (X −15.5, Z −17.0), from the bracket back face through the rear ear block and the clamp's rear spacer boss into a trapped M3 hex nut (side slot from −X, nut Y −2.5..−0.1); head flush at Y 27.5, tip Y −2.5 (rev AG: was M3 × 35) |
+| 1 | M3 × 12 ISO 10642 countersunk | rev AG front jack: up and back into the clamp's front-bottom face, threads itself into the D2.8 bore, tip on the guard's front slope |
+| 4 | M3 hex nut (ISO 4032, 5.5 AF × 2.4) | servo_bracket_L: U18 and L40 slide in from the side slots, U28 drops into its top slot (vertex down); trig_clamp_R_v2: rear nut slides into the cradle side slot from −X. Slots stop the nuts turning |
 | 4 | M3 × 10 ISO 10642 countersunk | servo ears RI / RO / FI / FO, up into the bracket |
 | 1 | M3 × 12 ISO 10642 countersunk | lever + horn → servo output shaft (M3 × 14 bottoms out) |
 | 4 | M2 × 5 machine screw, pan head (ISO 7045) or SHCS | Pi 3B → M2 inserts, from the component side |
