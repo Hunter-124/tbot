@@ -858,6 +858,10 @@ printed part and one screw; the bracket, clamp and button are unchanged.
   no supports: 3.4 g, 0.54 h, strength profile. Slicer printability flags
   only the 0.9 U28 wall and about 21 mm² of small bore crowns; the G-code
   check warns about one 8.2 mm air run.
+- Assembly: `asm/tbot_full.step+` components `trig_plug` (identity, gun
+  frame), `fhcs_m3x18_jack` (tip X 35.8, 0.08 short of the modelled wall)
+  and `nut_m3_jack` (X 27.3..29.7, against the pocket's rear wall). The 2.55
+  mm³ jack/plug overlap is the screw in the D2.8 thread-forming section.
 - Install, safety: after the jack is tight, put the servo at REST and confirm
   daylight between the lever and the trigger before anything else. The jack
   moves the set rearward by whatever gap the cradle had. If the lever touches
