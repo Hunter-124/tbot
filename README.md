@@ -4,7 +4,7 @@
 predicts where it will be when the shot arrives, and a servo presses the trigger at the instant the two line up.
 The shooter only swings the gun and holds a button.
 
-Designed, printed, wired, programmed and calibrated by one person in 23 days (2026-10-25 to 2026-11-17).
+Designed, built and calibrated by one person in 23 days (2026-10-25 to 2026-11-17). The software was written with AI coding tools.
 First live range day: **two shots fired by the machine, two clays broken.**
 
 ![The assembled gun: trigger servo at the guard, camera and compute module clamped under the barrel](docs/media/hero_assembled.jpg)
@@ -83,9 +83,15 @@ through the same code on a laptop.
 
 ### Mechanical
 
-All parts are PLA, printed on an Ender 3, designed against a photogrammetry scan and caliper measurements of
-the gun. Nothing on the gun is modified: the front module hangs from two worm-drive hose clamps seated in
-grooves, and the trigger set clamps to the guard.
+![CAD render of the full assembly](docs/media/cad_full.jpg)
+
+| | |
+|---|---|
+| ![Front module, gun-left cover removed](docs/media/cad_open_L.jpg) | ![Front module, gun-right cover removed](docs/media/cad_open_R.jpg) |
+| Gun-left: Raspberry Pi 3B, camera ribbon, camera in the nose | Gun-right: 3S pack, buck converter bay, power harness |
+
+All parts are PLA, printed on an Ender 3. Nothing on the gun is modified: the front module hangs from two
+worm-drive hose clamps seated in grooves, and the trigger set clamps to the guard.
 
 - **Front module** (8 parts, 231 g): camera in the nose, Pi on one side, 3S 2600 mAh battery and two buck
   converters on the other, IMU in the clamp. M3 into brass heat-set inserts throughout.
@@ -97,6 +103,23 @@ grooves, and the trigger set clamps to the guard.
 
 CAD: `parts/` (native), `export/STEP/` and `export/STL/` (open in anything), [BOM](design/BOM.md),
 [assembly sequence](design/assembly_sequence.md).
+
+### Reference model by Gaussian splatting
+
+The forend and trigger guard are compound curves that calipers cannot capture, so the gun itself was scanned
+from phone video ([refs/scan/](refs/scan/)):
+
+1. Walk-around video with printed ChArUco boards in frame.
+2. Structure from motion for camera poses (407 frames, 1.23 px mean reprojection error).
+3. A Gaussian splat trained on those poses (567,000 Gaussians).
+4. Splat to mesh by fusing rendered depth into a TSDF at 0.54 mm voxels.
+5. Absolute scale from the boards (0.64 mm RMS), then registration into the gun frame used by the CAD and the
+   software.
+
+![Scanned mesh (white) registered onto the CAD gun body (red)](docs/media/scan_vs_cad.png)
+
+*Scan in white over the CAD gun body in red, side and plan views, millimetres. The clamps were modelled against
+this surface.*
 
 ### Calibration
 
@@ -111,24 +134,34 @@ with its own procedure and uncertainty ([CALIBRATION.md](software/docs/CALIBRATI
 | IMU axis map and gyro bias | fit within 0.8° | Three hand-held poses; bias re-zeroed whenever the gun rests for 1 s |
 | Trigger delay | 161 ms | Microphone on the bench, then recoil on the IMU in live fire |
 
-### Software
+### Techniques
 
-About 30,000 lines of Python in [software/](software/), running on a Raspberry Pi 3B, with 459 tests that need
-no hardware.
+- **Detection without colour.** The sensor is monochrome, so the clay is found with a matched filter sized to
+  it, local hysteresis, and speck and contrast tests that reject noise and scenery. The barrel is masked using
+  the camera model.
+- **Range from one camera.** A clay is 110 mm across; its apparent size, corrected for lens blur, gives range.
+- **Attitude.** A complementary filter fuses gyro and accelerometer, and re-zeroes gyro bias whenever the gun
+  rests for a second.
+- **Tracking.** An extended Kalman filter holds 3-D position and velocity in a gravity-aligned world frame, so
+  the shooter's swing does not look like target motion.
+- **Fire decision.** The solver extrapolates the clay and the gun swing (including angular acceleration) across
+  the full delay, applies a pellet drag, drop and pattern model for the load and choke, and converts miss
+  distance and its uncertainty into a hit probability.
 
-- **Every stage runs on a laptop too.** Camera, IMU, GPIO and servo all have simulated backends. `tbot sim`
-  runs the whole loop against synthetic skeet and trap scenarios with a simulated shooter, and judges each shot
-  against ground truth.
-- **Hardware-in-the-loop bench.** The gun's camera watches a monitor showing a moving target while the real
-  servo fires against a microphone, measuring end-to-end timing without ammunition.
-- **Fit to a 2016 computer.** The attitude filter went from 6.4 ms to 0.67 ms per frame by dropping small-array
-  NumPy for plain floats; the 3-D tracker costs 1.2 ms; the detector was cut by 35 %.
-- **Diagnostics over guesswork.** `tbot explain` prints why the solver held fire on each frame, `tbot
-  sensitivity` ranks which measurement error costs the most hit probability, `tbot doctor` checks a
-  configuration before assembly, `tbot score` replays a real shot against where the clay actually was.
+### Simulation and bench testing
 
-Start with [software/README.md](software/README.md); the module contract is
-[ARCHITECTURE.md](software/docs/ARCHITECTURE.md).
+- **Closed-loop simulator.** `tbot sim` flies synthetic skeet and trap targets with gravity and drag, renders
+  them through the calibrated camera model with motion blur and noise, swings a simulated shooter, and judges
+  each shot against ground truth.
+- **Monitor in the loop.** The gun's camera watches a screen showing a moving target while the real servo fires
+  against a microphone, timing the chain from photon to trigger break without ammunition.
+- **Replay.** Every live press records raw frames, IMU and decisions, and replays through the same pipeline on
+  a laptop.
+- **Yaw table.** A stepper turntable for IMU scale and timing is designed and coded but has not yet been run on
+  hardware.
+
+The software lives in [software/](software/) and runs with no hardware attached; start with
+[software/README.md](software/README.md) and [ARCHITECTURE.md](software/docs/ARCHITECTURE.md).
 
 ## Safety
 
@@ -161,7 +194,7 @@ makes the actuator safe. All bench work is done with the gun unloaded.
 |---|---|
 | Oct 25 | Gun measured, parts ordered |
 | Oct 26 | First full CAD (rev G) and first software package |
-| Nov 5 | Photogrammetry scan of the gun; CAD rebuilt against it |
+| Nov 5 | Gaussian-splat scan of the gun; CAD rebuilt against it |
 | Nov 12 | Full assembly on the gun |
 | Nov 14 to 15 | Latency measured, IMU calibrated, 3-D tracker, simulator with doubles |
 | Nov 16 | 12 mm lens fitted; focal length and laser boresight |
