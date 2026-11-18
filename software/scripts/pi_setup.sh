@@ -5,8 +5,8 @@
 #
 # Installs the apt packages the Pi path needs, enables the OV9281 camera overlay, I2C (400 kHz),
 # hardware PWM0 on GPIO18 and the serial console in config.txt, puts the invoking user in the
-# video/gpio/i2c groups, and creates ~/tbot-venv (--system-site-packages, so apt's OpenCV/numpy/
-# picamera2/lgpio are used) with TBOT installed editable.
+# video/gpio/i2c groups, creates ~/tbot-venv (--system-site-packages, so apt's OpenCV/numpy/
+# picamera2/lgpio are used) with TBOT installed editable, and builds the detector's native kernel.
 set -euo pipefail
 
 BLOCK_BEGIN="# --- tbot ---"
@@ -39,6 +39,8 @@ APT_PACKAGES=(
 	python3-venv
 	python3-setuptools                # the --no-build-isolation editable-install fallback imports setuptools.build_meta
 	python3-pytest
+	gcc                               # the detector's native measurement kernel (scripts/build_native.sh)
+	libc6-dev
 )
 
 info() { printf '==> %s\n' "$*"; }
@@ -201,6 +203,17 @@ if ! runuser -u "${TARGET_USER}" -- "${VENV_DIR}/bin/pip" install --no-deps -e "
 	runuser -u "${TARGET_USER}" -- "${VENV_DIR}/bin/pip" install \
 		--no-deps --no-build-isolation -e "${SOFTWARE_DIR}" ||
 		die "editable install failed; check pip output above"
+fi
+
+# --------------------------------------------------------------------------- native kernel
+# The detector's per-candidate measurement in C (tbot/vision/_measure.c). Optional: without the library the
+# Python loop runs instead (same detections, ~6 ms a candidate on a Pi 3B instead of well under 1 ms).
+info "building the native measurement kernel"
+if runuser -u "${TARGET_USER}" -- "${SCRIPT_DIR}/build_native.sh"; then
+	"${VENV_DIR}/bin/python" -c 'from tbot.vision import _native; assert _native.kernel() is not None, _native.status' ||
+		note "the kernel was built but does not load; the detector uses its Python path"
+else
+	note "build failed; the detector uses its Python path (rerun scripts/build_native.sh to retry)"
 fi
 
 # --------------------------------------------------------------------------- working directories

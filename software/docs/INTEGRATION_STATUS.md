@@ -546,3 +546,34 @@ computes. Tracker 1.5, attitude 1.3, solver 0.2 (10-15 on the frame that fires, 
   microseconds: by that arithmetic ~22 -> ~13 ms a frame, 40 -> 60+ frames/s, about +4-5 points (an estimate
   until it is timed on the Pi). That is the next software step for speed. The scenery filter is the one after it.
 - **And both are small beside the trigger delay** (+19 points for the first 60 ms), which no language touches.
+
+### The native measurement kernel (done on the laptop; Pi timing still to be measured)
+
+The step above is in: `tbot/vision/_measure.c` (one file, no Python headers, called through `ctypes` by
+`tbot/vision/_native.py`) is the loop of `ClayDetector._measure` and `_adaptive_moments`, statement for
+statement. The Python loop is untouched: it runs whenever the library is not built, does not load, is from
+another version of the C file, or is switched off (`detector.native = false`, or `TBOT_NATIVE=0` in the
+environment), and it is the reference in `tests/test_native_measure.py`.
+
+- **Build:** `scripts/build_native.sh` (`cc -O2 -shared -fPIC -ffp-contract=off`; `clang` builds a DLL on the
+  laptop). `scripts/pi_setup.sh` installs `gcc` and calls it. The binary is not in git. `tbot bench` prints
+  whether the kernel is in use, or why not.
+- **Same detections.** Built scenes (both polarities, edge-on, image border, mask, clutter, colour, tiny
+  frames), all eight simulator scenarios and all nine range presses of 2026-11-17, native against Python:
+  the same candidates accepted and rejected, area / bounding box / peak contrast equal, positions and
+  diameters equal to rounding (~1e-8 relative; the test allows 1e-3 px and 1e-3). They are not bit for bit:
+  the C library's `expf` and NumPy's float32 `exp` round differently in the last place.
+- **Downstream:** `tbot sim --seeds 6` and `tbot rescore` on the nine presses print the same report with the
+  kernel on and off (24 shots / 17 hits; 6 shots / 3 hits). In the full-precision JSON the numbers agree to
+  ~1e-8 (the worst is 3e-6, on a minimum over a run), and one fire time of 48 runs differs by 1 ns.
+- **One trap worth knowing:** when the Gaussian weight wanders off a faint blob (a speck on the horizon),
+  the weighted flux drops under ~2e-16 and `cv2.moments` then returns the raw second moments as the central
+  ones; where that sets in depends on the OpenCV build (5.0 sums such an image twice, so half of
+  `DBL_EPSILON`). The detector measures it once (`_moments_m00_floor`) and the kernel follows, so such a
+  window gives the same junk either way. It is junk: a guard in `_adaptive_moments` would be the real fix.
+- **Laptop timing** (AMD64, Python 3.13, the loop only, per candidate handed to it): Python 0.30 ms ->
+  native 0.022 ms on the simulator scenarios (x13), 0.38 -> 0.044 ms on the range presses (x9). `tbot bench`
+  (skeet_crossing, no overlay): detect 3.68 -> 2.49 ms median, 5.45 -> 3.52 ms p95.
+- **Pi 3B: not measured yet** (the Pi was off). The ~22 -> ~13 ms a frame above is still the estimate. On the
+  gun: `./scripts/build_native.sh`, then `tbot bench` with and without `TBOT_NATIVE=0`, and
+  `python -m pytest tests/test_native_measure.py` (the Pi's OpenCV and NumPy are older than the laptop's).

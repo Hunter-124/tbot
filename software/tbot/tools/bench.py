@@ -85,6 +85,7 @@ def run_bench(
     from tbot.fire.solver import FireSolver
     from tbot.imu.attitude import FixedAttitude
     from tbot.optics import CameraModel, MountModel, combined_mask
+    from tbot.vision import _native
     from tbot.vision.detector import ClayDetector
     from tbot.vision.tracker3d import make_tracker
 
@@ -186,6 +187,8 @@ def run_bench(
         "python": sys.version.split()[0],
         "numpy": np.__version__,
         "opencv": opencv_info(),
+        # the detector's C measurement kernel: in use, or why not (not built, switched off, stale)
+        "native_measure": _native.describe(bool(getattr(cfg.detector, "native", True))),
         "source": getattr(source, "name", "?"),
         "scenario": scenario if source_spec is None else None,
         "frames": processed,
@@ -216,6 +219,8 @@ def format_bench(result: dict) -> str:
     ]
     if "cpu_features" in result["opencv"]:
         lines.append(f"  cpu: {result['opencv']['cpu_features']}")
+    if "native_measure" in result:
+        lines.append(f"  native measurement kernel: {result['native_measure']}")
     lines.append("")
     lines.append(f"  {'stage':<10}{'p50':>9}{'p95':>9}{'max':>9}{'mean':>9}   [ms]")
     lines.append(f"  {'-' * 46}")

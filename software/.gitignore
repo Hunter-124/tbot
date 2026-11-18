@@ -6,4 +6,10 @@ config/local.toml
 pi-pulls/
 /calib/
 *.pstats
+# native measurement kernel: built per machine by scripts/build_native.sh
+/tbot/vision/_measure*.so
+/tbot/vision/_measure*.dll
+/tbot/vision/_measure*.dylib
+/tbot/vision/_measure*.lib
+/tbot/vision/_measure*.exp
 /runs/

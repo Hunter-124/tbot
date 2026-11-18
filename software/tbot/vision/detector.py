@@ -15,6 +15,7 @@ reallocate ~1 MB per frame at 120 fps.
 
 from __future__ import annotations
 
+import ctypes
 import math
 import time
 from functools import lru_cache
@@ -24,6 +25,7 @@ import numpy as np
 
 from tbot.config import Config
 from tbot.types import Detection, Frame
+from tbot.vision import _native
 
 # 8-bit quantisation alone is uniform over 1 DN => sigma = 1/sqrt(12); never report less than that,
 # so snr stays finite on synthetic/flat imagery.
@@ -183,6 +185,7 @@ class ClayDetector:
         self._min_diameter_px = 0.0
         self._scale_key: tuple | None = None
         self._down: np.ndarray | None = None
+        self._native_params: _native.MeasureParams | None = None
         self.set_mask(mask)
 
     # ------------------------------------------------------------------ mask
@@ -700,6 +703,15 @@ class ClayDetector:
             idx = _prescreen(idx, labels, stats, binary, contrast, matched, sigma, det, mask, grow_low,
                              moat_half, alpha_half)
             grown_done = True
+        # The measurement loop below in C when the kernel is built (vision/_measure.c, scripts/build_native.sh):
+        # the same statements, tens of microseconds a candidate instead of ~6 ms on a Pi 3B. detector.native =
+        # false or TBOT_NATIVE=0 keeps the Python loop, which is the reference.
+        lib = _native.kernel() if bool(getattr(det, "native", True)) else None
+        if lib is not None and idx.size:
+            native = self._measure_native(lib, idx, labels, stats, contrast, sigma, det, t_ns, mask, matched,
+                                          matched_sigma, grow_low, grown_done, moat_half, k_sigma, alpha_half)
+            if native is not None:
+                return native
         for i in idx:
             lid = int(i) + 1
             if (not grown_done and grow_low is not None
@@ -836,10 +848,93 @@ class ClayDetector:
             )
         return out
 
+    def _measure_native(self, lib, idx, labels, stats, contrast, sigma, det, t_ns, mask, matched,
+                        matched_sigma, grow_low, grown_done, moat_half, k_sigma, alpha_half) -> list[Detection] | None:
+        """The candidates `idx` through the C kernel; None when the arrays are not in the layout it reads
+        (the caller then runs the Python loop)."""
+        p = self._native_params
+        if p is None:
+            p = self._native_params = _native.MeasureParams()
+            # module constants: set once, so the C file holds no tuning values of its own
+            p.adaptive_min_half = ADAPTIVE_MIN_HALF
+            p.grow_radius = GROW_RADIUS_PX
+            p.local_ring_px = LOCAL_RING_PX
+            p.adaptive_iters = ADAPTIVE_ITERS
+            p.window_sigmas = WINDOW_SIGMAS
+            p.local_k_sigma = LOCAL_K_SIGMA
+            p.meas_seed_sigmas = MEAS_SEED_SIGMAS
+            p.moment_floor_sigmas = MOMENT_FLOOR_SIGMAS
+            p.pixel_box_var = PIXEL_BOX_VAR
+            p.adaptive_alpha = ADAPTIVE_ALPHA
+            p.min_weight_var = MIN_WEIGHT_VAR
+            p.adaptive_tol = ADAPTIVE_TOL
+            p.adaptive_damping = ADAPTIVE_DAMPING
+            p.moment_m00_min = _moments_m00_floor()
+        shape = labels.shape
+        try:
+            if isinstance(contrast, _LazyContrast):
+                gray, bg, c16 = contrast.gray, contrast.bg, None
+            else:
+                gray, bg, c16 = None, None, contrast
+            gsm = None
+            if matched is not None:
+                if not isinstance(matched, _LazyContrast) or c16 is not None or matched.bg is not bg:
+                    return None
+                gsm = matched.gray
+            if any(a is not None and a.shape != shape for a in (gray, bg, gsm, c16, mask)):
+                return None
+            if stats.ndim != 2 or stats.shape[1] != 5:
+                return None
+            p.gray = _native.ptr(gray, np.uint8)
+            p.bg = _native.ptr(bg, np.uint8)
+            p.gsm = _native.ptr(gsm, np.uint8)
+            p.contrast16 = _native.ptr(c16, np.int16)
+            p.labels = _native.ptr(labels, np.int32)
+            p.stats = _native.ptr(stats, np.int32)
+            p.mask = _native.ptr(mask, np.bool_)
+        except (TypeError, AttributeError):
+            return None
+        p.h, p.w = int(shape[0]), int(shape[1])
+        p.sigma = float(sigma)
+        p.matched_sigma = float(matched_sigma) if matched_sigma is not None else 0.0
+        p.has_grow = int(grow_low is not None)
+        p.grow_low = float(grow_low) if grow_low is not None else 0.0
+        p.grown_done = int(grown_done)
+        p.k_sigma = float(k_sigma)
+        p.min_contrast = float(det.min_contrast)
+        p.max_peak_fraction = float(getattr(det, "max_peak_fraction", 1.0))
+        p.max_aspect = float(det.max_aspect)
+        p.min_area_px = int(det.min_area_px)
+        p.max_area_px = int(det.max_area_px)
+        p.moat_half = int(moat_half)
+        p.alpha_half = float(alpha_half)
+        p.diameter_divisor = PROFILE_FACTOR * MORPH_SIZE_BIAS if self._morph_bg else PROFILE_FACTOR
+        lids = (idx + 1).astype(np.int32)
+        res = np.empty((lids.size, _native.OUT_COLS), np.float64)
+        if lib.tbot_measure(ctypes.byref(p), lids.ctypes.data, int(lids.size), res.ctypes.data) != 0:
+            return None
+        t = int(t_ns)
+        return [Detection(t_ns=t, u=r[1], v=r[2], area_px=r[3], diameter_px=r[4], contrast=r[5], snr=r[6],
+                          score=r[7], bbox=(int(r[8]), int(r[9]), int(r[10]), int(r[11])))
+                for r in res.tolist() if r[0] == 0.0]
+
 
 @lru_cache(maxsize=8)
 def _rect_kernel(k: int) -> np.ndarray:
     return cv2.getStructuringElement(cv2.MORPH_RECT, (k, k))
+
+
+@lru_cache(maxsize=1)
+def _moments_m00_floor() -> float:
+    """The |m00| up to which this OpenCV's cv2.moments returns the raw second moments as the central ones
+    (its guard against dividing by no flux): DBL_EPSILON, or half of it on a build that sums such an image
+    twice (5.0). Measured once, so the native kernel treats a window the Gaussian weight has left the way the
+    Python loop on this machine does."""
+    eps = float(np.finfo(np.float64).eps)
+    a = np.float32(0.75 * eps / 4.0)   # m00 = 0.75 eps: between the two
+    mo = cv2.moments(np.array([[a, 0, 0], [0, a, 0], [0, 0, 2 * a]], np.float32))
+    central = mo["m20"] != 0.0 and abs(mo["mu20"] / mo["m20"]) < 0.65   # 2.75 / 9 central, 1 raw
+    return 0.5 * eps if central else eps
 
 
 @lru_cache(maxsize=82)

@@ -103,6 +103,8 @@ static_lever_m = 0.9          # allowing for parallax: the camera is this far ah
 static_min_range_m = 6.0      # about [INFERENCE], so scenery from this range out to infinity trails its old place
 static_min_age_ms = 50.0      # compared with where candidates were this long ago ... (a clay slower than
 static_max_age_ms = 250.0     # tol / min_age = 1.7 deg/s across the sky cannot be told from scenery)
+native = true                 # measure candidates in the C kernel when it is built (scripts/build_native.sh); false, or
+                              # TBOT_NATIVE=0 in the environment = the Python loop (the reference; same detections)
 psf_px = 1.2                  # 4-sigma diameter of the system blur (pixel box alone = 1.15 px); calibrate: tbot calib-detector --psf [INFERENCE]
 
 [tracker]
