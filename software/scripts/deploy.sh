@@ -34,7 +34,8 @@ case "$cmd" in
             # Untracked files are NOT sent. Files deleted here stay on the Pi. Per-rig data is never in git.
             [[ -z ${TBOT_DEPLOY_LOCAL_ROOT:-} ]] || { echo 'tar deploy needs a host' >&2; exit 2; }
             cd -- "$software_dir"
-            rev=$(git stash create 2> /dev/null || true)
+            # TBOT_DEPLOY_REV=HEAD (or any commit) sends that instead of the working tree
+            rev=${TBOT_DEPLOY_REV:-$(git stash create 2> /dev/null || true)}
             rev=${rev:-HEAD}
             desc="$(git rev-parse --short HEAD)$( [[ $rev == HEAD ]] || echo '+uncommitted')"
             untracked=$(git ls-files --others --exclude-standard -- tbot scripts pi config tests | head -20)

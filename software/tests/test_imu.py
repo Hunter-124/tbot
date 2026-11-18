@@ -118,6 +118,9 @@ class FakeMpu:
             return list(out)
         if reg == REG_TEMP_OUT_H:
             return list(struct.pack(">h", self.temp_raw))
+        if reg == REG_FIFO_COUNT_H and length == 2:  # FIFO_COUNT_H, FIFO_COUNT_L in one read
+            self._generate()
+            return [(len(self.fifo) >> 8) & 0xFF, len(self.fifo) & 0xFF]
         return [0] * length
 
     def close(self):
@@ -307,6 +310,8 @@ def test_driver_recovers_from_a_fifo_overflow(tmp_path):
     try:
         time.sleep(0.1)
         before = len(imu.read())
+        # what the chip does when nobody reads it for a while: the FIFO fills to capacity and wraps
+        bus.fifo = bytearray(bus.FIFO_CAPACITY)
         bus.overflow = True
         time.sleep(0.15)
         imu.read()

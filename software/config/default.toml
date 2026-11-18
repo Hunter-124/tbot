@@ -21,7 +21,8 @@ ae_dim_exposure_us = 4000.0   # exposure on to this dim-light limit (blur, but 4
                               # moves its own width in 5.4 ms) [INFERENCE: validate ranging in dim light],
 ae_min_gain = 1.0
 ae_max_gain = 16.0            # then gain to the sensor's maximum (15.94). Measured: gain never lowers the S/N ratio
-ae_every = 1                  # meter every n-th frame (about 1 ms per frame on the Pi 3B)
+ae_every = 2                  # meter every n-th frame (about 1 ms per frame on the Pi 3B, in the sensor process that must
+                              # keep up with 100 fps: every 2nd = 50 Hz control, still settles in a few tens of ms)
 ae_hold_s = 0.5               # a scene that turned darker is left alone this long (gun passing over trees keeps the
 ae_up_stops_per_s = 1.5       # sky's exposure), then the exposure rises at this rate. Brighter is corrected at once
 rotate_180 = false            # layout.md "As-built camera": no board rotation, J1 at the bottom edge. Confirmed

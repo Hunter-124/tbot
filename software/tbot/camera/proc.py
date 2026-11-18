@@ -327,14 +327,14 @@ class SensorProcess(SourceBase):
         if self._proc.is_alive():
             self._proc.terminate()
 
-    def _kill_child(self) -> None:
-        """End the current child, politely first; never returns with it still holding the camera."""
+    def _kill_child(self, polite: bool = True) -> None:
+        """End the current child, politely first unless it is hung; never returns with it holding the camera."""
         proc = self._proc
         self._stop_evt.set()
-        deadline = time.monotonic() + 1.5
+        deadline = time.monotonic() + (1.5 if polite else 0.0)
         while proc.is_alive() and time.monotonic() < deadline:
             self._pump(0.05)  # keep the pipe drained so the child is never stuck in send()
-        for end in (proc.terminate, proc.kill):
+        for end in (proc.terminate, proc.kill) if polite else (proc.kill,):
             if not proc.is_alive():
                 break
             end()
@@ -347,14 +347,14 @@ class SensorProcess(SourceBase):
             pass
         self._poller = None
 
-    def _respawn(self, reason: str) -> None:
+    def _respawn(self, reason: str, hung: bool = False) -> None:
         """Replace the child (now, or after the backoff when respawns keep failing)."""
         now = time.monotonic()
         if self._state != "down":
             log.warning("sensor process: %s; starting a new one (respawn #%d)", reason, self.respawns + 1)
             self.last_error = reason
             self._state = "stopping"  # drained while it dies, never attached
-            self._kill_child()
+            self._kill_child(polite=not hung)
             self._base_dropped += self._child_dropped
             self._base_restarts += self._child_restarts
             self._base_lost += self._child_lost
@@ -391,7 +391,7 @@ class SensorProcess(SourceBase):
         elif self._state == "starting" and now - self._spawn_t > START_TIMEOUT_S:
             self._respawn(f"it did not open the camera within {START_TIMEOUT_S:.0f} s")
         elif self._state == "running" and now - self._last_msg_t > self.hang_s:
-            self._respawn(f"it has said nothing for {now - self._last_msg_t:.1f} s (hung)")
+            self._respawn(f"it has said nothing for {now - self._last_msg_t:.1f} s (hung)", hung=True)
         elif self._state == "running" and now - self._last_frame_t > self.respawn_s:
             self._respawn(f"no frame for {now - self._last_frame_t:.1f} s")
 

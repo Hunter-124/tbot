@@ -7,6 +7,7 @@ smbus2/smbus are imported lazily so the laptop path never needs them.
 
 from __future__ import annotations
 
+import ctypes
 import threading
 import time
 from dataclasses import dataclass, field
@@ -385,11 +386,19 @@ class Mpu6050:
     def _read_block(self, reg: int, length: int) -> bytes:
         return bytes(self._bus.read_i2c_block_data(self.address, reg, length))
 
+    def _read_count(self) -> int:
+        """FIFO_COUNT_H and _L in one transaction (they are adjacent registers)."""
+        hi, lo = self._read_block(REG_FIFO_COUNT_H, 2)[:2]
+        return (hi << 8) | lo
+
     def _read_fifo(self, length: int) -> bytes:
         if self._i2c_msg is not None:
             write = self._i2c_msg.write(self.address, [REG_FIFO_R_W])
             read = self._i2c_msg.read(self.address, length)
             self._bus.i2c_rdwr(write, read)
+            buf = getattr(read, "buf", None)
+            if buf is not None:  # straight out of the ctypes buffer: iterating the message costs ~0.6 ms a poll
+                return ctypes.string_at(buf, int(read.len))
             return bytes(bytearray(list(read)))
         out = bytearray()
         remaining = length
@@ -458,12 +467,15 @@ class Mpu6050:
                 self._stop.wait(delay)
 
     def _poll(self) -> None:
-        if self._read_byte(REG_INT_STATUS) & INT_STATUS_FIFO_OFLOW:
+        # Two I2C transactions a poll in the normal case (FIFO count as one 2-byte read, then the samples), not
+        # four: each costs ~0.7 ms of a Pi 3B core, in the sensor process that also feeds the camera at 100 fps.
+        # The overflow flag is only read when the FIFO is nearly full, which is the only time it can be set.
+        count = self._read_count()
+        if count >= FIFO_CAPACITY_BYTES - 2 * SAMPLE_BYTES and                 self._read_byte(REG_INT_STATUS) & INT_STATUS_FIFO_OFLOW:
             # The FIFO wrapped: the sample stream is no longer contiguous, so drop it and re-anchor.
             self.overflows += 1
             self._reset_fifo()
             return
-        count = (self._read_byte(REG_FIFO_COUNT_H) << 8) | self._read_byte(REG_FIFO_COUNT_L)
         n = min(count // SAMPLE_BYTES, MAX_SAMPLES_PER_READ)
         if n <= 0:
             self._maybe_read_temperature()
