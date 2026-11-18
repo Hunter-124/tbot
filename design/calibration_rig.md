@@ -1,7 +1,6 @@
 # IMU / swing calibration rig (CalRig)
 
 Status: candidate B rev B2 built in CAD; software written (section 7), not yet run on hardware.
-Owner of the mechanical side: Hunter. Owner of the software side: Alex (`software/`).
 Units mm unless stated. Rig frame: origin on the turntable axis at the top face of the base plate, +Z up,
 +X toward the motor, yaw angle positive counter-clockwise seen from above.
 

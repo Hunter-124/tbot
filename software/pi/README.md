@@ -1,6 +1,6 @@
 # TBOT Pi access
 
-Credentials for the gun's Pi 3B. Kept in this private repo on purpose (the Pi is only networked occasionally).
+Credentials for the gun's Pi 3B. Kept in the repo on purpose: the Pi is a bench device that is almost never on a network.
 
 | | |
 |---|---|
