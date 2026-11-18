@@ -10,6 +10,8 @@ COMMANDS: dict[str, tuple[str, str]] = {
     "sim": ("tbot.tools.sim_eval", "closed-loop evaluation on synthetic scenarios"),
     "record": ("tbot.app.record", "record a session (frames + timestamps + IMU) for replay"),
     "score": ("tbot.tools.score", "would each shot of a recorded press have hit? (bore at exit vs target at arrival)"),
+    "rescore": ("tbot.tools.rescore", "recorded presses through today's software, scored against what really happened"),
+    "vclay": ("tbot.tools.vclay", "virtual clays through recorded gun motion: clays hit per firing rule / frame rate / delay"),
     "clip": ("tbot.tools.clip", "annotated video (boxes, tracks, decision) of a recorded press -> <session>/clip.mp4"),
     "board": ("tbot.tools.make_board", "write a printable calibration chessboard"),
     "focus": ("tbot.tools.focus", "headless focus and exposure calibration"),

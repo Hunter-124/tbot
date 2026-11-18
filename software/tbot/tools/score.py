@@ -66,6 +66,22 @@ def config_from_meta(meta: dict) -> Config:
         return _build(Config, _fill(meta["config"], dataclasses.asdict(load_config())), "")
 
 
+RIG_SECTIONS = ("camera", "optics", "mount", "shot", "gun", "imu", "attitude")
+
+
+def rig_config(cfg: Config, press_dir: str | Path) -> Config:
+    """Today's software settings on the gun a press was recorded with: the hardware sections (camera, lens,
+    mount, load, IMU) come from the press, everything that decides (detector, tracker, fire, latency) from
+    `cfg`."""
+    meta = json.loads((Path(press_dir) / META_JSON).read_text())
+    raw = dataclasses.asdict(cfg)
+    have = meta.get("config") or {}
+    for sec in RIG_SECTIONS:
+        if isinstance(have.get(sec), dict):
+            raw[sec] = _fill({k: v for k, v in have[sec].items() if k in raw[sec]}, raw[sec])
+    return _build(Config, raw, "")
+
+
 def _unit(v) -> np.ndarray:
     v = np.asarray(v, dtype=np.float64).reshape(3)
     return v / max(float(np.linalg.norm(v)), 1e-12)
@@ -84,7 +100,9 @@ def _azel_dir(az_deg: float, el_deg: float) -> np.ndarray:
 class Session:
     """A recorded press with its attitude re-estimated from the stored IMU samples."""
 
-    def __init__(self, path: str | Path, cfg: Config | None = None) -> None:
+    def __init__(self, path: str | Path, cfg: Config | None = None, telemetry: list[dict] | None = None) -> None:
+        """telemetry: per-frame records to score instead of the session's own telemetry.jsonl (the press run
+        again through other software: `tbot rescore`)."""
         self.path = Path(path)
         self.meta = json.loads((self.path / META_JSON).read_text())
         self.cfg = cfg if cfg is not None else config_from_meta(self.meta)
@@ -96,14 +114,17 @@ class Session:
         self.budget = LatencyBudget.from_config(self.cfg, cal.get("latency"))
         self.R_gc = np.asarray(self.mount.gun_to_cam(np.eye(3)), dtype=np.float64).reshape(3, 3)
         self.tel = []
-        with open(self.path / TELEMETRY_JSONL) as f:
-            for line in f:
-                try:
-                    rec = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                if "t_exposure_ns" in rec and rec.get("R_wg") is not None:
-                    self.tel.append(rec)
+        if telemetry is not None:
+            self.tel = [rec for rec in telemetry if "t_exposure_ns" in rec and rec.get("R_wg") is not None]
+        else:
+            with open(self.path / TELEMETRY_JSONL) as f:
+                for line in f:
+                    try:
+                        rec = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if "t_exposure_ns" in rec and rec.get("R_wg") is not None:
+                        self.tel.append(rec)
         self.tel.sort(key=lambda r: r["t_exposure_ns"])
         self.t_exp = np.array([r["t_exposure_ns"] for r in self.tel], dtype=np.int64)
         self.events = []
@@ -174,10 +195,11 @@ class Session:
 GATED = ("p_hit ", "better in", "would fire", "FIRE")   # reasons of a frame that passed every gate but confidence
 
 
-def score(session: str | Path, image: bool = False, every: bool = False) -> list[dict]:
+def score(session, image: bool = False, every: bool = False) -> list[dict]:
     """One result per shot of the press; with `every`, one per frame that had a firing solution for a settled
-    track (see the module docstring), each scored as if the command had gone out on that frame."""
-    s = Session(session)
+    track (see the module docstring), each scored as if the command had gone out on that frame.
+    `session` is a press directory or a Session."""
+    s = session if isinstance(session, Session) else Session(session)
     atype = str(s.cfg.actuator.type)
     delay_ns = int(round(s.budget.fire_delay_s(atype) * 1e9))
     bore_g = _unit(s.mount.bore_dir_g)
