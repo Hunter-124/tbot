@@ -187,8 +187,14 @@ def evaluate_run(
     max_frames: int | None = None,
     lead_s: float = LEAD_S,
     det_tol_px: float = DET_TOL_PX,
+    observer=None,
 ) -> dict:
-    """Run the pipeline once over one scenario/seed and score it against the truth. Returns a metrics dict."""
+    """Run the pipeline once over one scenario/seed and score it against the truth. Returns a metrics dict.
+
+    `observer` (tbot.tools.simviz.Recorder) only watches: observer.attach(source, pipe) once before the
+    first frame, observer.step(tele, shot) after each frame (shot = the shot judged on that frame, else
+    None). It changes nothing in the run; None (the default) leaves the run exactly as it was.
+    """
     cfg = copy.deepcopy(cfg)
     cfg.fire.live = True
     cfg.actuator.type = "sim"
@@ -207,6 +213,8 @@ def evaluate_run(
         gpio.close()
         raise RuntimeError("tbot sim needs the simulated GPIO backend")
     pipe = Pipeline(cfg, calib, source, gpio=gpio)
+    if observer is not None:
+        observer.attach(source, pipe)
     if armed:
         gpio.inject(int(cfg.arming.pin), 0 if cfg.arming.active_low else 1)
         # the debounce runs on a real timer and the simulation does not wait for real time: without this the
@@ -245,6 +253,8 @@ def evaluate_run(
                 if out["hit"]:
                     source.break_clay(int(out["clay"]), int(out["t_arrive_ns"]))
                 shots.append({**out, "predicted": dict(tele["decision"]), "armed_at_fire": bool(tele["armed"])})
+            if observer is not None:
+                observer.step(tele, shots[-1] if tele["fired"] else None)
 
             truth = source.truth(t)
             matched = []
@@ -460,6 +470,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-frames", type=int, default=None, metavar="N", help="cap the frames per run")
     parser.add_argument("--not-armed", action="store_true", help="never press the arming button (interlock check)")
     parser.add_argument("--out", default=None, metavar="JSON", help="write the full result as JSON")
+    parser.add_argument(
+        "--render", default=None, metavar="DIR",
+        help="also draw every run into DIR (tbot simviz: video + summary PNG per run, contact sheet); "
+             "off by default, changes no result",
+    )
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(name)s: %(message)s")
@@ -472,8 +487,14 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--seeds must be >= 1")
 
     runs = []
+    rendered = []
     for name in names:
         for seed in range(1, int(args.seeds) + 1):
+            rec = None
+            if args.render:
+                from tbot.tools import simviz  # noqa: PLC0415 - graphics only when asked for
+
+                rec = simviz.Recorder()
             r = evaluate_run(
                 cfg,
                 calib,
@@ -482,11 +503,21 @@ def main(argv: list[str] | None = None) -> int:
                 actuator_delay_ms=args.actuator_delay_ms,
                 armed=not args.not_armed,
                 max_frames=args.max_frames,
+                observer=rec,
             )
             runs.append(r)
             print(f"{name:<18} seed {seed}: {r['frames']} frames, {r['fires']} fire(s), {r['hits']} hit(s), "
                   f"{r['clays_broken']}/{r['clays_thrown']} clay(s) broken, {r['debris_shots']} debris shot(s)",
                   flush=True)
+            if rec is not None:
+                paths = simviz.render_outputs(rec, r, resolve_path(args.render))
+                rendered.append(paths["png"])
+                print(f"{'':<18} drawn: {paths['png']}" + (f", {paths['video']}" if paths["video"] else ""),
+                      flush=True)
+    if len(rendered) > 1:
+        from tbot.tools import simviz  # noqa: PLC0415
+
+        print(f"contact sheet: {simviz.contact_sheet(rendered, resolve_path(args.render) / 'contact_sheet.png')}")
 
     summary = summarize_runs(runs)
     print()

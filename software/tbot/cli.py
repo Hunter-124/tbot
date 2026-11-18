@@ -8,6 +8,7 @@ import sys
 COMMANDS: dict[str, tuple[str, str]] = {
     "run": ("tbot.app.run", "live pipeline: camera -> detect -> track -> fire solver (dry run unless fire.live)"),
     "sim": ("tbot.tools.sim_eval", "closed-loop evaluation on synthetic scenarios"),
+    "simviz": ("tbot.tools.simviz", "sim runs drawn: slow-motion video (camera + field + shots), summary PNG, contact sheet"),
     "record": ("tbot.app.record", "record a session (frames + timestamps + IMU) for replay"),
     "score": ("tbot.tools.score", "would each shot of a recorded press have hit? (bore at exit vs target at arrival)"),
     "rescore": ("tbot.tools.rescore", "recorded presses through today's software, scored against what really happened"),

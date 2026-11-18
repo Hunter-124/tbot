@@ -13,3 +13,4 @@ pi-pulls/
 /tbot/vision/_measure*.lib
 /tbot/vision/_measure*.exp
 /runs/
+/docs/sim_samples/*.mp4
