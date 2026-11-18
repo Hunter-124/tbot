@@ -699,8 +699,8 @@ contacts and connector seating remain open.
   The U18/U28 countersink-to-countersink web is 4.3; U28 hole edge is 1.62
   above the opening.
 - Rev AB guard cradle (anti-slide lock): a solid block from the plate's inner
-  face (Y −8.5) to Y 4.0, which is 1.5 short of the bracket face (rev AE;
-  it was Y 5.0, 0.5 short). It spans
+  face (Y −8.5) to Y 0.5, which is 5.0 short of the bracket face (rev AF;
+  it was Y 5.0, 0.5 short, through rev AD). It spans
   X −19..44.5, from the bed (Z −22.3) up to the outer surface of the guard bow.
   - Its top follows the bow's outer spline with about 0.5 clearance (it was
     measured at 0.27 against `guard_measured`) and is capped at Z −9 at both
@@ -711,7 +711,7 @@ contacts and connector seating remain open.
     rely on clamp friction.
   - The cradle carries:
     - the rear M3 nut in a side slot (open to −X; nut Y −6.6..−4.0, bearing at
-      −4.0; D3.5 bore Y −4..4);
+      −4.0; D3.5 bore Y −4..0.5);
     - the L40 bore, which leaves only about 0.2 of skin over its crown at the
       cradle top. That skin is not load-bearing.
   - Lever plane (Z ≥ −8.2) and trigger clear the cradle top by ≥ 0.8 and ≥ 2.1.
@@ -776,6 +776,37 @@ contacts and connector seating remain open.
   2.5 mm tet10): 4.7 MPa peak away from the fixtures (fatigue limit
   18 MPa), 0.027 deflection; the 18.8 MPa raw peak is the clamped rear-bore
   singularity.
+- Rev AF (outer-face cleanup and rounded ribs).
+  - Cradle: the hand-made 3.5 cut behind the cradle is folded into f13
+    (depth 9.0). The cradle now stops at Y 0.5, 5.0 short of the bracket
+    face, so the clamp can close up to 5 on a thin guard. The rear nut has
+    4.5 of plastic behind it (Y −4.0..0.5).
+  - Hole pad lower edge: drawn oversize (R26.2, tangent line Z −23.7) so the
+    bed flat and the R25.4 trim cut it. This removes the 1.6 ledge and the
+    stub step between the pad and the trim near the L40 hole; the pad's
+    front edge is still the exact X 44.5 line. The bottom rib is back to
+    its 303° end, now buried in the pad.
+  - Rounded rib tops: the pad, the bottom rib and the scallop rib are built
+    as their own bodies (merge off), pad+bottom rib fused and rounded
+    R0.6 on the whole top rim (f56), the scallop rib rounded R0.6 (f57),
+    then fused together (f58) and into the plate (f59) before the bed flat.
+    Rounding after the fuse fails where the rib tops meet the flange wall.
+    The R6 web (f43) now comes before the pad.
+  - Scallop rib outer radius 26 to 25.2 (4.7 wide) so it crosses the pad's
+    R5.6 notch 2.0 from the notch's tangent point instead of 1.2.
+  - One root fillet R0.8 (f49, `RibPadRootR0_8`) for the scallop rib, pad
+    and bottom rib floor edges; the separate f51/f52 root fillets collided
+    with it. Vertical rib-to-pad junction edges are left sharp (rounding
+    them ran into the R0.6 tops and left slivers).
+  - Front-bottom corner round f42 is R0.9 (R2 no longer fits against the
+    rounded pad edge).
+  - Result: one solid, 144 faces, no slivers or tiny edges, every face
+    triangulates, closed STL; 13815 mm³, PrusaSlicer 18.9 g with no mesh
+    repairs. FEA as rev AE with a finer local mesh (130k tet10): 40 MPa
+    at the sharp floor corner of the button nut relief (f33), where the
+    load face ends. That corner was not changed; the coarser rev AE mesh
+    did not resolve it. It is a 50 N case; a 10 N press scales to about
+    8 MPa.
 
 ## Printing and materials
 

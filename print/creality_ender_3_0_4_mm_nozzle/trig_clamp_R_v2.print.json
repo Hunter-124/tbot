@@ -93,40 +93,40 @@
     "usable": true
   },
   "config_sha256": "54a740af33eeec43c02191f292834139b9cac66c92fa134edc259d680c01d255",
-  "mesh_sha256": "3636903eda011d2926c428776b95dbcfceb055a2f9937a0a22a1fce66d85d355",
+  "mesh_sha256": "d63a8125e4ffee43e571e26dd79866f44d1ce479cc35bbf9893ebfcfbef6ac70",
   "gcode": "/home/hunter/Desktop/TBOT/print/creality_ender_3_0_4_mm_nozzle/trig_clamp_R_v2.gcode",
-  "gcode_sha256": "31d0a3cda5bad8185fa28cbea8110ee8441b5856387f62c21179c91269bbfa90",
+  "gcode_sha256": "4a7ff0305d1fb5ce05ef2a4c1cc50018e619c5b398b92766464b63124abf3413",
   "project_3mf": "/home/hunter/Desktop/TBOT/print/creality_ender_3_0_4_mm_nozzle/trig_clamp_R_v2.3mf",
   "stats": {
     "layers": 121,
     "height_mm": 24.2,
-    "filament_mm": 6960.767,
-    "filament_g": 20.76,
-    "print_time_s": 11947.0,
-    "support_share": 0.1125,
+    "filament_mm": 6326.046,
+    "filament_g": 18.87,
+    "print_time_s": 11115.0,
+    "support_share": 0.1368,
     "by_type_mm": {
-      "Bridge infill": 2084.634,
+      "Bridge infill": 1772.854,
       "Custom": 260.0,
-      "External perimeter": 23463.393,
-      "Internal infill": 92246.233,
-      "Overhang perimeter": 513.719,
-      "Perimeter": 44146.564,
-      "Skirt/Brim": 463.219,
-      "Solid infill": 23890.723,
-      "Support material": 23706.282,
-      "Support material interface": 369.884,
-      "Top solid infill": 2857.249
+      "External perimeter": 22500.368,
+      "Internal infill": 78548.256,
+      "Overhang perimeter": 452.458,
+      "Perimeter": 42481.209,
+      "Skirt/Brim": 450.44,
+      "Solid infill": 19819.562,
+      "Support material": 26386.15,
+      "Support material interface": 355.077,
+      "Top solid infill": 2458.527
     },
     "slicer": "PrusaSlicer 2.9.7"
   },
   "estimate": {
-    "part_volume_mm3": 15640.653,
-    "support_volume_mm3": 1791.794,
-    "material_g": 19.642,
-    "support_g": 0.333,
-    "time_h": 0.361,
+    "part_volume_mm3": 13815.391,
+    "support_volume_mm3": 1703.883,
+    "material_g": 17.376,
+    "support_g": 0.317,
+    "time_h": 0.327,
     "layers": 122,
-    "support_share": 0.017,
+    "support_share": 0.018,
     "method": "deterministic shell/infill/flow ranking estimate, not slicer output"
   },
   "printability": {
@@ -135,7 +135,7 @@
       {
         "check": "min_wall",
         "status": "fail",
-        "note": "Minimum measured wall 0.171 mm; required 1.32 mm. 14 more regions are not shown. To show up to 50 regions, set detail=true.",
+        "note": "Minimum measured wall 0.171 mm; required 1.32 mm. 20 more regions are not shown. To show up to 50 regions, set detail=true.",
         "fix": [
           "thicken to >= 1.32 mm (3 perimeters at 0.44 mm)"
         ]
@@ -143,7 +143,7 @@
       {
         "check": "overhang",
         "status": "fail",
-        "note": "383.8 mm2 needs support above 45 deg from vertical (bridges and bed contact excluded). 16 more regions are not shown. To show up to 50 regions, set detail=true.",
+        "note": "333.5 mm2 needs support above 45 deg from vertical (bridges and bed contact excluded). 18 more regions are not shown. To show up to 50 regions, set detail=true.",
         "fix": [
           "add 45 deg chamfers or reorient",
           "replace bed-edge fillet with a 45 deg chamfer",
@@ -153,7 +153,7 @@
       {
         "check": "support",
         "status": "warn",
-        "note": "Support envelope 1791.8 mm3; 76.5 mm2 lands on model; 11.0 mm3 enclosed/unremovable. 18 more regions are not shown. To show up to 50 regions, set detail=true.",
+        "note": "Support envelope 1703.9 mm3; 73.8 mm2 lands on model; 8.2 mm3 enclosed/unremovable. 19 more regions are not shown. To show up to 50 regions, set detail=true.",
         "fix": [
           "reorient with optimize_print_orientation; add 45 deg chamfers or split part",
           "avoid support landing on model surfaces (scars and harder removal)"
@@ -162,12 +162,12 @@
     ]
   },
   "gcode_check": {
-    "status": "fail",
+    "status": "warn",
     "issues": [
       {
         "check": "floating_extrusion",
-        "status": "fail",
-        "note": "Hard floating: 12.6 mm2/layer, 3.301 mm unanchored run; unanchored air run 9.664 mm (limit 10); backed bridge 9.629 mm; infill/interface spans informational (14.0 mm2 total)",
+        "status": "warn",
+        "note": "Hard floating: 3.8 mm2/layer, 0.000 mm unanchored run; unanchored air run 6.030 mm (limit 10); backed bridge 3.424 mm; infill/interface spans informational (16.2 mm2 total)",
         "fix": [
           "Reorient or support long unanchored outer-wall and bridge paths.",
           "Review the flagged type, layer and XY positions in PrusaSlicer before printing."
@@ -176,7 +176,7 @@
       {
         "check": "support_towers",
         "status": "warn",
-        "note": "2 distinct tall/slender support islands (height >=20 mm, height/width >8)",
+        "note": "3 distinct tall/slender support islands (height >=20 mm, height/width >8)",
         "fix": [
           "Use a flatter orientation or grid/organic supports with wider anchored bases.",
           "Add a support sheath/brim and reduce unsupported tower height."
@@ -184,9 +184,7 @@
       }
     ]
   },
-  "slicer_warnings": [
-    "[2026-11-17 22:31:53.223773] [0x00007f96a9b996c0] [warning] Influence area could not be increased! Data about the Influence area: Radius: 1454941 at layer: 49 NextTarget: 49 Distance to top: 45 Elephant foot increases 0 use_min_xy_dist false to buildplate true gracious true safe true until move 0; Parent 0x55d85a409900: Radius: 1454941 at layer: 50 NextTarget: 50 Distance to top: 44 Elephant foot increases 0  use_min_xy_dist false to buildplate true gracious true safe true until move 0; Error: Potentially lost branch!, critical: 1"
-  ],
+  "slicer_warnings": [],
   "slicer_mesh_repairs": {
     "available": true,
     "volumes": 1,
