@@ -748,6 +748,23 @@ contacts and connector seating remain open.
   is gone. The trigger edge is R0.75: R1.5 no longer builds on this tree. The
   flange-front R1 is dropped because it forces the R6 web smaller. Equations:
   `plate_t`, `rib_h`, `flange_t`.
+- Rev AD (solid/mesh fix plus blends). Rev AC's scallop rib came after the
+  holes and filled the U18 countersink. Its hole pad also ran 0.001 mm inside
+  the top rail, and the rib footprint sat exactly on the R25.4 trim; both left
+  sliver faces that would not mesh, so STL export failed or produced an open
+  mesh that slicers reported as non-solid. Now:
+  - all bosses (pad, bottom rib, scallop rib) come before the bed flat, the
+    R25.4 front-bottom trim and the holes;
+  - the bottom rib is drawn oversize (R26.5, down to Z −23) from
+    `DatumY_PadRoot` and is cut to shape by the bed flat and the trim;
+  - the pad meets the top rail with flush flats, non-tangent corners and a
+    1 mm inset along the slanted rail;
+  - root fillets: R1 on the scallop rib and bottom rib, R0.95 on the pad.
+  Rib tops stay crisp: the kernel can't close those corners against the
+  flange. The result is one closed solid with no sliver faces or tiny edges,
+  and Chudware's STL export passes its facet check. Kernel hazard: exactly
+  coincident tangent arcs between the pad and the plate fillets hang the
+  boolean indefinitely.
 
 ## Printing and materials
 
