@@ -82,8 +82,8 @@ F14. Belly, bench-wired (lever connector in its seat, buck #1 on its posts with 
 T1. Iron 4 M3 inserts into servo_bracket_L ears RI, RO, FI, FO from the Z −21.7 face (remove the print supports first).
     Then run a 3.5 mm drill through the rear clamp bore (X −15.5) to clear any plastic the RI/RO inserts pushed in.
     The guard-clamp joints have no inserts: drop/slide 3 M3 hex nuts into the bracket's U18 (side slot from −X), U28
-    (top slot, vertex down) and L40 (side slot from +X) pockets, and 1 into trig_clamp_R_v2's rear side slot
-    (from −X, flats top and bottom); a dab of tape holds them for assembly.
+    (top slot, vertex down) and L40 (side slot from +X) pockets, and 1 into trig_clamp_R_v2's guard-cradle rear slot
+    (from −X); a dab of tape holds them for assembly.
 T2. Servo into the bracket from below, 4 × M3 × 10 up through the ears. Cable grommet points rearward.
 T3. Arming button, on the bench: nut off, push the button thread-first from behind the trig_clamp_R panel through the
     D7.4 hole until the flange seats on the panel back; nut on the panel front, flats horizontal, tighten with a 9.5 mm
@@ -91,8 +91,8 @@ T3. Arming button, on the bench: nut off, push the button thread-first from behi
 T4. Bracket on the gun-left side of the guard, trig_clamp_R on the right, a 1 mm liner on each plate's guard face. The
     guard bow sits in the clamp's cradle. 3 × M3 × 30 from the right (U18, U28, L40, heads flush in the hole pad). The
     U18 bolt passes through the u18_spacer between the plates. Then 1 × M3 × 30 from the LEFT at the rear (X −15.5,
-    Z −17.0): in through the bracket's back-face countersink, through the rear ear block and the clamp's rear boss,
-    into the nut in the clamp's side slot. Snug all four.
+    Z −17.0): down the bracket's back-face counterbore (the head sits about 4 mm deep), through the rear ear block,
+    into the nut in the cradle. Snug all four.
 T4a. Front jack: drive the M3 × 12 countersunk screw (2 mm hex) up into the hole in the clamp's curved front-bottom
     face. It cuts its own thread. Turn it until the tip meets the bottom-front of the trigger guard and the whole set
     moves forward and down onto the U18 spacer and U28 bolt, then about a quarter turn more. Firm, not cranked. Then

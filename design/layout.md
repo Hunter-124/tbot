@@ -838,22 +838,28 @@ the set could ride down and back off it.
   bore clears the L40 hole by 2.4. The head stands about 2
   proud of the face.
 - `u18_spacer` (new part): a D5 × 11.6 tube, bore D3.3, on the U18 bolt
-  between the two taper lands (X 18.5, Z −7.75). With the rear boss below,
-  it fixes the plate-to-bracket gap, so tightening the bolts no longer
-  squeezes the tapered guard. The 1 mm liners take up side play. Lever at
+  between the two taper lands (X 18.5, Z −7.75). It fixes the
+  plate-to-bracket gap at the front, so tightening the bolts no longer
+  squeezes the tapered guard there. The 1 mm liners take up side play. Lever at
   rest: 2.4 clear.
-- Rear joint M3 × 35 → M3 × 30. `RevAG_RearSpacerBoss` (f62) fills the cradle
-  from Y 0.3 to 5.4 (0.1 short of the bracket) over X −19..−11.5, Z bed..−12.5.
-  The nut moves to a new side slot (f64, open to −X, nut Y −2.5..−0.1), with
-  5.5 of solid plastic behind it to the bracket. The old nut pocket is filled
-  (f61). The bracket is unchanged: head flush in its existing back-face
-  countersink at Y 27.5, tip at Y −2.5.
+- Rear joint M3 × 35 → M3 × 30, done in the bracket only: a D6.4
+  counterbore from the back face (Y 27.5) down to Y 23.4, then a new 90°
+  countersink seat (`servo_bracket_L` f145/f146). The head sits 4.1 deeper,
+  so the M3 × 30 tip lands at Y −6.6, through the unchanged nut in the
+  clamp's guard cradle (nut Y −6.4..−4.0). The clamp's rear joint is
+  unchanged. The thinnest web around the new counterbore is 0.55, at the
+  bracket's rear face edge, the same as the old flush countersink. It stays
+  more than 0.5 clear of the RI/RO ear insert bores.
+- `u18_spacer` is the only rigid spacer. The rear joint keeps the rev AF
+  5 mm cradle-to-bracket gap.
 - The servo and lever move with the set (about 0.4 forward, 1 down once
   jacked). Re-run the servo REST/FIRE endpoint calibration after installing.
 - Assembly: `fhcs_m3x12_front_jack` (tip 0.06 off the modelled slope),
-  `u18_spacer`, `fhcs_m3x30_rear`, `nut_m3_rear`. The only overlaps are the
+  `u18_spacer`, `fhcs_m3x30_rear` (head at Y 23.4), `nut_m3_rear` (original
+  seat). The only overlaps are the
   jack screw in its D2.8 bore (8.5 mm³, the thread it cuts) and the existing
-  `gun_body`/`guard_measured` pair. Clamp 14.1 cm³; slice 14.0 g / 1.8 h. The
+  `gun_body`/`guard_measured` pair. Clamp 13.8 cm³; slice 13.6 g / 1.7 h. Bracket re-sliced: 11.7 g / 1.8 h,
+  build-plate organic supports as before. The
   G-code check flags a 13.6 mm anchored overhang perimeter at 0.4 mm on the
   existing shallow R25.4 front-bottom arc, a cosmetic edge. Spacer 0.3 g,
   printed standing up with a brim.
