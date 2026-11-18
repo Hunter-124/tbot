@@ -96,36 +96,36 @@
     "usable": true
   },
   "config_sha256": "ba53bb7f1a702be0d7d8efd2cdc3046bd15627b63b91c7ecf7745edde02a0848",
-  "mesh_sha256": "93e93e1380561dfa19982ce562aa948fe6770e20e6134c2152bbd8d3910273d1",
+  "mesh_sha256": "72246136c630f95f47cc81552954cdcb1d56a6422d2ee8df430c25870ab19415",
   "gcode": "/home/hunter/Desktop/TBOT/print/creality_ender_3_0_4_mm_nozzle/servo_mount_L.gcode",
-  "gcode_sha256": "88cfc5e9e8d7ae7a8644648205b11c655508c6306f24987c756a5596d642432c",
+  "gcode_sha256": "5fe6b4cf3bdb52c1592a37826d6261ad640dce979f2b90afb58746c52ba3b04b",
   "project_3mf": "/home/hunter/Desktop/TBOT/print/creality_ender_3_0_4_mm_nozzle/servo_mount_L.3mf",
   "stats": {
     "layers": 111,
     "height_mm": 22.2,
-    "filament_mm": 8420.849,
+    "filament_mm": 8420.656,
     "filament_g": 25.12,
-    "print_time_s": 12780.0,
-    "support_share": 0.1031,
+    "print_time_s": 12796.0,
+    "support_share": 0.1032,
     "by_type_mm": {
-      "Bridge infill": 4767.033,
+      "Bridge infill": 4808.711,
       "Custom": 260.0,
-      "External perimeter": 37260.807,
-      "Internal infill": 50520.063,
+      "External perimeter": 37256.825,
+      "Internal infill": 50476.071,
       "Overhang perimeter": 746.352,
-      "Perimeter": 105564.423,
+      "Perimeter": 105493.164,
       "Skirt/Brim": 441.943,
-      "Solid infill": 27501.937,
+      "Solid infill": 27544.305,
       "Support material": 24167.448,
       "Support material interface": 2441.976,
-      "Top solid infill": 4328.533
+      "Top solid infill": 4304.135
     },
     "slicer": "PrusaSlicer 2.9.7"
   },
   "estimate": {
-    "part_volume_mm3": 24046.897,
+    "part_volume_mm3": 24037.09,
     "support_volume_mm3": 4375.088,
-    "material_g": 25.222,
+    "material_g": 25.19,
     "support_g": 0.814,
     "time_h": 0.438,
     "layers": 111,
@@ -138,7 +138,7 @@
       {
         "check": "min_wall",
         "status": "fail",
-        "note": "Minimum measured wall 0.409 mm; required 1.76 mm. 46 more regions are not shown. To show up to 50 regions, set detail=true.",
+        "note": "Minimum measured wall 0.409 mm; required 1.76 mm. 47 more regions are not shown. To show up to 50 regions, set detail=true.",
         "fix": [
           "thicken to >= 1.76 mm (4 perimeters at 0.44 mm)"
         ]

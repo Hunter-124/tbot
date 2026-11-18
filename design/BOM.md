@@ -39,7 +39,7 @@ G-code in `print/creality_ender_3_0_4_mm_nozzle/`. PLA, 0.2 mm layers, 4 walls.
 |---|---|---|---|
 | servo_mount_L | −Y, ear-seat face (Y 18.1) on the bed | build plate, organic (servo pocket roof) | 25.1 g / 3.6 h, 35 % cubic |
 | btn_mount_R | +Z, bottom edge on the bed | build plate, organic (under the button barrel) | 20.0 g / 2.9 h, 35 % cubic |
-| trig_cam | +Y, countersink face on the bed | none | 1.9 g / 0.3 h, 100 % |
+| trig_cam | +Y, countersink face on the bed | none | 1.9 g / 0.3 h, 100 % (rev AH-2: wider horn slot) |
 | jack_shoe | flat, dimple up | none | 0.4 g / 0.1 h, 100 % |
 
 Hardware for rev AH:
@@ -48,14 +48,14 @@ Hardware for rev AH:
 |---|---|---|
 | 10 | M3 heat-set insert | servo_mount_L: 3 pocket floor, 4 recessed in the outer face, 3 ear seats |
 | 3 | M3 × 20 ISO 10642 countersunk | P1, P2, P3: right plate, through the plug, into the pocket-floor inserts |
-| 4 | M3 × 25 ISO 10642 countersunk | U1, U2, F1, F2: right plate, through the saddle, into the recessed inserts |
+| 4 | M3 × 25 ISO 10642 countersunk | U1, U2, F1, F2 (model `refs/fhcs_m3x25`; M3 × 20 is `refs/fhcs_m3x20`): right plate, through the saddle, into the recessed inserts |
 | 3 | M3 × 10 ISO 10642 countersunk | servo ears (rear lower, front upper, front lower) |
 | 1 | M3 × 10 ISO 10642 countersunk + M3 hex nut | jack screw and its trapped nut |
 | 1 | M3 × 12 ISO 10642 countersunk | cam and horn onto the servo shaft |
 | 1 | M2 × 8 pan head self-tapping | cam into the horn's first hole |
 | 2 | 1 mm neoprene liner | one on each guard land |
 
-The stock horn arm is cut at its second hole (10.7 mm from centre). No M3 × 30
+The stock single-arm horn is cut 9.3 mm from its centre, just past the first hole. No M3 × 30
 or M3 × 35 is used. The table below is rev AG and earlier.
 
 ### Trigger set (rev AG, superseded)

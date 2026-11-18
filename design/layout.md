@@ -89,31 +89,42 @@ specified at rest unless a motion angle is stated. Dimensions marked
 
 ### `refs/guard_measured.step+`
 
-This is the fit reference for the trigger set. The guard in `gun_body` remains
-an approximately 9-wide nominal slab; both representations coexist in the
-assembly and their overlap is two models of the same guard, not two parts.
+This is the fit reference for the trigger set. Since rev AH the guard inside
+`gun_body` (f171/f6/f175) uses the same profile, so the two overlap exactly;
+their overlap in the assembly is two models of one guard, not two parts.
 
-- Width calipers: 9.3 at the narrowest, 15.7 at the widest. Width location is
-  photo-derived: half-width h(X) = 4.65 for X ≤ 12, linearly increasing to 7.85
-  at X 50, and 7.85 beyond. The taper location is [INFERENCE].
-- Opening: 29.0 high from receiver underside Z 16 to bow top; length 47.0,
-  X -10.0..37.0. Rear opening wall is vertical at X -10. Trigger face to front
-  inside is 37.0. Bow is 3.5 thick, with its outer bottom Z -16.5 at X ~10.
-- The model has a 2 mm bevel on the bow's outer underside edges. It is inferred
-  from the photo, not caliper-confirmed; the photo-derived opening dimensions
-  should be treated as approximately ±10%.
+- Profile measured 2026-11-18 from a taped side photo (10.6 px/mm, fitted to
+  the outer edge) and cross-checked against the 2026-11-05 scan mesh to about
+  1 mm. Widths are unchanged from the earlier caliper readings.
+- Width: 9.3 at the narrowest, 15.7 at the widest. Half-width h(X) = 4.65 for
+  X ≤ 12, rising linearly to 7.85 at X 50, then 7.85. The taper location is
+  [INFERENCE].
+- Opening: floor Z −13.2 (X 3..10), ceiling Z 12.2, so 25.4 high. Rear wall
+  vertical at X −7.2 from the ceiling down to Z −1, then curving into the
+  floor. Front wall leans forward: X 27.9 at Z −10.1, 33.9 at −4.5, 36.5 at
+  0.9, 38.2 at 6.3, 39.6 at the ceiling.
+- Outer profile: bottom Z −16.5 at X 6.5..13, then Z −14.6 at X 26, −12.3 at
+  33, −9.4 at 40, −7.0 at 45, −3.4 at 51, 0.0 at 57, 3.8 at 63, 9.8 at 72,
+  reaching the receiver (Z 16) at X 81. The rear outer profile is unchanged.
+- A trigger slot X −10..13, Y ±4, Z 11..17 is cut through the guard top
+  [INFERENCE: not visible in the photos].
+- The old 2 mm underside bevel no longer builds on this profile and is
+  suppressed. It was never caliper-confirmed. Without it the model is fuller
+  than the real guard, so clearances measured against it are conservative.
 - Guard-side liner is 1 mm neoprene, compressed to 0.85 on each side; the
-  intended land face follows h(X) + 0.85. There is no rigid spacer that fixes
-  the guard width independently of the liner.
+  intended land face follows h(X) + 0.85.
 
 ### `refs/gun_trigger.step+`
 
-The trigger is a separate moving reference, Y ±3.5, 4 thick in X behind its
-finger face. Its face points (X,Z) are (5.4,-9.2), (2.8,-6.0), (0.6,-1.8),
-(-0.6,2.7), (-1.0,7.4), (-0.2,10.4), (-0.5,16); the tip is R2 around Z -10.
-The Y-axis pivot is at (X -4, Z 26), radius 26.3 to the origin. Positive
-rotation about +Y is pull. Model break is 3.5 at contact (7.6°), hard stop
-4.3 (9.4°); pull is approximately 27 N [INFERENCE], design load 35 N.
+A deep crescent, not a straight blade (measured 2026-11-18 from the same
+photo). Moving reference, Y ±3.5. Front face (X,Z), tip to root: (4.6,−11.5),
+(3.4,−10.2), (2.0,−8.5), (0.2,−4.8), belly (−0.5,−1.0), (0.3,2.8), (2.9,6.6),
+(6.7,10.3), (9.1,11.7), (11.5,12.6). Rear edge: (3.6,−11.6), (−0.4,−8.5),
+(−3.0,−4.8), (−3.5,−1.0), (−3.2,2.8), (−1.0,9.0), (1.5,12.2). The tip hooks
+5 forward and ends 1.7 above the floor. Above the ceiling the outline to the
+pivot is [INFERENCE]. Y-axis pivot at (X −4, Z 26) [INFERENCE]; positive
+rotation about +Y is pull. Model break 7.6°, hard stop 9.4°
+[INFERENCE, carried over]; pull approximately 27 N, design load 35 N.
 
 ## Front module
 
@@ -867,25 +878,14 @@ the set could ride down and back off it.
 ### Rev AH — servo output inside the guard, finger cam, plug-and-saddle mount
 
 Replaces `servo_bracket_L`, `servo_lever`, `trig_clamp_R_v2` and `u18_spacer`
-(rev AG and earlier stay in the repo for reference). New parts:
-`servo_mount_L`, `btn_mount_R`, `trig_cam`, `jack_shoe`. Sub-assembly:
-`asm/trigger_set_AH.step+`. `asm/tbot_full.step+` still shows rev AG.
+(rev AG and earlier stay in the repo for reference, suppressed in the assembly).
+New parts: `servo_mount_L`, `btn_mount_R`, `trig_cam`, `jack_shoe`.
+`asm/tbot_full.step+` shows rev AH with all hardware; `asm/trigger_set_AH.step+`
+is the four parts plus the servo.
 
-Guard and trigger as measured 2026-11-18 (side photo with tape, scale 10.6 px/mm
-fitted to the outer profile and cross-checked against the 2026-11-05 scan mesh,
-agreement about 1 mm). These numbers supersede `guard_measured` and
-`gun_trigger`, which are **not yet updated** (they still say 29 high and a
-straight trigger):
+Guard and trigger geometry: see `refs/guard_measured` and `refs/gun_trigger`
+above (both measured 2026-11-18).
 
-- Opening: floor Z −13.2 (X 3..10), ceiling Z 12.2 (not 16), so 25.4 high. Front
-  inside wall leans forward: X 27.9 at Z −10.1, 33.9 at −4.5, 36.5 at 0.9, 38.2
-  at 6.3, 39.6 at the ceiling. Bow outer bottom −16.5 (unchanged). Outer front
-  slope beyond X 45 is shallower than modelled: Z −7.0 at X 45, −3.4 at 51, 0.0
-  at 57, 3.8 at 63, 9.8 at 72.
-- Trigger is a deep crescent, not a straight blade. Front face (X,Z): tip
-  (4.6,−11.5), (2.0,−8.5), (0.2,−4.8), belly (−0.5,−1.0), (0.3,2.8), (2.9,6.6),
-  (6.7,10.3), (9.1,11.7). The tip hooks 5 forward and ends 1.7 above the floor;
-  the root sweeps 9 forward at the ceiling. Pivot (−4,26) is still [INFERENCE].
 - Safety button: in the guard's rear web, about X −16.4..−7.9, Z 2.3..12.2.
   Nothing in rev AH is behind X −7.4 above Z 0.3 on the left, or behind X −7.0
   above Z 1.5 on the right.
@@ -897,11 +897,13 @@ Servo and cam:
   X −1.4..39.3, Z −8.65..11.05, Y 12.4..47.7; gear cover top Y 10.0; ear seat
   Y 18.1; spline tip Y 2.7. Case top is 1.15 below the receiver underside.
 - `trig_cam`: Y ±4.6, hub R6.9, finger nose R3.0 centred 10.3 from the shaft.
-  The stock horn sits in a pocket on the +Y face exactly like the old lever
-  (hub seat R5.75 × 3.3, boss bore R4.2 × 4.3, M3 × 12 centre screw, one
-  M2 × 8 into the horn's first hole at 7.5). **The horn arm must be cut at its
-  second hole (10.7 from centre)**: the slot is 11.2 long and leads the finger
-  by 20° on the side away from the trigger.
+  The stock single-arm horn sits in a pocket on the +Y face: hub seat
+  R5.75 × 3.3, boss bore R4.6 × 4.3, arm slot 8.8 wide out to 9.6 from the
+  centre, M3 × 12 centre screw, one M2 × 8 into the horn's first hole (7.5).
+  **Cut the horn arm 9.3 from the centre, just past the first hole** (the arm
+  is 8 wide; longer will not fit). The slot leads the finger by 20° on the
+  side away from the trigger, inside a R5.9 lobe; thinnest wall 0.9 at the
+  slot's outer corners.
 - Angles are measured at the shaft from the rearward horizontal, negative
   below it. Modelled at −88° (finger straight down, nose 1.2 clear of the
   trigger hook). First contact −77°, on the lower hook at about (3.7,−10.6);
@@ -918,6 +920,9 @@ Servo and cam:
   FIRE endpoint just past the break, never at the mechanical maximum.
 
 `servo_mount_L` (24.0 cm³, 25 g sliced):
+
+- Chamfer along the inner top edge (Y 5..9.5, Z 9.8..12.5) clears the
+  receiver's V underside by about 0.5.
 
 - Slab Y 5.5..18.1 with the ear seats on its outer face, servo pocket floor at
   Y 9.7 (web 5.5..9.7), D16.4 hole for the output collar. Guard land tapered
@@ -949,10 +954,17 @@ the plug.
 Screws: P1..P3 are M3 × 20, U1, U2, F1, F2 are M3 × 25, heads in the right
 plate at Y −12.5, tips at Y 7.5 and 12.5.
 
-Checks: `check_interference` on the four parts plus the servo is clear (mount
-to plate 1.5, cam to each side 0.9, cam to servo 1.9, servo seated on its
-pads). Fit against the gun is from the measured profile above, not from
-`guard_measured`. Not yet printed or fitted.
+Checks in `asm/tbot_full.step+` (trigger area, 24 members): no interference
+between printed parts, gun and hardware except the expected ones (the two
+guard models; horn spline teeth on the smooth modelled servo spline, 14 mm³;
+M2 self-tapper in the horn hole; jack thread in its nut; a 0.08 mm³ sliver
+between the button and its panel). Clearances: mount to guard 0.50, plate to
+guard 0.85, cam to trigger at rest 0.87, cam to each side 0.9, shoe to bow
+0.075 (seats when the jack is turned), mount to `gun_body` 0.10 at the
+safety crossbolt (D8 at X −11.5, Z 11, modelled to Y 12): the mount's
+rear-top corner is right beside the safety head, and the servo's rear ear
+(X −8.05) is 0.6 ahead of it on the outside. Check the safety can still be
+pushed. Not yet printed or fitted.
 
 ## Printing and materials
 

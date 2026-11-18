@@ -136,7 +136,8 @@ T2. Slide an M3 nut into the jack slot and `jack_shoe` (dimple down) into its
     pocket, both from the −Y end of the saddle. Start the M3 × 10 jack screw from
     underneath, only until it reaches the shoe.
 T3. Servo into the pocket, three M3 × 10 through the ears.
-T4. Cut the horn arm at its second hole. Drive the servo to its REST angle, fit
+T4. Cut the horn arm 9.3 mm from its centre, just past the first hole, and
+    deburr. Drive the servo to its REST angle, fit
     the horn so the arm points down and about 20° forward, then `trig_cam` over
     it: M2 × 8 into the horn, M3 × 12 into the shaft. The finger should hang
     straight down.

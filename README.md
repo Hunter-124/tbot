@@ -97,7 +97,7 @@ worm-drive hose clamps seated in grooves, and the trigger set clamps to the guar
 
 - **Front module** (8 parts, 231 g): camera in the nose, Pi on one side, 3S 2600 mAh battery and two buck
   converters on the other, IMU in the clamp. M3 into brass heat-set inserts throughout.
-- **Trigger set** (3 parts): MG996R servo, lever, guard clamp that also houses the arming button.
+- **Trigger set** (4 parts, rev AH): MG996R servo mounted beside the guard with its output inside the guard; a printed cam presses the trigger's lower hook; a plug-and-saddle mount around the bow and a right-side plate that houses the arming button.
 - **22 design revisions** in three weeks (G through AB), each recorded with its reason in
   [design/layout.md](design/layout.md). Every dimension the software uses comes from that file.
 - A modelled wiring harness and camera ribbon in the assembly, and an M12 × 0.5 split clamp nut to lock lens

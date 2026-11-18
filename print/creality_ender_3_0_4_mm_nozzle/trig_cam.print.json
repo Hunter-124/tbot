@@ -91,35 +91,35 @@
     "usable": true
   },
   "config_sha256": "9646b6c97941f79fc22e11e645a723eb69ce5201440749953a693fde38099235",
-  "mesh_sha256": "dcbc582401bf0ce73ad49fb506f8bb7c2ea0be689c3e9e175ef69ed73d3cf8d2",
+  "mesh_sha256": "a74f926e703e0ed6d75fb546dec152c1e41dcf4d42e8ef8690d0fcf668bd7577",
   "gcode": "/home/hunter/Desktop/TBOT/print/creality_ender_3_0_4_mm_nozzle/trig_cam.gcode",
-  "gcode_sha256": "8a4aa22cef5d15f7425403450b1131e99ed143e7ac74141a2c7da4363e2cbb7a",
+  "gcode_sha256": "c03e024b668f72d5c1823a4cde550334e1e7ca73291b66e8450088b70887a29b",
   "project_3mf": "/home/hunter/Desktop/TBOT/print/creality_ender_3_0_4_mm_nozzle/trig_cam.3mf",
   "stats": {
     "layers": 46,
     "height_mm": 9.2,
-    "filament_mm": 626.721,
-    "filament_g": 1.87,
-    "print_time_s": 1054.0,
+    "filament_mm": 649.837,
+    "filament_g": 1.94,
+    "print_time_s": 1116.0,
     "support_share": 0.0,
     "by_type_mm": {
       "Custom": 260.0,
-      "External perimeter": 4035.666,
-      "Internal infill": 2966.707,
-      "Overhang perimeter": 18.639,
-      "Perimeter": 8394.439,
-      "Skirt/Brim": 307.092,
-      "Solid infill": 2056.63,
-      "Top solid infill": 285.408
+      "External perimeter": 4096.335,
+      "Internal infill": 3148.658,
+      "Overhang perimeter": 18.64,
+      "Perimeter": 9089.511,
+      "Skirt/Brim": 309.487,
+      "Solid infill": 2187.575,
+      "Top solid infill": 295.93
     },
     "slicer": "PrusaSlicer 2.9.7"
   },
   "estimate": {
-    "part_volume_mm3": 1419.178,
+    "part_volume_mm3": 1470.841,
     "support_volume_mm3": 1.939,
-    "material_g": 1.76,
+    "material_g": 1.824,
     "support_g": 0.0,
-    "time_h": 0.052,
+    "time_h": 0.053,
     "layers": 46,
     "support_share": 0.0,
     "method": "deterministic shell/infill/flow ranking estimate, not slicer output"
@@ -130,7 +130,7 @@
       {
         "check": "min_wall",
         "status": "fail",
-        "note": "Minimum measured wall 0.974 mm; required 1.76 mm. 9 more regions are not shown. To show up to 50 regions, set detail=true.",
+        "note": "Minimum measured wall 0.916 mm; required 1.76 mm. 7 more regions are not shown. To show up to 50 regions, set detail=true.",
         "fix": [
           "thicken to >= 1.76 mm (4 perimeters at 0.44 mm)"
         ]
@@ -161,7 +161,7 @@
       {
         "check": "floating_extrusion",
         "status": "warn",
-        "note": "Hard floating: 0.0 mm2/layer, 0.000 mm unanchored run; unanchored air run 8.105 mm (limit 10); backed bridge 0.000 mm; infill/interface spans informational (0.0 mm2 total)",
+        "note": "Hard floating: 0.0 mm2/layer, 0.000 mm unanchored run; unanchored air run 8.106 mm (limit 10); backed bridge 0.000 mm; infill/interface spans informational (0.0 mm2 total)",
         "fix": [
           "Reorient or support long unanchored outer-wall and bridge paths.",
           "Review the flagged type, layer and XY positions in PrusaSlicer before printing."
