@@ -708,7 +708,11 @@ world.
   and drift estimate as the Python on random swings through scenery (five camera models, with and without a
   simulated 3 deg/s bias) and through the whole pipeline on all nine presses (`tests/test_native_scenery.py`).
   Laptop, presses: 1.43 ms (Python, with the drift) -> **0.25 ms**; the Python pass before today was 0.54.
-  Pi 3B: not measured yet (the Pi was off the network); expect ~1 ms against the 2.3 ms of the Python.
+  **Pi 3B** (27d55b7, service stopped, the nine presses replayed with their own calibration, 883 filter calls):
+  **1.13 ms p50 / 1.25 p90 in C against 7.73 / 8.44 in Python** (with the drift; 6.8x). Whole frame with
+  `detector.native` on vs off: 20.8 / 24.6 ms against 22.3 / 29.7 (p50 / p90; the gap is smaller than the
+  filter's alone - not chased). Drift estimate on the Pi: 3.2 deg/s p50, as on the laptop. 66 C peak, never
+  throttled.
 
 **Measured** (pasted-clay bench: 108 virtual clays, 6-14 px, dark and light, 3-50 deg/s across the IMU's
 world, drawn into the real press frames and run through the real detector, filter and tracker):
