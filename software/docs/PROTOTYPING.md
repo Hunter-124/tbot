@@ -149,6 +149,7 @@ on the 40-pin connector.
 | Servo PWM (MG996R) | **18** | 12 | hardware PWM0 | `dtoverlay=pwm,pin=18,func=2`; sysfs `/sys/class/pwm/pwmchip0/pwm0`; 50 Hz frame, `rest_us = 1670`, `fire_us = 1330`. Signal only — **not** servo power. |
 | PQ12 extend | **23** | 16 | output | To an H-bridge input (§4). |
 | PQ12 retract | **24** | 18 | output | To the other H-bridge input. |
+| Ready light (status LED) | **27** | 13 | output | `hw/status_led.py`: LED + **220–330 Ω** to GND (pin 14), see the wiring below. Same pin as the latency LED (that tool runs with the pipeline stopped). |
 | Latency LED | **27** | 13 | output | `tbot latency-camera`: LED + **330 Ω** to GND, in the camera's view. |
 | Break sense | **22** | 15 | input, pull-up | `tbot latency-actuator`: microswitch to **GND**, closes at trigger break (falling edge = break, rising = sear reset). |
 | IMU SDA | **2** | 3 | I2C1 | GY-521 (MPU-6050), address **0x68**, `dtparam=i2c_arm=on`, 400 kHz. |
@@ -160,6 +161,57 @@ on the 40-pin connector.
 Conflicts to know about: **PWM0 on GPIO18 is shared with the analogue audio output**, so `dtparam=audio=off` is
 required for a stable servo pulse (`scripts/pi_setup.sh` sets it). GPIO 2/3 have fixed 1.8 kΩ pull-ups to 3.3 V on
 the board — fine for I2C, unusable as general inputs.
+
+### 3.1 Pi 3 B 40-pin header pinout (reference)
+
+Held with the **header at the top, along the board's top edge, and the USB/Ethernet ports at the bottom**: pin 1 is
+the top-left pin (the one nearest the SD-card end of the header, usually marked with a square pad / "1" on the
+silkscreen); odd pins run down the inner column, even pins down the outer (board-edge) column. Numbers in
+brackets are the **physical pin**, `GPIOn` is the **BCM** number the config uses. Pins used by this project are
+marked `<==`.
+
+```
+                      3V3  (1) (2)  5V
+          I2C1 SDA  GPIO2  (3) (4)  5V
+          I2C1 SCL  GPIO3  (5) (6)  GND            <== IMU ground / any GND
+                    GPIO4  (7) (8)  GPIO14  UART TXD   <== serial console
+                      GND  (9) (10) GPIO15  UART RXD   <== serial console
+ <== arming button GPIO17 (11) (12) GPIO18  PWM0       <== servo signal
+                   GPIO27 (13) (14) GND            <== READY LED: pin 13 -> LED -> resistor -> pin 14
+ <== break sense   GPIO22 (15) (16) GPIO23         PQ12 extend (fallback)
+                      3V3 (17) (18) GPIO24         PQ12 retract (fallback)
+                SPI MOSI GPIO10 (19) (20) GND
+                SPI MISO  GPIO9 (21) (22) GPIO25
+                SPI SCLK GPIO11 (23) (24) GPIO8   SPI CE0
+                      GND (25) (26) GPIO7   SPI CE1
+                 ID_SD GPIO0 (27) (28) GPIO1   ID_SC     (HAT EEPROM, leave alone)
+                    GPIO5 (29) (30) GND
+                    GPIO6 (31) (32) GPIO12
+                   GPIO13 (33) (34) GND
+                   GPIO19 (35) (36) GPIO16
+                   GPIO26 (37) (38) GPIO20
+                      GND (39) (40) GPIO21
+```
+
+Power pins: 3V3 = 1, 17; 5V = 2, 4; GND = 6, 9, 14, 20, 25, 30, 34, 39. GPIO pins are **3.3 V logic and are not 5 V
+tolerant**; each can safely source only a few mA (keep an LED to ~5 mA).
+
+### 3.2 Ready light wiring
+
+Defaults: `gpio.status_led_pin = 27`, `gpio.status_led_active_high = true`.
+
+```
+ Pi pin 13 (GPIO27) ---[ 220-330 ohm ]---->|--- Pi pin 14 (GND)
+                                        LED  (long leg / anode toward the resistor,
+                                              short leg / flat side / cathode to GND)
+```
+
+- Pins 13 and 14 are adjacent, so the whole light is one LED and one resistor across two neighbouring pins.
+- The resistor can be on either side of the LED; it must be in series. With 330 ohm a red/green LED draws about
+  (3.3 V - ~2 V) / 330 = ~4 mA, plenty bright, well inside the pin's limit.
+- Wired the other way (LED between 3.3 V on pin 1 or 17 and GPIO27) set `status_led_active_high = false`.
+- Behaviour: solid = ready and live; slow blink = ready but dry run; fast blink = running but not ready;
+  off = pipeline not running.
 
 **Grounds.** The Pi, the actuator driver, the actuator supply and the arming switch share one ground. The PQ12
 fallback needs 12 V; the installed servo uses a separate 7.0 V XL4015, never the Pi's 5 V pin.
