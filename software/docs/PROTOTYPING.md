@@ -154,7 +154,7 @@ on the 40-pin connector.
 | Break sense | **22** | 15 | input, pull-up | `tbot latency-actuator`: microswitch to **GND**, closes at trigger break (falling edge = break, rising = sear reset). |
 | IMU SDA | **2** | 3 | I2C1 | GY-521 (MPU-6050), address **0x68**, `dtparam=i2c_arm=on`, 400 kHz. |
 | IMU SCL | **3** | 5 | I2C1 | |
-| IMU power | — | 1 (3V3) + 6 (GND) | — | **3.3 V**. The GY-521's regulator accepts 5 V, but then its logic lines are 5 V-tolerant-by-luck; run the board at 3.3 V. |
+| IMU power | — | 1 (3V3) + 9 (GND) | — | **3.3 V**. The GY-521's regulator accepts 5 V, but then its logic lines are 5 V-tolerant-by-luck; run the board at 3.3 V. |
 | Serial console TXD | **14** | 8 | UART out | To the USB-TTL cable's RX, 3.3 V, 115200 (`enable_uart=1`). |
 | Serial console RXD | **15** | 10 | UART in | To the cable's TX. |
 
@@ -162,39 +162,48 @@ Conflicts to know about: **PWM0 on GPIO18 is shared with the analogue audio outp
 required for a stable servo pulse (`scripts/pi_setup.sh` sets it). GPIO 2/3 have fixed 1.8 kΩ pull-ups to 3.3 V on
 the board — fine for I2C, unusable as general inputs.
 
-### 3.1 Pi 3 B 40-pin header pinout (reference)
+### 3.1 Pi 3 B header pinout, as built (reference)
 
-Held with the **header at the top, along the board's top edge, and the USB/Ethernet ports at the bottom**: pin 1 is
-the top-left pin (the one nearest the SD-card end of the header, usually marked with a square pad / "1" on the
-silkscreen); odd pins run down the inner column, even pins down the outer (board-edge) column. Numbers in
-brackets are the **physical pin**, `GPIOn` is the **BCM** number the config uses. Pins used by this project are
-marked `<==`.
+What is **actually wired** on the gun, from `design/BOM.md` / `design/layout.md` (wire table) plus the ready light.
+Held with the header at the top and the USB/Ethernet ports at the bottom: pin 1 is the top-left pin (SD-card end,
+square pad); odd pins down the inner column, even pins down the outer column. `[wired]` = connected on the
+built harness, `[to add]` = the ready light, not yet soldered. Everything not listed is unconnected.
 
 ```
-                      3V3  (1) (2)  5V
-          I2C1 SDA  GPIO2  (3) (4)  5V
-          I2C1 SCL  GPIO3  (5) (6)  GND            <== IMU ground / any GND
-                    GPIO4  (7) (8)  GPIO14  UART TXD   <== serial console
-                      GND  (9) (10) GPIO15  UART RXD   <== serial console
- <== arming button GPIO17 (11) (12) GPIO18  PWM0       <== servo signal
-                   GPIO27 (13) (14) GND            <== READY LED: pin 13 -> LED -> resistor -> pin 14
- <== break sense   GPIO22 (15) (16) GPIO23         PQ12 extend (fallback)
-                      3V3 (17) (18) GPIO24         PQ12 retract (fallback)
-                SPI MOSI GPIO10 (19) (20) GND
-                SPI MISO  GPIO9 (21) (22) GPIO25
-                SPI SCLK GPIO11 (23) (24) GPIO8   SPI CE0
-                      GND (25) (26) GPIO7   SPI CE1
-                 ID_SD GPIO0 (27) (28) GPIO1   ID_SC     (HAT EEPROM, leave alone)
-                    GPIO5 (29) (30) GND
-                    GPIO6 (31) (32) GPIO12
-                   GPIO13 (33) (34) GND
-                   GPIO19 (35) (36) GPIO16
-                   GPIO26 (37) (38) GPIO20
-                      GND (39) (40) GPIO21
+   IMU VCC (3V3)  <-- 3V3    (1) (2)  5V     --> Pi power + (buck #1, 5.1 V)
+   IMU SDA        <-- GPIO2  (3) (4)  5V
+   IMU SCL        <-- GPIO3  (5) (6)  GND    --> Pi power - (buck #1)
+                      GPIO4  (7) (8)  GPIO14        (unused)
+   IMU GND        <-- GND    (9) (10) GPIO15        (unused)
+   arming switch  <-- GPIO17 (11) (12) GPIO18 --> servo signal
+   ready LED +    <-- GPIO27 (13) (14) GND    --> arming GND, servo-signal GND, ready LED -
+                      GPIO22 (15) (16) GPIO23       (unused)
+                      3V3    (17) (18) GPIO24       (unused)
+                      pins 19-40: unconnected
 ```
 
-Power pins: 3V3 = 1, 17; 5V = 2, 4; GND = 6, 9, 14, 20, 25, 30, 34, 39. GPIO pins are **3.3 V logic and are not 5 V
-tolerant**; each can safely source only a few mA (keep an LED to ~5 mA).
+| Pin | Name | Wired to | Wire |
+|---|---|---|---|
+| 1 | 3V3 | GY-521 VCC | IMU 4 x 26 AWG |
+| 2 | 5V | Buck #1 OUT+ (5.1 V) | Pi 5 V pair, 2 x 20 AWG |
+| 3 | GPIO2 / SDA1 | GY-521 SDA | IMU |
+| 5 | GPIO3 / SCL1 | GY-521 SCL | IMU |
+| 6 | GND | Buck #1 OUT- | Pi 5 V pair |
+| 9 | GND | GY-521 GND | IMU |
+| 11 | GPIO17 | Arming switch (other side to GND) | Arming + PWM, 3 x 26 AWG |
+| 12 | GPIO18 / PWM0 | MG996R signal | Arming + PWM |
+| 14 | GND | Arming switch return **and** servo-signal ground | Arming + PWM |
+| 13 | GPIO27 | Ready LED anode through 220-330 ohm **[to add]** | new |
+| 14 | GND | Ready LED cathode **[to add]**, same pin as above | new |
+
+Not wired on this build: break sense (GPIO22, pin 15, only for the `latency-actuator` bench fixture), PQ12
+extend/retract (GPIO23/24, pins 16/18, fallback actuator only), the serial-console pins (GPIO14/15, pins 8/10, only
+when a USB-TTL cable is attached for bring-up) and the SPI / ID pins.
+
+Pin 5 V and GND are the only power pins used. GPIO pins are **3.3 V logic, not 5 V tolerant**, and each should source
+only a few mA (keep an LED to ~5 mA). Pins 13 and 14 sit side by side, and pin 14 already carries the arming/servo
+ground, so the ready light adds one wire at pin 13 and a second wire onto pin 14 (the BOM notes GPIO connections are
+soldered, with no room for DuPont housings: header pin tips are 8 mm from cover_L).
 
 ### 3.2 Ready light wiring
 
