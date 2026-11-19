@@ -102,8 +102,10 @@ def test_crossing_clay_is_tracked_confirmed_and_predicted(cfg):
         p = _crossing(n / FPS)
         det = scene.detect(p, att.R_wg(t), t, rng, 0.3)
         tracks = tracker.update(t, [det] if det is not None else [], att.R_wg(t))
-        assert len(tracks) == 1
-        track = tracks[0]
+        # one clay, one track; the cartesian tracker may hold a clean twin of a newborn for a frame or two
+        # (tracker.twin_newborn) but never confirms a second one
+        assert len(tracks) <= 2 and sum(tr.confirmed for tr in tracks) <= 1
+        track = max(tracks, key=lambda tr: tr.hits)
         assert track.confirmed == (n + 1 >= cfg.tracker.confirm_hits)
         if not track.confirmed:
             continue
@@ -340,3 +342,104 @@ def test_make_tracker_rejects_an_unknown_model():
     scene = Scene(cfg)
     with pytest.raises(ValueError):
         make_tracker(cfg, scene.cam, scene.mount)
+
+
+# ------------------------------------------------------------------ 2026-11-19 range day: clutter around the clay
+def _cart():
+    return load_config(sets=["tracker.model=cartesian"])
+
+
+def _feed(tracker, scene, att, n0, n1, pos_of, extra=lambda n, t: []):
+    for n in range(n0, n1):
+        t = T0 + n * DT_NS
+        dets = [d for d in (scene.detect(p, att.R_wg(t), t) for p in pos_of(n)) if d is not None]
+        tracker.update(t, dets + extra(n, t), att.R_wg(t))
+
+
+def test_target_is_the_moving_track_nearest_the_bore_not_the_oldest_speck():
+    """A tree speck the scenery filter missed (still in the world, many hits) against a clay the gun points at."""
+    cfg = _cart()
+    scene = Scene(cfg)
+    att = FixedAttitude(0.0, math.radians(8.0))
+    tracker = make_tracker(cfg, scene.cam, scene.mount)
+    speck = np.array([30.0, 8.0, 6.0])                       # fixed in the world, 15 deg off the bore
+    _feed(tracker, scene, att, 0, 60, lambda n: [speck])
+    _feed(tracker, scene, att, 60, 120, lambda n: [speck, _crossing(0.3 + (n - 60) / FPS)])   # 20 m/s, at the bore
+    by_hits = tracker.best()
+    bore = np.asarray(azel_to_dir(0.0, math.radians(8.0)), dtype=float)
+    chosen = tracker.best(bore_dir_w=bore, t_ns=T0 + 119 * DT_NS)
+    assert by_hits is not None and chosen is not None and chosen is not by_hits
+    assert by_hits.hits > chosen.hits and not tracker.surely_slow(chosen)
+    assert np.linalg.norm(chosen.s[3:6]) > 10.0, "the target is the 20 m/s clay"
+
+
+def _recorded(name):
+    """Frames of a real range press (2026-11-19, the gun swinging on a clay in trees): every detection the gun made
+    and its attitude, with the lens and mount it had (tests/data/range_2026-11-19_clutter.json)."""
+    import json
+    from pathlib import Path
+
+    from tbot.config import _build, Config
+    from tbot.tools.score import _fill
+    import dataclasses
+
+    d = json.loads((Path(__file__).parent / "data" / "range_2026-11-19_clutter.json").read_text())[name]
+    raw = dataclasses.asdict(load_config())
+    for sec, v in d["config"].items():
+        raw[sec] = _fill({k: x for k, x in v.items() if k in raw[sec]}, raw[sec])
+    cfg = _build(Config, raw, "")
+    cam = CameraModel.from_calibration(d["calibration"]["intrinsics"], cfg, d["width"], d["height"])
+    mount = MountModel.from_config(cfg, d["calibration"]["boresight"])
+    return cfg, cam, mount, d["frames"]
+
+
+@pytest.mark.parametrize("name,clay_uv", [("20261119-092601-press", (251.0, 252.0)),
+                                          ("20261119-092733-press", (227.0, 224.0))])
+def test_real_clay_in_clutter_keeps_a_track_that_predicts_it(name, clay_uv):
+    """On the range day the clay the gun followed was taken by one-frame tracks born on specks, rejected by the
+    overconfident track that resulted, and pushed out of a full table: it never had a track old enough to shoot
+    at. Through today's tracker, from the frame the clay is first seen to the end of the slice, some confirmed
+    track must be on it (predicting it to 0.3 deg) in most frames."""
+    cfg, cam, mount, frames = _recorded(name)
+    tracker = make_tracker(cfg, cam, mount)
+    cu, cv = clay_uv
+    on, seen = 0, 0
+    for fr in frames:
+        R = np.asarray(fr["R"], dtype=float).reshape(3, 3)
+        dets = [Detection(t_ns=fr["t"], u=x[0], v=x[1], area_px=x[9], diameter_px=x[2], contrast=x[4], snr=x[3],
+                          score=1.0, bbox=(int(x[5]), int(x[6]), int(x[7]), int(x[8]))) for x in fr["dets"]]
+        near = [x for x in dets if math.hypot(x.u - cu, x.v - cv) < 30.0 and x.diameter_px < 20.0]
+        clay = min(near, key=lambda x: math.hypot(x.u - cu, x.v - cv)) if near else None
+        tracker.update(fr["t"], dets, R)
+        if clay is None:
+            continue
+        cu, cv = clay.u, clay.v
+        seen += 1
+        ray = np.asarray(mount.cam_to_gun(np.asarray(cam.pixel_to_ray(np.array([clay.u, clay.v]))).reshape(3)))
+        d_clay = R @ (ray.reshape(3) / np.linalg.norm(ray))
+        if any(tr.confirmed and _angle(tracker.predict_dir(tr, fr["t"]), d_clay) < math.radians(0.3)
+               for tr in tracker.tracks):
+            on += 1
+    assert seen >= 10
+    assert on >= 0.6 * seen, f"the clay had a confirmed track on it in {on} of the {seen} frames it was seen"
+
+
+def test_a_one_frame_track_does_not_steal_the_clay_and_a_clean_twin_takes_over():
+    """A speck seen once next to where the clay then appears (30 fps, as in trees on the gun) must not leave the
+    clay with a junk velocity it is sure of: the clay must keep a confirmed track that predicts it."""
+    cfg = _cart()
+    scene = Scene(cfg)
+    att = FixedAttitude(0.0, math.radians(8.0))
+    tracker = make_tracker(cfg, scene.cam, scene.mount)
+    dt = 33_333_333
+    clay = lambda n: np.array([25.0, -3.0 + 0.5 * n, 4.0 + 0.1 * n])   # 15 m/s across
+    speck = clay(1) + np.array([0.0, -0.25, 0.1])                        # ~0.6 deg from the clay's first sighting
+    t = T0
+    tracker.update(t, [scene.detect(speck, att.R_wg(t), t)], att.R_wg(t))
+    for n in range(1, 16):
+        t = T0 + n * dt
+        tracker.update(t, [scene.detect(clay(n), att.R_wg(t), t)], att.R_wg(t))
+    d_true = clay(15) / np.linalg.norm(clay(15))
+    live = [tr for tr in tracker.tracks if tr.confirmed and tr.misses == 0]
+    assert live, "the clay must have a confirmed track that is still being seen"
+    assert min(_angle(tracker.predict_dir(tr, t), d_true) for tr in live) < math.radians(0.1)

@@ -111,6 +111,7 @@ class FrameTime:
     t_decide_ns: int    # when the solver ran on it
     imu_lag_ns: int     # age of the newest IMU sample at that moment
     armed: bool
+    clutter: tuple = ()  # --clutter: the detections the gun really made in this frame (trees, specks, real clays)
 
 
 @dataclass
@@ -229,7 +230,8 @@ class Press:
                 if t_dec >= self.t_end:
                     break
                 self.frames.append(FrameTime(int(r["t_exposure_ns"]), t_dec, int(lag * 1e6),
-                                             bool(r.get("armed")) and t_dec <= self.t_release))
+                                             bool(r.get("armed")) and t_dec <= self.t_release,
+                                             tuple(tuple(x) for x in (r.get("dets") or ()))))
 
     @property
     def armed_s(self) -> float:
@@ -263,11 +265,14 @@ class Bench:
 
     def __init__(self, cfg: Config, true_delay_error_ms: float = 0.0, jitter_ms: float = 1.5,
                  noise_px: float = 0.5, size_noise: float = 0.12, dropout: float = 0.1,
-                 cmd_late_ms: float = 0.0, fly_s: tuple[float, float] = FLY_S) -> None:
+                 cmd_late_ms: float = 0.0, fly_s: tuple[float, float] = FLY_S, clutter: bool = False,
+                 latency: dict | None = None) -> None:
         self.cfg = cfg
+        self.clutter = bool(clutter)
         self.fly_s = (float(fly_s[0]), float(fly_s[1]))
         self.shot = ShotModel(cfg)
-        self.budget = LatencyBudget.from_config(cfg, None)
+        # the trigger delay the gun was calibrated with when the presses were recorded (calib/latency.json)
+        self.budget = LatencyBudget.from_config(cfg, latency)
         self.atype = str(cfg.actuator.type)
         self.assumed_delay_s = self.budget.fire_delay_s(self.atype)
         self.true_delay_s = self.assumed_delay_s + true_delay_error_ms * 1e-3
@@ -415,6 +420,14 @@ class Bench:
                                               contrast=-40.0, snr=20.0, score=0.8,
                                               bbox=(int(u - dia / 2), int(v - h / 2), int(dia) + 1, int(h) + 1)))
                         res.detections += 1
+            if self.clutter:
+                # what the detector really reported in this frame: the trees and specks the virtual clay has to
+                # be told apart from (dets rows: u, v, diameter, snr, contrast, bbox x, y, w, h, area)
+                for x in fr.clutter:
+                    dets.append(Detection(t_ns=fr.t_exp_ns, u=float(x[0]), v=float(x[1]), area_px=float(x[9]),
+                                          diameter_px=float(x[2]), contrast=float(x[4]), snr=float(x[3]), score=0.5,
+                                          bbox=(int(x[5]), int(x[6]), int(x[7]), int(x[8]))))
+                dets = dets[:max(1, int(self.cfg.detector.max_detections))]
             tracker.update(fr.t_exp_ns, dets, press.R(fr.t_exp_ns))
             if prev_exp is not None and fr.t_exp_ns > prev_exp:
                 inst = 1e9 / (fr.t_exp_ns - prev_exp)
@@ -585,6 +598,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--quick", action="store_true",
                    help="a quick shooter: the crossing comes 0.35-0.7 s after the clay appears (default 0.7-1.6 s)")
     p.add_argument("--dropout", type=float, default=0.1, help="share of frames in which the clay is not detected")
+    p.add_argument("--clutter", action="store_true",
+                   help="also feed the detections the gun really made in each recorded frame (trees, specks, real "
+                        "clays) to the tracker: target choice and association in clutter")
     p.add_argument("--json", default=None, metavar="PATH", help="write the results as JSON")
     args = p.parse_args(argv)
 
@@ -608,7 +624,10 @@ def main(argv: list[str] | None = None) -> int:
         print("tbot vclay: no press long enough to fly a clay through", file=sys.stderr)
         return 1
     bench = Bench(cfg, true_delay_error_ms=args.delay_error_ms, jitter_ms=args.jitter_ms, dropout=args.dropout,
-                  cmd_late_ms=args.cmd_late_ms, fly_s=QUICK_FLY_S if args.quick else FLY_S)
+                  cmd_late_ms=args.cmd_late_ms, fly_s=QUICK_FLY_S if args.quick else FLY_S, clutter=args.clutter,
+                  latency=next(((pr.session.meta.get("calibration") or {}).get("latency")
+                                for pr in sorted(presses, key=lambda pr: pr.name, reverse=True)
+                                if (pr.session.meta.get("calibration") or {}).get("latency")), None))
     print(f"{len(presses)} press(es), {args.clays} clays each; trigger delay assumed {bench.assumed_delay_s * 1e3:.0f} ms, "
           f"true {bench.true_delay_s * 1e3:.0f} ms; frames: "
           + (f"{args.fps:.0f} fps, {args.age_ms:.0f} ms old" if args.fps > 0 else "as recorded"))

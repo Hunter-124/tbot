@@ -188,12 +188,17 @@ class FireSolver:
     ) -> FireDecision:
         """accept(track) -> bool may veto targets (the engagement lockout of a multi-shot press)."""
         now_ns = int(now_ns)
-        track = tracker.best(accept) if accept is not None else tracker.best()
+        rot_now = np.asarray(attitude.R_wg(now_ns), dtype=np.float64).reshape(3, 3)
+        # the target is the moving track nearest where the gun points (tracker.best): the shooter is on the clay
+        bore_w = rot_now @ self._bore_g if bool(getattr(self.cfg.fire, "target_nearest_bore", True)) else None
+        try:
+            track = tracker.best(accept, bore_dir_w=bore_w, t_ns=now_ns)
+        except TypeError:  # a tracker without the bore-aware choice (test stand-ins)
+            track = tracker.best(accept) if accept is not None else tracker.best()
         if track is None:
             reason = "no confirmed track" if armed else "no confirmed track (not armed)"
             return FireDecision(fire=False, t_ns=now_ns, reason=reason)
 
-        rot_now = np.asarray(attitude.R_wg(now_ns), dtype=np.float64).reshape(3, 3)
         omega = np.asarray(attitude.omega_g(now_ns), dtype=np.float64).reshape(3)
         alpha_fn = getattr(attitude, "alpha_g", None)
         alpha = (np.asarray(alpha_fn(now_ns), dtype=np.float64).reshape(3) if callable(alpha_fn)
@@ -227,6 +232,8 @@ class FireSolver:
             speed_hi = speed + k_sig * math.sqrt(max(float(u @ Svv @ u), 0.0))
         if track.hits < fc.min_track_hits:
             reason = "track young"
+        elif track.misses > int(getattr(fc, "max_target_misses", 1_000_000)):
+            reason = f"target not seen for {track.misses} frames"
         elif speed_hi < float(fc.min_clay_speed_mps):
             reason = f"too slow for a clay ({speed:.1f} m/s)"
         elif not (fc.min_range_m <= g["range_m"] <= fc.max_range_m):

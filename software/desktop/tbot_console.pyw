@@ -8,8 +8,11 @@ How it works: a tiny web server on 127.0.0.1:47811 serves the console's pages fr
 TBOT" until the gun answers, and reconnects by itself after a reboot or a pulled cable. No internet anywhere:
 the gun is found at its fixed link-local address 169.254.20.20 (or tbot.local over mDNS). The window is a
 Microsoft Edge app window (on every Windows 10/11) with its own profile, so it looks and behaves like an app.
-Every press with a clip is also copied to Videos/TBOT/<press> on this computer (Archiver), so the videos are
-kept even after the gun's SD card is cleaned. Standard library only.
+Every press is also copied to Videos/TBOT/<press> on this computer (Archiver), raw data included, and its clip
+and preview are RENDERED HERE (a second on this computer, 10-20 s of a gun core on the Pi - which no longer renders
+while its pipeline runs). The console shows those local clips as if the gun had made them. The proxy and the
+archive use the standard library only; rendering runs this checkout's `tbot clip` / `tbot.console.thumbs`
+(numpy + OpenCV).
 """
 
 from __future__ import annotations
@@ -93,12 +96,62 @@ class Link:
         self.wake.set()
 
 
-class Archiver:
-    """Copies every press that has a clip from the gun into ARCHIVE/<session>/ (clip, preview, notes, score,
-    shot images, summary), so the videos outlive the SD card and `tbotctl clean`. A clip never changes once it
-    exists; the small files are fetched again whenever the gun's list says they changed."""
+SOFTWARE = HERE.parent           # this checkout's software/ (tbot clip, tbot.console.thumbs)
+RAW = ("summary.json", "meta.json", "telemetry.jsonl", "frames.csv", "events.jsonl", "imu.csv", "frames.bin")
+LOCAL_FILES = ("clip.mp4", "thumb.jpg", "preview.json")   # served from the archive when the gun has none
 
-    SMALL = ("thumb.jpg", "preview.json", "summary.json", "console.json", "score.json")
+
+def _python() -> str:
+    """python.exe next to pythonw.exe (no console window either way: CREATE_NO_WINDOW)."""
+    exe = Path(sys.executable)
+    alt = exe.with_name("python.exe")
+    return str(alt if exe.name.lower() == "pythonw.exe" and alt.exists() else exe)
+
+
+def _run_tool(args: list[str], timeout: float = 600.0) -> bool:
+    flags = 0
+    if sys.platform == "win32":
+        flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) | getattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0)
+    try:
+        r = subprocess.run([_python(), *args], cwd=str(SOFTWARE), stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL, timeout=timeout, creationflags=flags)
+        return r.returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def local_file(name: str, fname: str) -> Path | None:
+    """A clip / preview this computer made (or saved) for press `name`, if it has one."""
+    if not name or "/" in name or "\\" in name or ".." in name or fname not in LOCAL_FILES:
+        return None
+    f = ARCHIVE / name / fname
+    return f if f.is_file() else None
+
+
+def patch_session(row: dict) -> dict:
+    """A session as the gun lists it, with what this computer has added (its own clip and preview)."""
+    name = str(row.get("name") or "")
+    if not row.get("clip") and local_file(name, "clip.mp4") is not None:
+        row["clip"] = "clip.mp4"
+    thumb = local_file(name, "thumb.jpg")
+    if not row.get("thumb") and thumb is not None:
+        row["thumb"] = True
+        row["thumb_v"] = int(thumb.stat().st_mtime)
+        try:
+            prev = json.loads((ARCHIVE / name / "preview.json").read_text())
+            row["key_t"], row["key_reason"] = prev.get("clip_t"), prev.get("reason")
+        except (OSError, ValueError):
+            pass
+    return row
+
+
+class Archiver:
+    """Copies every finished press from the gun into ARCHIVE/<session>/ - the raw data (frames, IMU, telemetry), the
+    notes, score and shot images - and renders its clip and preview here, so the gun never spends a core on
+    video and the presses outlive the SD card and `tbotctl clean`. A clip never changes once it exists; the small
+    files are fetched again whenever the gun's list says they changed."""
+
+    SMALL = ("summary.json", "console.json", "score.json")
 
     def __init__(self, link: Link):
         self.link = link
@@ -155,19 +208,31 @@ class Archiver:
         conn.request("GET", "/api/sessions")
         listing = json.loads(conn.getresponse().read())
         conn.close()
-        todo = [s for s in listing.get("sessions", []) if s.get("clip") == "clip.mp4"]
+        # newest first: the press just shot is the one the shooter wants to see
+        todo = [s for s in listing.get("sessions", []) if s.get("clip") == "clip.mp4" or s.get("renderable")]
         for i, s in enumerate(todo):
             name = s["name"]
-            sig = json.dumps([s.get(k) for k in ("thumb_v", "outcome", "note", "starred", "scored", "shot_images")])
-            have_clip = (ARCHIVE / name / "clip.mp4").exists()
-            if have_clip and self.index.get(name) == sig:
-                continue
+            sig = json.dumps([s.get(k) for k in ("outcome", "note", "starred", "scored", "shot_images")])
             d = ARCHIVE / name
+            have_clip = (d / "clip.mp4").exists()
+            if have_clip and (d / "thumb.jpg").exists() and self.index.get(name) == sig:
+                continue
             d.mkdir(parents=True, exist_ok=True)
             q = urllib.parse.quote(name)
             self.state = f"saving {name} ({i + 1}/{len(todo)})"
-            if not have_clip and not self._get(f"/api/sessions/{q}/clip.mp4", d / "clip.mp4"):
-                continue
+            if not have_clip and s.get("clip") == "clip.mp4":
+                have_clip = self._get(f"/api/sessions/{q}/clip.mp4", d / "clip.mp4")
+            if not (have_clip and (d / "thumb.jpg").exists()):
+                # render here: fetch the raw press (frames.bin last: it is the big one), then clip + preview
+                if not all((d / f).exists() or self._get(f"/api/sessions/{q}/{f}", d / f) for f in RAW):
+                    continue
+                self.state = f"rendering {name} ({i + 1}/{len(todo)})"
+                if not have_clip:
+                    have_clip = _run_tool(["-m", "tbot.cli", "clip", str(d)]) and (d / "clip.mp4").exists()
+                if not (d / "thumb.jpg").exists():
+                    _run_tool(["-m", "tbot.console.thumbs", str(d)], timeout=120.0)
+                if not have_clip:
+                    continue
             for f in (*self.SMALL, *(s.get("shot_images") or [])):
                 self._get(f"/api/sessions/{q}/{f}", d / f)
             self.index[name] = sig
@@ -233,7 +298,52 @@ class Handler(BaseHTTPRequestHandler):
 
     do_GET = do_POST = do_DELETE = do_HEAD = _any
 
+    def _local(self) -> bool:
+        """Serve /api/sessions/<name>/<clip|thumb|preview> from this computer when it made one. True = done."""
+        if self.command not in ("GET", "HEAD"):
+            return False
+        parts = urllib.parse.unquote(urllib.parse.urlsplit(self.path).path).split("/")
+        if len(parts) != 5 or parts[2] != "sessions":
+            return False
+        f = local_file(parts[3], parts[4])
+        if f is None:
+            return False
+        ctype = mimetypes.guess_type(f.name)[0] or "application/octet-stream"
+        size = f.stat().st_size
+        start, end = 0, size - 1
+        rng = (self.headers.get("Range") or "").strip()
+        partial = rng.startswith("bytes=") and rng[6:].split("-")[0].isdigit()
+        if partial:
+            a, _, z = rng[6:].partition("-")
+            start = int(a)
+            end = min(int(z), size - 1) if z.isdigit() else size - 1
+        if start > end:
+            self.send_response(416)
+            self.send_header("Content-Range", f"bytes */{size}")
+            self.end_headers()
+            return True
+        self.send_response(206 if partial else 200)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Accept-Ranges", "bytes")
+        self.send_header("Content-Length", str(end - start + 1))
+        if partial:
+            self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+        self.end_headers()
+        if self.command == "GET":
+            with open(f, "rb") as fh:
+                fh.seek(start)
+                left = end - start + 1
+                while left > 0:
+                    chunk = fh.read(min(65536, left))
+                    if not chunk:
+                        break
+                    self.wfile.write(chunk)
+                    left -= len(chunk)
+        return True
+
     def _proxy(self) -> None:
+        if self._local():
+            return None
         target = self.link.host
         if target is None:
             return self._send(502, "application/json", b'{"error": "the gun is not connected"}')
@@ -251,6 +361,22 @@ class Handler(BaseHTTPRequestHandler):
         except (OSError, http.client.HTTPException) as e:
             self.link.lost()
             return self._send(502, "application/json", json.dumps({"error": f"the gun did not answer: {e}"}).encode())
+        path = urllib.parse.urlsplit(self.path).path.rstrip("/")
+        if self.command == "GET" and r.status == 200 and path.startswith("/api/sessions") and path.count("/") <= 3:
+            # the list (/api/sessions) or one press (/api/sessions/<name>): add the clips and previews made here
+            try:
+                data = json.loads(r.read())
+                if isinstance(data.get("sessions"), list):
+                    data["sessions"] = [patch_session(x) for x in data["sessions"]]
+                elif data.get("name"):
+                    data = patch_session(data)
+                body = json.dumps(data).encode()
+            except (ValueError, OSError, http.client.HTTPException, AttributeError):
+                body = None
+            conn.close()
+            if body is None:
+                return self._send(502, "application/json", b'{"error": "bad answer from the gun"}')
+            return self._send(200, "application/json", body)
         self.send_response(r.status)
         for k in ("Content-Type", "Content-Length", "Content-Range", "Accept-Ranges", "Content-Disposition",
                   "Cache-Control"):

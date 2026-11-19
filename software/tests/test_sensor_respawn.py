@@ -110,3 +110,24 @@ def test_without_respawn_a_dead_child_still_raises(tmp_path):
                 proc.read(timeout_s=0.05)
     finally:
         proc.stop()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Windows keeps a named mapping alive while it is open")
+def test_respawn_after_the_frame_ring_vanished(tmp_path):
+    """2026-11-19, the range: a hung child was killed, the shared-memory ring vanished with it, and every
+    replacement failed on the old name (FileNotFoundError /psm_..., 45 respawns, 16 minutes without a camera).
+    Each child now gets a fresh ring."""
+    from multiprocessing import shared_memory
+
+    cfg = _cfg(tmp_path)
+    proc = SensorProcess(cfg, Calibration(dir=tmp_path / "calib"), "synthetic:static_gun", respawn_s=5.0)
+    try:
+        _frames(proc, 3)
+        old = proc._shm.name
+        shared_memory.SharedMemory(name=old).unlink()
+        proc._proc.kill()
+        _wait_respawn(proc, 1)
+        _frames(proc, 5)
+        assert proc._shm.name != old
+    finally:
+        proc.stop()

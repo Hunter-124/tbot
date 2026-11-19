@@ -77,6 +77,10 @@ class Console:
 
     def _clip_busy(self) -> str | None:
         """Why background clip work must not run right now (None = it may)."""
+        if self.pipeline()["active"]:
+            # Never on the gun while it can shoot (2026-11-19, the range: the gun stopped working between presses
+            # and rendering was the suspect). The laptop app renders every press from its raw data instead.
+            return "the pipeline is running: the laptop app makes the clips"
         h = self.helper
         if h is not None and h.alive:
             return "a calibration tool is open"

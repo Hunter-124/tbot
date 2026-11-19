@@ -171,6 +171,12 @@ class CartesianClayTracker(ClayTracker):
     def __init__(self, cfg: Config, cam: CameraModel, mount: MountModel):
         super().__init__(cfg, cam, mount)
         self._q3 = float(cfg.tracker.jerk_psd_mps3)
+        self._twin = bool(getattr(cfg.tracker, "twin_newborn", True))
+        bg = np.asarray(getattr(mount, "bore_dir_g", (1.0, 0.0, 0.0)), dtype=np.float64).reshape(3)
+        self._bore_g = bg / max(float(np.linalg.norm(bg)), 1e-12)
+        self._young_hits = int(getattr(cfg.tracker, "young_hits", 0) or 0)
+        yg = math.radians(float(getattr(cfg.tracker, "young_gate_min_deg", 0.0) or 0.0))
+        self._young_floor_var = max(self._floor_var, (yg / self._gate) ** 2 if self._gate > 0 else 0.0)
         tc = cfg.tracker
         sv = float(getattr(tc, "new_speed_sigma_mps", 0.0) or _NEW_SPEED_SIGMA_MPS)
         sa = float(getattr(tc, "new_acc_sigma_mps2", 0.0) or _NEW_ACC_SIGMA_MPS2)
@@ -206,37 +212,51 @@ class CartesianClayTracker(ClayTracker):
             az_l, el_l, sa_l, se_l, ok_l = (az_m.tolist(), el_m.tolist(), sig_az.tolist(), sig_el.tolist(),
                                             usable.tolist())
             floor_var, gate2 = self._floor_var, self._gate * self._gate
-            floor_az_l = [floor_var / max(math.cos(e), _MIN_COS_EL) ** 2 if ok else 0.0
-                          for e, ok in zip(el_l, ok_l)]
+            inv_cos2 = [1.0 / max(math.cos(e), _MIN_COS_EL) ** 2 if ok else 0.0 for e, ok in zip(el_l, ok_l)]
         for j, (sp, Sp) in enumerate(preds):
             if not n_det:
                 break
             px, py, pz = sp[0:3].tolist()
             az_p, el_p = math.atan2(py, px), math.atan2(pz, math.hypot(px, py))
             c00, c01, c11 = _proj2(_jac5(px, py, pz), Sp[0:3, 0:3].tolist())
+            # A young track's velocity rests on a few points, one of which may not have been the clay (a speck
+            # it was born on): its own sigma is then far too small. Until it has young_hits detections its gate
+            # is at least young_gate_min_deg, so the clay can still correct it (2026-11-19: tracks on the clay
+            # were 0.15 deg off when confirmed and 0.5-1.5 deg off a frame later, and dropped it).
+            fv = self._young_floor_var if self.tracks[j].hits < self._young_hits else floor_var
             for i in range(n_det):
                 if not ok_l[i]:
                     continue
                 d_az = _wrap_pi(az_l[i] - az_p)
                 d_el = el_l[i] - el_p
-                s00 = c00 + sa_l[i] ** 2 + floor_az_l[i]
-                s11 = c11 + se_l[i] ** 2 + floor_var
+                s00 = c00 + sa_l[i] ** 2 + fv * inv_cos2[i]
+                s11 = c11 + se_l[i] ** 2 + fv
                 s01 = c01
                 det = s00 * s11 - s01 * s01
                 if det <= 0.0 or not math.isfinite(det):
                     continue
                 d2 = (s11 * d_az * d_az - 2.0 * s01 * d_az * d_el + s00 * d_el * d_el) / det
                 if self._gate >= 0.0 and 0.0 <= d2 <= gate2:
-                    pairs.append((d2, j, i))
+                    # assignment cost = -2 ln(likelihood) + const = d2 + ln det S. With d2 alone a one-frame
+                    # track (5 deg wide at 15 fps) is "nearest" to everything and takes the clay from the track
+                    # that predicted it to a pixel; the ln det term charges a vague prediction for its width
+                    pairs.append((d2 + math.log(det), j, i))
 
         pairs.sort()
         det_of_track: dict[int, int] = {}
         used_det: set[int] = set()
+        twins: list[int] = []
         for _, j, i in pairs:
             if j in det_of_track or i in used_det:
                 continue
             det_of_track[j] = i
             used_det.add(i)
+            if self.tracks[j].hits == 1 and self._twin:
+                # A one-frame track may have been born on something else (a speck 1 deg from the clay): its
+                # second point then gives it a velocity tens of deg/s wrong, held with full confidence, and the
+                # clay is rejected from the next frame on (2026-11-19, the clay in open sky lost 9 times in 30
+                # frames). The detection also starts a clean track; the one that predicts it keeps it.
+                twins.append(i)
 
         survivors: list[Track] = []
         for j, tr in enumerate(self.tracks):
@@ -257,16 +277,26 @@ class CartesianClayTracker(ClayTracker):
                 if tr.hits >= self.cfg.tracker.confirm_hits:
                     tr.confirmed = True
             self._sync_views(tr)
-            limit = self.cfg.tracker.max_misses if tr.confirmed else _TENTATIVE_MISSES - 1
+            # a tentative track seen twice survives a two-frame dropout (a clay crossing a light trunk merges with
+            # it for a frame or two); a one-hit one does not
+            limit = (self.cfg.tracker.max_misses if tr.confirmed
+                     else _TENTATIVE_MISSES if tr.hits >= 2 else _TENTATIVE_MISSES - 1)
             if tr.misses <= limit:
                 survivors.append(tr)
         self.tracks = survivors
 
-        for i in range(n_det):
-            if i in used_det or not usable[i]:
+        # new tracks nearest the bore first: the clay is where the gun points
+        bore_w = rot @ self._bore_g
+        new = [i for i in range(n_det) if i not in used_det and usable[i]]
+        dirs = {}
+        for i in new + twins:
+            ce = math.cos(float(el_m[i]))
+            dirs[i] = np.array([ce * math.cos(float(az_m[i])), ce * math.sin(float(az_m[i])), math.sin(float(el_m[i]))])
+        new.sort(key=lambda i: -float(dirs[i] @ bore_w))
+        twins.sort(key=lambda i: -float(dirs[i] @ bore_w))
+        for i in new + twins:
+            if not self._make_room(dirs[i], bore_w):
                 continue
-            if not self._make_room():
-                break
             self.tracks.append(self._new_track(t_ns, detections[i], float(az_m[i]), float(el_m[i]),
                                                float(sig_az[i]), float(sig_el[i]), float(ifov[i])))
         return self.tracks

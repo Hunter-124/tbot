@@ -229,14 +229,27 @@ class Pipeline:
         ("under_voltage_now", "UNDER-VOLTAGE on the Pi supply (sagging pack or thin wiring)"),
         ("throttled_now", "CPU THROTTLED (hot pod or low supply voltage)"),
         ("soft_temp_limit_now", "SOFT TEMPERATURE LIMIT reached (clock reduced: hot pod)"),
+        # the sticky "since boot" bits: a dip shorter than the health period is only seen here (2026-11-19 at the
+        # range the Pi rebooted every minute or two and the log never said why; one boot had this bit set)
+        ("under_voltage_occurred", "UNDER-VOLTAGE happened since boot (a brief dip of the 5 V supply: check the pack "
+                                   "charge, the lever connector and the buck converter; the next dip may reboot the Pi)"),
     )
 
     def _check_health(self, health: dict) -> None:
         """Warn once on each rising edge of an under-voltage / throttling condition."""
         flags = (health or {}).get("throttled") or {}
+        if not self._health_flags.get("logged_boot") and health:
+            # a reboot shows in the log as a small uptime (the Pi has no clock: its date jumps back on a reboot)
+            self._health_flags["logged_boot"] = True
+            try:
+                up = float(open("/proc/uptime").read().split()[0])
+            except (OSError, ValueError, IndexError):
+                up = None
+            log.info("health: Pi up %s, supply/throttle since boot: %s", "?" if up is None else f"{up:.0f} s",
+                     flags.get("hex", "?"))
         for key, message in self._HEALTH_WARNINGS:
             active = bool(flags.get(key))
-            if active and not self._health_flags[key]:
+            if active and not self._health_flags.get(key):
                 log.warning("health: %s (source %s)", message, (health or {}).get("source"))
             self._health_flags[key] = active
         # early heat warning: the Pi 3B firmware throttles the ARM clock at 80 C, which costs frame rate

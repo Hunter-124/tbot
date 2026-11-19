@@ -60,10 +60,18 @@ class VideoOut:
             return
         except Exception:  # noqa: BLE001 - no PyAV / no libx264: OpenCV's writer
             self._av = None
-        for fourcc, suffix in (("avc1", ".mp4"), ("mp4v", ".mp4"), ("MJPG", ".avi")):
+        tries = [("avc1", ".mp4", None), ("mp4v", ".mp4", None), ("MJPG", ".avi", None)]
+        if sys.platform == "win32":
+            # the laptop: OpenCV's ffmpeg there has no H.264 encoder (and mp4v does not play in a browser), but
+            # Windows' own Media Foundation has one
+            tries.insert(0, ("H264", ".mp4", cv2.CAP_MSMF))
+        for fourcc, suffix, api in tries:
             path = stem.with_suffix(suffix)
             tmp = path.with_name(path.stem + TMP_SUFFIX + suffix)  # OpenCV picks the container from the suffix
-            writer = cv2.VideoWriter(str(tmp), cv2.VideoWriter_fourcc(*fourcc), float(fps), (w, h))
+            if api is None:
+                writer = cv2.VideoWriter(str(tmp), cv2.VideoWriter_fourcc(*fourcc), float(fps), (w, h))
+            else:
+                writer = cv2.VideoWriter(str(tmp), api, cv2.VideoWriter_fourcc(*fourcc), float(fps), (w, h))
             if writer.isOpened():
                 self._cv, self.path, self._tmp = writer, path, tmp
                 return

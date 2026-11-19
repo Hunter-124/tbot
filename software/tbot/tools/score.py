@@ -66,7 +66,7 @@ def config_from_meta(meta: dict) -> Config:
         return _build(Config, _fill(meta["config"], dataclasses.asdict(load_config())), "")
 
 
-RIG_SECTIONS = ("camera", "optics", "mount", "shot", "gun", "imu", "attitude")
+RIG_SECTIONS = ("camera", "optics", "mount", "shot", "gun", "imu", "attitude", "actuator")  # actuator: the lever (pre-travel)
 
 
 def rig_config(cfg: Config, press_dir: str | Path) -> Config:

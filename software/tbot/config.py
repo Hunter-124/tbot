@@ -123,6 +123,9 @@ class TrackerConfig:
     size_range_bias_frac: float
     max_tracks: int
     model: str = "angular"
+    twin_newborn: bool = False
+    young_hits: int = 0
+    young_gate_min_deg: float = 0.0
     jerk_psd_mps3: float = 50.0
     new_speed_sigma_mps: float = 25.0
     new_acc_sigma_mps2: float = 12.0
@@ -206,6 +209,8 @@ class FireConfig:
     min_shot_interval_ms: float = 250.0
     min_clay_speed_mps: float = 6.0
     min_clay_speed_sigmas: float = 0.0
+    target_nearest_bore: bool = False
+    max_target_misses: int = 1000000
     duplicate_deg: float = 1.0
     debris_cone_deg: float = 2.0
     debris_spread_deg_s: float = 15.0

@@ -113,7 +113,7 @@ def test_sessions_shots_and_notes():
         assert listed[0]["outcome"] == "hit" and listed[0]["note"] == "station 4"
         with pytest.raises(ValueError):
             sessions.save_notes(s, {"outcome": "maybe"})
-        assert sessions.servable("shot_1.png") == "image/png" and sessions.servable("frames.bin") is None
+        assert sessions.servable("shot_1.png") == "image/png" and sessions.servable("frames.bin") == "application/octet-stream"  # the laptop app renders from it
 
 
 def test_shot_placed_by_seq_not_telemetry_line():

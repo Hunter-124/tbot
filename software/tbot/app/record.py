@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 import queue
 import re
 import shutil
@@ -49,6 +50,26 @@ _DUMP_IMU_CHUNK = 50
 _NUMBER = re.compile(r"[-+]?\d+(?:\.\d+)?")
 TELEMETRY_JSONL = "telemetry.jsonl"  # one line per processed frame: what the pipeline saw and decided (run.py)
 SUMMARY_JSON = "summary.json"        # the press at a glance (summarise_session)
+
+
+def _fsync_dir(path: Path) -> None:
+    """fsync every file of a directory and the directory itself (best effort; a no-op where unsupported)."""
+    try:
+        for f in path.iterdir():
+            if f.is_file():
+                fd = os.open(str(f), os.O_RDONLY)
+                try:
+                    os.fsync(fd)
+                finally:
+                    os.close(fd)
+        if hasattr(os, "O_DIRECTORY"):
+            fd = os.open(str(path), os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(fd)
+            finally:
+                os.close(fd)
+    except OSError:
+        pass
 
 
 def _json_default(obj):
@@ -558,6 +579,10 @@ class RingRecorder:
                                             default=_json_default)))
         except Exception as exc:  # noqa: BLE001
             print(f"tbot record: could not write the telemetry/summary of {dump.path}: {exc}", file=sys.stderr)
+        # Onto the SD card now, not in the kernel's own time (~30 s): on 2026-11-19 the gun lost power a few seconds
+        # after presses and four of them were left as files of zero bytes. This press's files only (background
+        # thread): a whole-card sync waits for everything else that is dirty.
+        _fsync_dir(dump.path)
         with self._lock:
             self.sessions.append(dump.path)
         if self.on_dump is not None:

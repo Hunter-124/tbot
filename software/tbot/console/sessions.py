@@ -18,8 +18,10 @@ from pathlib import Path
 from typing import Any
 
 SESSION_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$")
-#: Files the console serves from a session (frames.bin is hundreds of MB: download it with scp if ever needed).
+#: Files the console serves from a session. frames.bin (10-50 MB a press) is fetched by the laptop app, which renders
+#: the clips and previews there instead of on the gun.
 SERVABLE = {
+    "frames.bin": "application/octet-stream",
     "clip.mp4": "video/mp4", "clip.avi": "video/x-msvideo", "summary.json": "application/json",
     "telemetry.jsonl": "text/plain; charset=utf-8", "events.jsonl": "text/plain; charset=utf-8",
     "meta.json": "application/json", "imu.csv": "text/csv", "frames.csv": "text/csv",

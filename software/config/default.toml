@@ -126,9 +126,13 @@ range_prior_m = 20.0          # skeet crossing distance class [INFERENCE]
 range_prior_sigma_m = 8.0
 size_range_sigma_frac = 0.35  # 1-sigma relative error of one size-based range sample (frame-to-frame noise)
 size_range_bias_frac = 0.10   # systematic (frame-correlated) size-range error: floor on the fused range sigma
-max_tracks = 4
+max_tracks = 6                # tree specks the scenery filter misses hold slots too: with 4 the clay often had none (2026-11-19)
 model = "cartesian"           # cartesian: 3-D CA EKF in metres (tracker3d.py) | angular: CA Kalman in (az, el).
                               # Sim 50 fps / 80 ms, 6 seeds x 4 scenarios: angular 0/4 hits, cartesian 10/15 (14/15 on the clay)
+twin_newborn = true           # cartesian: a detection taken by a one-frame track also starts a clean track of its own (the
+                              # newborn may have been a speck next to the clay: 2026-11-19 the clay was lost 9 times so)
+young_hits = 8                # cartesian: a track with fewer detections than this ...
+young_gate_min_deg = 1.0      # ... gates at least this wide (its velocity may rest on a speck it was born on)
 jerk_psd_mps3 = 50.0          # cartesian: white-jerk PSD, m^2/s^5 (drag/lift change slowly) [INFERENCE]
 new_speed_sigma_mps = 13.0    # cartesian: a new track's velocity, 1 sigma per axis (a clay at 18-30 m/s in any direction is
                               # ~13 per axis; 25 overstated a young track's uncertainty about 2x: real range-day frames, error /
@@ -216,6 +220,10 @@ min_shot_interval_ms = 250.0  # no fire command within this long of the previous
 min_clay_speed_mps = 6.0      # cartesian tracker: never fire at something slower (clays fly 15-30 m/s) [INFERENCE]
 min_clay_speed_sigmas = 2.0   # ... and only when it is SURELY that slow: speed + this many of its own sigma (0 = the
                               # estimate alone, which starts near 0 on a young track: tbot sim 6 seeds 27 -> 30/54 clays)
+target_nearest_bore = true    # target = the moving confirmed track nearest the bore (the shooter is on the clay), surely-slow
+                              # ones (scenery) last. false = the track with the most hits (a tree speck, in trees: 2026-11-19)
+max_target_misses = 1         # never fire on a target missing from the last 2 frames: it is coasting on its prediction (it
+                              # broke, went behind something, or the shooter swung off it: 2026-11-19 replay of 092601)
 duplicate_deg = 1.0           # a track this close to the target at the shot is the same clay: engaged with it
 debris_cone_deg = 2.0         # debris lockout: tracks born after a shot inside this cone around the broken clay's
 debris_spread_deg_s = 15.0    # predicted path, widening at this rate (fragments ~5 m/s at ~20 m) [INFERENCE],

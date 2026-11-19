@@ -234,16 +234,67 @@ class ClayTracker:
         ce = math.cos(el)
         return np.array([ce * math.cos(az), ce * math.sin(az), math.sin(el)], dtype=np.float64)
 
-    def best(self, accept=None) -> Track | None:
-        """Confirmed track with the most hits (ties: the most recently created one); `accept(track)` may veto
-        tracks (the engagement's debris/engaged lockout)."""
+    def best(self, accept=None, bore_dir_w=None, t_ns: int | None = None) -> Track | None:
+        """The target: a confirmed track `accept(track)` lets through (the engagement's debris/engaged lockout).
+
+        With `bore_dir_w` (where the gun points, world frame) it is the one nearest the bore that is not surely
+        too slow for a clay: the shooter swings onto the clay, so it is the moving thing the gun points at. (The
+        range day of 2026-11-19 in trees: the track with the most hits was a tree speck the scenery filter had
+        missed, held for whole presses while the clay the gun followed went untargeted.) A surely-slow track is
+        chosen only when nothing else is there, so the solver can still say why it does not fire.
+
+        Without it: the track with the most hits (ties: the most recently created one)."""
         best: Track | None = None
+        if bore_dir_w is not None:
+            bx, by, bz = (float(c) for c in np.asarray(bore_dir_w, dtype=np.float64).reshape(3))
+            cand = []
+            for tr in self.tracks:
+                if not tr.confirmed or (accept is not None and not accept(tr)):
+                    continue
+                d = self.predict_dir(tr, int(t_ns) if t_ns is not None else tr.t_ns)
+                cos = max(-1.0, min(1.0, float(d[0]) * bx + float(d[1]) * by + float(d[2]) * bz))
+                cand.append((self.surely_slow(tr), math.acos(cos), tr))
+            if not cand:
+                return None
+            slow0 = min(c[0] for c in cand)
+            cand = [c for c in cand if c[0] == slow0]
+            a0 = min(c[1] for c in cand)
+            # tracks within duplicate_deg of the nearest are the same clay (a clay often has two: see
+            # twin_newborn): the one followed longest, so a fresh duplicate never resets the shot
+            dup = math.radians(float(getattr(getattr(self.cfg, "fire", None), "duplicate_deg", 1.0) or 1.0))
+            same = [c for c in cand if c[1] <= a0 + dup]
+            return max(same, key=lambda c: (c[2].hits, -c[1]))[2]
         for tr in self.tracks:
             if not tr.confirmed or (accept is not None and not accept(tr)):
                 continue
             if best is None or (tr.hits, tr.first_t_ns, tr.track_id) > (best.hits, best.first_t_ns, best.track_id):
                 best = tr
         return best
+
+    def surely_slow(self, tr: Track) -> bool:
+        """True when the track is surely slower than any clay (fire.min_clay_speed_mps, by
+        fire.min_clay_speed_sigmas of its own speed uncertainty): scenery, not a target. Needs the 3-D state
+        (tracker.model = "cartesian"); the angular filter has no speed in m/s and never says so."""
+        s = getattr(tr, "s", None)
+        S = getattr(tr, "S", None)
+        fc = getattr(self.cfg, "fire", None)
+        if s is None or S is None or fc is None:
+            return False
+        v_min = float(getattr(fc, "min_clay_speed_mps", 0.0) or 0.0)
+        if v_min <= 0.0:
+            return False
+        vx, vy, vz = (float(c) for c in s[3:6])
+        speed = math.sqrt(vx * vx + vy * vy + vz * vz)
+        if speed > 1e-6:
+            ux, uy, uz = vx / speed, vy / speed, vz / speed
+            Sv = S[3:6, 3:6]
+            var = float(ux * (Sv[0, 0] * ux + Sv[0, 1] * uy + Sv[0, 2] * uz)
+                        + uy * (Sv[1, 0] * ux + Sv[1, 1] * uy + Sv[1, 2] * uz)
+                        + uz * (Sv[2, 0] * ux + Sv[2, 1] * uy + Sv[2, 2] * uz))
+        else:
+            var = float(S[3, 3])
+        k = float(getattr(fc, "min_clay_speed_sigmas", 0.0) or 0.0)
+        return speed + k * math.sqrt(max(var, 0.0)) < v_min
 
     # ----------------------------------------------------------------- internals
     def _measure(self, detections: list[Detection], rot: np.ndarray):
@@ -335,19 +386,49 @@ class ClayTracker:
         self._range_update(tr, det, ifov)
         return tr
 
-    def _make_room(self) -> bool:
-        """Ensure a new track fits under max_tracks by dropping the weakest tentative one."""
+    def _make_room(self, new_dir_w=None, bore_w=None) -> bool:
+        """Ensure a new track fits under max_tracks; False = the new detection gets none.
+
+        The shooter points the gun at the clay, so where the table is full, nearness to the bore decides. A track
+        is spent first if it missed this frame, is a one-hit tentative track, or is scenery (surely too slow for a
+        clay); of those, the one farthest from the bore goes. Failing that, a young confirmed track (fewer than
+        fire.min_track_hits) still being seen goes if the new detection is nearer the bore than it is (the farthest
+        one). An established moving track (fire.min_track_hits) never goes, seen or coasting through a dropout
+        (the gun leads its clay by degrees, and the clay can vanish behind a trunk for a frame or two). A tentative track that was
+        just seen again is kept (the clay being picked up). On 2026-11-19 in trees six confirmed tracks on specks
+        held the table for seconds while the clay, at the bore, never got one."""
         if len(self.tracks) < self.cfg.tracker.max_tracks:
             return True
-        weakest = None
+
+        def off_bore(tr):
+            if bore_w is None:
+                return 0.0
+            d = self.predict_dir(tr, tr.t_ns)
+            return math.acos(max(-1.0, min(1.0, float(d @ bore_w))))
+
+        established = int(getattr(getattr(self.cfg, "fire", None), "min_track_hits", 5) or 5)
+        spent, seen = [], []
         for tr in self.tracks:
-            if tr.confirmed:
+            scenery = tr.confirmed and self.surely_slow(tr)
+            if not tr.confirmed and tr.misses == 0 and tr.hits >= 2:
                 continue
-            if weakest is None or (tr.hits, -tr.misses, tr.age) < (weakest.hits, -weakest.misses, weakest.age):
-                weakest = tr
-        if weakest is None:
+            if tr.confirmed and not scenery and tr.hits >= established:
+                continue  # an established moving track keeps its place, seen or coasting through a dropout
+            if tr.misses > 0 or not tr.confirmed or scenery:
+                spent.append((tr.misses == 0, not scenery, -off_bore(tr), tr.hits, tr))
+            elif tr.hits < established:
+                seen.append(tr)  # a young confirmed track (most are specks) may give way; an established one never
+        if spent:
+            victim = min(spent, key=lambda k: k[:4])[4]
+        elif seen and new_dir_w is not None and bore_w is not None:
+            far = max(seen, key=off_bore)
+            a_new = math.acos(max(-1.0, min(1.0, float(np.asarray(new_dir_w) @ bore_w))))
+            if off_bore(far) <= a_new:
+                return False
+            victim = far
+        else:
             return False
-        self.tracks.remove(weakest)
+        self.tracks.remove(victim)
         return True
 
     def _range_predict(self, tr: Track, dt: float) -> None:

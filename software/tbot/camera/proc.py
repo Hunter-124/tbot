@@ -304,10 +304,7 @@ class SensorProcess(SourceBase):
         self.applied_timestamp_offset_ns = int(info["applied_timestamp_offset_ns"])
         self._frame_bytes = self.width * self.height * self._channels
         self._slot_bytes = HEADER + self._frame_bytes
-        self._shm = shared_memory.SharedMemory(create=True, size=SLOTS * self._slot_bytes)
-        self._buf = np.ndarray((SLOTS * self._slot_bytes,), dtype=np.uint8, buffer=self._shm.buf)
-        self._heads = [np.ndarray((2,), dtype=np.int64, buffer=self._shm.buf, offset=i * self._slot_bytes)
-                       for i in range(SLOTS)]
+        self._new_ring()
         self._shape = (self.height, self.width) if self._channels == 1 else (self.height, self.width, 3)
         self._attach(info)
         self._imu = _ImuProxy(self) if self.has_imu else None
@@ -358,6 +355,26 @@ class SensorProcess(SourceBase):
                 break
         self._abort()
         raise RuntimeError(f"the sensor process did not open {self.spec!r} (exit code {self._proc.exitcode})")
+
+    def _new_ring(self) -> None:
+        """A fresh shared-memory ring (the old one, if any, closed and unlinked). Each child gets its own: on
+        2026-11-19 a hung child was killed and the segment it had mapped vanished with it, and every replacement
+        then failed on the old name (`FileNotFoundError: /psm_...`, 45 respawns, 16 minutes without a camera)."""
+        old = self._shm
+        self._buf = self._heads = None
+        if old is not None:
+            try:
+                old.close()
+            except (OSError, BufferError):
+                pass
+            try:
+                old.unlink()
+            except (OSError, FileNotFoundError):
+                pass
+        self._shm = shared_memory.SharedMemory(create=True, size=SLOTS * self._slot_bytes)
+        self._buf = np.ndarray((SLOTS * self._slot_bytes,), dtype=np.uint8, buffer=self._shm.buf)
+        self._heads = [np.ndarray((2,), dtype=np.int64, buffer=self._shm.buf, offset=i * self._slot_bytes)
+                       for i in range(SLOTS)]
 
     def _attach(self, info: dict) -> None:
         """The child described itself: hand it the ring (it starts streaming as soon as it has it)."""
@@ -423,6 +440,14 @@ class SensorProcess(SourceBase):
         if now >= self._next_spawn_t:
             self.respawns += 1
             self._fresh_child = True
+            self._latest = None  # (a slot index into the old ring)
+            if getattr(self, "_slot_bytes", 0):
+                try:
+                    self._new_ring()
+                except OSError as exc:  # /dev/shm full or gone: say so, keep trying on the backoff
+                    log.warning("sensor process: no new frame ring (%s); retrying", exc)
+                    self._next_spawn_t = now + RESPAWN_BACKOFF_S[min(self._backoff_i, len(RESPAWN_BACKOFF_S) - 1)]
+                    return
             self._spawn()
 
     def _supervise(self) -> None:
