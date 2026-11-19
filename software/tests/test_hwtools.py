@@ -824,3 +824,74 @@ def test_jog_main_refuses_an_actuator_it_cannot_jog(capsys):
     code = jog.main(["--set", "actuator.type=sim"])
     assert code == 2
     assert "tbot jog servo" in capsys.readouterr().err
+
+
+# ------------------------------------------------------------------ tbot find-break
+def test_find_break_stops_at_the_first_knock_and_shifts_the_whole_calibration(tmp_path):
+    from types import SimpleNamespace
+
+    import numpy as np
+
+    from tbot.tools import find_break as fb
+
+    class Pwm:
+        def __init__(self):
+            self.us = []
+
+        def set_pulse_us(self, us):
+            self.us.append(float(us))
+
+    class Imu:
+        """Quiet until the lever is at or beyond 1203 us, then one 1 g knock."""
+
+        def __init__(self, pwm):
+            self.pwm, self.knocked = pwm, False
+
+        def read(self):
+            g = fb.G
+            quiet = SimpleNamespace(accel=np.array([0.0, 0.0, g]))
+            if not self.knocked and self.pwm.us and self.pwm.us[-1] <= 1203.0 and len(self.pwm.us) > 1:
+                self.knocked = True
+                return [quiet, SimpleNamespace(accel=np.array([0.0, 0.0, 2.0 * g])), quiet]
+            return [quiet, quiet]
+
+    pwm = Pwm()
+    found, heard = fb.sweep(pwm, Imu(pwm), 1500.0, 1075.0, 8.0, 0.0, 0.4, sleep=lambda s: None, log=lambda m: None)
+    assert found == 1500.0 - 8.0 * 38            # 1196: the first step at or past 1203
+    assert pwm.us[-1] == found and min(pwm.us) == found   # it stopped there: nothing further was commanded
+    assert all(loud < 0.4 for _, loud in heard[:-1]) and heard[-1][1] >= 0.4
+
+    servo = SimpleNamespace(rest_us=1340.0, fire_us=1075.0, min_us=1070.0, max_us=1500.0, break_us=1095.0)
+    new = fb.shifted(servo, found)
+    assert new == {"rest_us": 1441.0, "fire_us": 1176.0, "min_us": 1171.0, "break_us": 1196.0}
+    with pytest.raises(ValueError):
+        fb.shifted(servo, 1300.0)                 # rest would land beyond max_us
+
+    local = tmp_path / "local.toml"
+    local.write_text("[actuator.servo]\nrest_us = 1340.0   # old\nfire_us = 1075.0\nmin_us = 1070.0\nmax_us = 1500.0\n"
+                     "break_us = 1095.0\npreload_frac = 0.6\n")
+    fb.apply_to_local(local, new, "test")
+    text = local.read_text()
+    assert "rest_us = 1441.0" in text and "break_us = 1196.0" in text and "preload_frac = 0.6" in text
+    assert "max_us = 1500.0" in text and (tmp_path / "local.toml.bak-find-break").exists()
+    assert fb.main([]) == 2                       # refused without --unloaded
+
+
+def test_find_break_reports_nothing_when_the_hammer_is_down():
+    from types import SimpleNamespace
+
+    import numpy as np
+
+    from tbot.tools import find_break as fb
+
+    class Pwm:
+        us = None
+
+        def set_pulse_us(self, us):
+            self.us = us
+
+    quiet = SimpleNamespace(accel=np.array([0.0, 0.0, fb.G]))
+    imu = SimpleNamespace(read=lambda: [quiet, quiet])
+    pwm = Pwm()
+    found, heard = fb.sweep(pwm, imu, 1500.0, 1075.0, 8.0, 0.0, 0.4, sleep=lambda s: None, log=lambda m: None)
+    assert found is None and pwm.us >= 1075.0 and len(heard) == 53

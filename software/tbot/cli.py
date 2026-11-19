@@ -29,6 +29,7 @@ COMMANDS: dict[str, tuple[str, str]] = {
     "hwcheck": ("tbot.tools.hwcheck", "check every fitted device: camera, IMU, arming switch, PWM/actuator, power, temperature"),
     "snap": ("tbot.tools.snap", "camera mode: the arming button saves a full-res still to the SD card (no trigger)"),
     "csi-lanes": ("tbot.tools.csi_lanes", "live per-wire view of the camera's MIPI lanes while you handle the ribbon (sudo)"),
+    "find-break": ("tbot.tools.find_break", "find the pulse where the sear breaks: step the lever, the IMU hears the hammer (EMPTY gun)"),
     "jog": ("tbot.tools.jog", "bench setup of the trigger actuator (servo pulse widths / PQ12 pulses); arming button held"),
     "hitl": ("tbot.tools.hitl", "hardware-in-the-loop bench: camera films a monitor, every delay photon -> trigger break"),
     "doctor": ("tbot.tools.doctor", "offline config, calibration and layout consistency checks (no hardware)"),
