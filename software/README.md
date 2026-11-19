@@ -62,6 +62,13 @@ sudo reboot            # the config.txt changes need it
 `pip install opencv-python` on a Pi 3B is a trap (hours of build or a wheel that fights apt's numpy) — the apt
 packages plus `--system-site-packages` is the supported path.
 
+## TBOT Console (the app)
+
+Plug the gun's Ethernet into the laptop, power it on and open **TBOT Console** (Desktop shortcut, made once with
+`desktop/install_shortcut.ps1`). Live view, recorded presses with the shot marked (mark hits, score, render clips),
+camera focus, boresight wizard, trigger servo setup, every setting, diagnostics, modes and power. No internet needed;
+any browser also works at `http://169.254.20.20/`. [docs/CONSOLE.md](docs/CONSOLE.md).
+
 ## Quick start on the laptop
 
 No hardware at all — synthetic scene, simulated gun swing, simulated IMU and GPIO:
@@ -119,6 +126,7 @@ tbot calib-detector --session sessions/20261026-141230-rec --gui    # tune on re
 | `tbot hitl analyze` | Re-analyse a saved HITL run and regenerate text, JSON and HTML reports. |
 | `tbot hitl mics` | List ALSA capture devices and optionally check microphone level and capture-clock statistics. |
 | `tbot hwcheck` | Check every fitted device on the Pi (boot overlays, camera fps, IMU WHO_AM_I/rate, arming pin, PWM/H-bridge, under-voltage/throttle, temperature, calibration status); `--interactive` tests the arming button, `--json`. Never moves the trigger. |
+| `tbot console` | The TBOT Console web app and API (port 80 on the gun, `tbot-console.service`); `--dev` runs a stand-in gun on a laptop. [docs/CONSOLE.md](docs/CONSOLE.md). |
 | `tbot calrig` | CalRig B motorised yaw table (UNLOADED gun): `info`, `home`, `jog`, `run hold\|turns\|sine\|rate\|home_check --pose ...`, `estop`, `analyze [--apply]`; `--sim` runs the whole stack with no hardware. See [docs/CALRIG.md](docs/CALRIG.md). |
 | `tbot jog` | Bench setup of the trigger actuator with the gun unloaded: find and save MG996R `rest_us`/`fire_us`, check PQ12 rod direction (`swap`); moves only while the arming button is held; saves to `config/local.toml`. |
 
@@ -173,6 +181,7 @@ Reference results (2026-11-17, trigger delay 164 ms): `sim` 17 of 54 clays, `res
 
 ## Documentation
 
+- [docs/CONSOLE.md](docs/CONSOLE.md) — the TBOT Console app: pages, safety, how it is built, working on it without the gun.
 - [docs/INTEGRATION_STATUS.md](docs/INTEGRATION_STATUS.md) — bench integration handoff: per-rig values on the Pi, calibration state, open items.
 - [docs/PREFLIGHT.md](docs/PREFLIGHT.md) — ordered offline optimisation, diagnostics, profiling and bench workflow before assembly.
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — module/API contract, frames, clock, calibration file formats, safety model.

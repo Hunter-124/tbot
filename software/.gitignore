@@ -14,3 +14,8 @@ pi-pulls/
 /tbot/vision/_measure*.exp
 /runs/
 /docs/sim_samples/*.mp4
+# TBOT Console: config backups, calibration-tool runs, the dev stand-in log
+config/backups/
+/calib_runs/
+/logs/
+config/console.json

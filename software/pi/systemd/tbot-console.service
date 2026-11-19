@@ -1,0 +1,21 @@
+# TBOT Console: the gun's web app (setup, calibration, recorded presses) on port 80.
+# Installed and enabled by `tbotctl install`; `tbotctl console on|off|restart`. Always on: it holds no hardware
+# (the camera and servo tools it starts are separate processes, and only while the pipeline is stopped).
+[Unit]
+Description=TBOT Console (web app on port 80)
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/TBOT/software
+ExecStart=/home/pi/tbot-venv/bin/python -m tbot.console.server --port 80
+# port 80 without root
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+# the pipeline comes first: the console and the tools it runs get the CPU only when the pipeline does not need it
+Nice=5
+Restart=always
+RestartSec=3
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

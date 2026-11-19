@@ -15,9 +15,11 @@
 #   tbotctl clean          delete the recorded presses under sessions/ (asks first)
 #   tbotctl preflight      go / no-go checks (tbot doctor + hardware check when the camera is free)
 #   tbotctl camera on|off  CAMERA MODE: the arming button saves stills to snaps/ (no trigger), also at power-up
+#   tbotctl console [on|off|restart|status]   the TBOT Console web app on port 80 (on by default after install)
 set -euo pipefail
 unit=tbot-run.service
 cam_unit=tbot-camera.service
+console_unit=tbot-console.service
 here="$(cd -- "$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")/.." && pwd)"
 tbot="${TBOT_BIN:-$HOME/tbot-venv/bin/tbot}"
 cmd=${1:-status}
@@ -25,10 +27,14 @@ case "$cmd" in
     install)
         sudo install -m 644 "$here/pi/systemd/$unit" /etc/systemd/system/$unit
         sudo install -m 644 "$here/pi/systemd/$cam_unit" /etc/systemd/system/$cam_unit
+        sudo install -m 644 "$here/pi/systemd/$console_unit" /etc/systemd/system/$console_unit
         sudo systemctl daemon-reload
         chmod +x "$here/scripts/tbot-run.sh" "$here/scripts/tbotctl"
         sudo ln -sf "$here/scripts/tbotctl" /usr/local/bin/tbotctl
+        sudo systemctl enable $console_unit > /dev/null 2>&1
+        sudo systemctl restart $console_unit
         echo "installed $unit (not enabled at boot: tbotctl boot on)"
+        echo "TBOT Console running at power-up: http://$(hostname -I | awk '{print $1}')/"
         ;;
     start)
         mode=${2:-dry}
@@ -128,5 +134,15 @@ case "$cmd" in
             echo; "$tbot" hwcheck --help > /dev/null 2>&1 && "$tbot" hwcheck || true
         fi
         ;;
-    *) sed -n '2,16p' "$0"; exit 2 ;;
+    console)
+        case ${2:-status} in
+            on) sudo systemctl enable --now $console_unit ;;
+            off) sudo systemctl disable --now $console_unit ;;
+            restart) sudo systemctl restart $console_unit ;;
+            status) ;;
+            *) echo "usage: tbotctl console [on|off|restart|status]" >&2; exit 2 ;;
+        esac
+        echo "console: $(systemctl is-active $console_unit 2>/dev/null || true), at power-up: $(systemctl is-enabled $console_unit 2>/dev/null || true)   http://$(hostname -I | awk '{print $1}')/"
+        ;;
+    *) sed -n '2,18p' "$0"; exit 2 ;;
 esac
