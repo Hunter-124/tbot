@@ -199,8 +199,8 @@ class FireConfig:
     aim_prior_evidence: float = 0.2
     adaptive: bool = False
     min_hit_probability_floor: float = 0.2
-    adaptive_reach: float = 0.85
-    adaptive_regret: float = 0.9
+    adaptive_reach: float = 0.7
+    adaptive_regret: float = 0.0
     adaptive_relax_from_ms: float = 200.0
     adaptive_relax_to_ms: float = 700.0
     min_shot_interval_ms: float = 250.0
@@ -282,6 +282,8 @@ class LatencyConfig:
     sim_cmd_to_break_ms: float
     none_cmd_to_break_ms: float
     jitter_ms: float
+    servo_cmd_to_break_rest_ms: float = 0.0
+    servo_transit_jitter_frac: float = 0.1
 
 
 @dataclass
@@ -608,6 +610,10 @@ class LatencyBudget:
     lock_time_ms: float
     barrel_time_ms: float
     sources: dict[str, str] = field(default_factory=dict)  # item -> "measured" | "default"
+    # cmd -> break when the lever starts from REST instead of the pre-travel position the main figure was measured
+    # from (fire/trigger.py). Only types that have such a second figure appear here.
+    rest_cmd_to_break_ms: dict[str, float] = field(default_factory=dict)
+    rest_jitter_ms: dict[str, float] = field(default_factory=dict)
 
     def fire_delay_s(self, actuator_type: str) -> float:
         """Decision -> shot exits the muzzle, seconds."""
@@ -627,6 +633,10 @@ class LatencyBudget:
         exp_ms = float(lat.exposure_to_user_ms)
         sources["camera.timestamp_offset"] = "default"
         sources["camera.exposure_to_user"] = "default"
+        rest: dict[str, float] = {}
+        rest_jit: dict[str, float] = {}
+        if float(getattr(lat, "servo_cmd_to_break_rest_ms", 0.0) or 0.0) > 0.0:
+            rest["servo"] = float(lat.servo_cmd_to_break_rest_ms)
         m = measured or {}
         cam = m.get("camera") or {}
         if "timestamp_offset_ns" in cam:
@@ -653,6 +663,11 @@ class LatencyBudget:
                     cmd[t] = float(bang["mean"]) - float(cfg.gun.lock_time_ms)
                     jit[t] = max(float(bang.get("std", 0.0)), 1.5)
                     sources[f"actuator.{t}"] = "measured (microphone)"
+                from_rest = (rec.get("from_rest") or {}).get("cmd_to_break_ms")
+                if isinstance(from_rest, dict) and "mean" in from_rest:
+                    rest[t] = float(from_rest["mean"])
+                    if "std" in from_rest:
+                        rest_jit[t] = float(from_rest["std"])
         return cls(
             camera_timestamp_offset_ns=cam_off,
             exposure_to_user_ms=exp_ms,
@@ -661,6 +676,8 @@ class LatencyBudget:
             lock_time_ms=float(cfg.gun.lock_time_ms),
             barrel_time_ms=float(cfg.gun.barrel_time_ms),
             sources=sources,
+            rest_cmd_to_break_ms=rest,
+            rest_jitter_ms=rest_jit,
         )
 
 

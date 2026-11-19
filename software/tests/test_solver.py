@@ -203,7 +203,7 @@ def test_leading_swing_fires_at_the_analytically_best_frame(scene_cfg):
     assert abs(fired - best_frame) <= 1
     d = decisions[fired]
     assert d.reason == "FIRE"
-    assert d.p_hit >= cfg.fire.min_hit_probability
+    assert d.p_hit >= d.extra["bar"] >= cfg.fire.min_hit_probability_floor  # the bar of that frame (fire/policy.py)
     assert d.miss_rad < d.pattern_rad
     assert d.range_m == pytest.approx(np.linalg.norm(_slow_crosser(fired / FPS)), rel=0.1)
     assert d.tof_s == pytest.approx(float(scene.shot.time_of_flight(d.range_m)), rel=0.1)
@@ -302,7 +302,7 @@ def test_incoming_clay_with_the_bore_on_it_fires(scene_cfg):
     d = decisions[fired]
     # (it fires while the filter is still settling: the rate estimate is small, not yet zero)
     assert d.extra["clay_rate_rad_s"] < 0.05, "a radially incoming clay has no angular velocity"
-    assert d.p_hit >= cfg.fire.min_hit_probability
+    assert d.p_hit >= d.extra["bar"] >= cfg.fire.min_hit_probability_floor  # the bar of that frame (fire/policy.py)
     assert d.miss_rad < d.pattern_rad
     assert all(x.reason.startswith("p_hit") for x in decisions[cfg.fire.min_track_hits:fired])
     mature = decisions[fired + 20]

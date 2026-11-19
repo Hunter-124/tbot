@@ -80,8 +80,12 @@ Bring: laptop + Ethernet cable, charged pack + spare, the mic is not needed. Len
    tbot latency-recoil --write    # stores it (needs 5 shots; --min-shots 2 if they agree); then tbotctl start live
    ```
 
-   The budget is 155 ms command to break since the first range day (it was 95: 6 clays in a hundred). Within
-   10 ms is good enough (0.4 clays in a hundred); the servo mount has been rebuilt since, so check it.
+   The budget is 38.5 ms command to break since 2026-11-19 (pre-travel; 191.7 from rest, 155 on the first
+   range day). At 38.5 ms a 10 ms error is 0.1-0.2 deg of clay travel, a quarter of the pattern: check it.
+   **The button and the lever:** pressing the button moves the lever 60 % of the way to the break; it is there
+   ~0.2 s later, and the gun knows (a shot before that is planned for the lever still moving). Held longer
+   than 30 s the servo lets go and the gun will mostly not fire (`let go` in the telemetry): release and press
+   again. So: press as you call for the bird, not minutes before.
 6. `tbotctl stop` before powering off (lets the last session finish writing). A power cycle comes back in
    dry run, unless the gun was put in field mode (below).
 

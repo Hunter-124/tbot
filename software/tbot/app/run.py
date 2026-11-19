@@ -38,6 +38,7 @@ from tbot.fire.ballistics import ShotModel
 from tbot.fire.engagement import Engagement
 from tbot.fire.recoil import RecoilDetector, summarise
 from tbot.fire.solver import FireSolver
+from tbot.fire.trigger import TriggerDelay
 from tbot.hw.actuator import make_actuator
 from tbot.hw.arming import ArmingSwitch
 from tbot.hw.gpio import SimGpio, open_gpio
@@ -127,6 +128,10 @@ class Pipeline:
         self.shot = ShotModel(cfg)
         self.budget: LatencyBudget = calib.budget or LatencyBudget.from_config(cfg, calib.latency)
         self.solver = FireSolver(cfg, self.shot, self.mount, self.budget)
+        # the trigger delay depends on where the lever is (still moving to the pre-travel, parked, let go)
+        self.trigger = TriggerDelay(cfg, self.budget)
+        self._shot_trigger: tuple[float, str | None] | None = None  # (cmd -> break ms, lever state) of the last shot
+        self.solver.trigger = self.trigger
         self.engagement = Engagement(cfg, self.tracker)
         self.recoil = RecoilDetector.from_config(cfg)
         self.recoil_delays_ms: list[float] = []
@@ -139,6 +144,8 @@ class Pipeline:
         self._own_gpio = gpio is None
         self.gpio = gpio if gpio is not None else open_gpio(cfg)
         self.arming = arming if arming is not None else ArmingSwitch(self.gpio, cfg)
+        # (source clock, as the solver's times are: on hardware the same monotonic clock the switch stamps with)
+        self.arming.on_change(lambda armed, _t: self.trigger.on_arming(armed, int(self.source.clock.now_ns())))
 
         self._own_actuator = actuator is None
         if actuator is not None:
@@ -407,9 +414,12 @@ class Pipeline:
 
     def _on_recoil(self, rec) -> None:
         """A live fire command resolved: the IMU saw the shot (and when), or it did not."""
-        expected = self.budget.cmd_to_break_ms[str(self.cfg.actuator.type)] + self.budget.lock_time_ms
+        # what THIS command was planned with: the lever may not have been parked at the pre-travel (fire/trigger.py)
+        cmd_to_break_ms, state = self._shot_trigger or (self.budget.cmd_to_break_ms[str(self.cfg.actuator.type)], None)
+        expected = cmd_to_break_ms + self.budget.lock_time_ms
         if rec.detected:
-            self.recoil_delays_ms.append(float(rec.delay_ms))
+            if state in (None, "parked"):  # the end-of-run summary compares with the budget's (parked) delay
+                self.recoil_delays_ms.append(float(rec.delay_ms))
             log.info("shot %d: recoil %.1f ms after the command (budget %.1f ms, %+.1f)  peak %.1f g",
                      rec.shot, rec.delay_ms, expected, rec.delay_ms - expected, rec.peak_g)
             if abs(rec.delay_ms - expected) > DELAY_MISMATCH_MS:
@@ -424,6 +434,7 @@ class Pipeline:
                         "safety on, empty chamber or a dud)", rec.shot, self.recoil.window_ns / 1e6)
         ev = rec.as_event()
         ev["expected_ms"] = expected
+        ev["trigger_state"] = state
         self._event(ev)
 
     def _event(self, ev: dict) -> None:
@@ -674,6 +685,10 @@ class Pipeline:
                     decision.range_m,
                 )
             if fired:
+                self._shot_trigger = (float(decision.extra.get("fire_delay_s", 0.0)) * 1e3
+                                      - self.budget.lock_time_ms - self.budget.barrel_time_ms,
+                                      decision.extra.get("trigger_state"))
+                self.trigger.on_fire(int(cmd_t_ns) if cmd_t_ns is not None else int(now))
                 self.shots += 1
                 target = next((t for t in self.tracker.tracks if t.track_id == decision.track_id), None)
                 self.engagement.record(decision, int(cmd_t_ns) if cmd_t_ns is not None else int(now), target)
@@ -764,6 +779,10 @@ class Pipeline:
                 "range_m": float(decision.range_m),
                 "tof_ms": float(decision.tof_s * 1e3),
                 "t_exit_ns": None if decision.t_exit_ns is None else int(decision.t_exit_ns),
+                # command -> muzzle for this solution, and the lever state it assumes (fire/trigger.py)
+                "fire_delay_ms": (None if not decision.extra or decision.extra.get("fire_delay_s") is None
+                                  else round(float(decision.extra["fire_delay_s"]) * 1e3, 2)),
+                "trigger_state": decision.extra.get("trigger_state") if decision.extra else None,
                 "lead_dir_w": None if decision.lead_dir_w is None else [float(x) for x in decision.lead_dir_w],
                 "bore_dir_w": None if decision.bore_dir_w is None else [float(x) for x in decision.bore_dir_w],
             },
@@ -779,6 +798,8 @@ class Pipeline:
                 "p_hit": tele["decision"]["p_hit"],
                 "range_m": tele["decision"]["range_m"],
                 "t_exit_ns": tele["decision"]["t_exit_ns"],
+                "fire_delay_ms": tele["decision"]["fire_delay_ms"],
+                "trigger_state": tele["decision"]["trigger_state"],
                 "tof_ms": tele["decision"]["tof_ms"],
                 "shots": self.shots,
             }

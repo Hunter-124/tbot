@@ -178,12 +178,17 @@ max_range_m = 60.0
 
 [fire]
 live = false                  # false = dry run: log would-fire decisions, never drive the actuator
-min_hit_probability = 0.4     # the bar P(hit) must clear at its top before the one shot of a press is spent. With
-                              # fire.adaptive it is only where the bar starts (fire/policy.py); the levels below are
-                              # from `tbot vclay --policies` on the range-day swings at the measured 164 ms delay,
-                              # 1500 virtual clays, clays hit: fixed 0.50 38 %, fixed 0.40 57 %, fixed 0.30 62 %,
-                              # fixed 0.25 64 %, adaptive as below 63 % (and much the same wherever it starts)
-min_hit_probability_settled = 0.25  # the bar for a target that has been followed a while: reached at settled_ms when
+min_hit_probability = 0.5     # the bar P(hit) must clear at its top before the one shot of a press is spent. With
+                              # fire.adaptive it is only where the bar starts (fire/policy.py). Re-tuned 2026-11-19
+                              # for the 38.5 ms pre-travel trigger (48 ms to the muzzle): a perfect aim is now worth
+                              # 0.9+, so a shot at 0.25-0.4 mostly throws away a better one a few frames on.
+                              # Virtual clays through the range-day swings (recorded frame times and a steady
+                              # 80 fps, deliberate and quick shooter), clays hit / hits per shot:
+                              #   48 ms    0.40/0.25, floor 0.2, reach 0.85, regret 0.9 (before)  92.2 % / 94 %
+                              #            0.50/0.45, floor 0.2, reach 0.70, regret off (now)     94.4 % / 97 %
+                              #   198 ms   (lever from rest)                         before 54.5 %, now 55.6 %
+                              # so the same rule serves both: at the long delay `reach` lowers the bar by itself
+min_hit_probability_settled = 0.45  # the bar for a target that has been followed a while: reached at settled_ms when
 settled_ms = 700.0            # fire.adaptive is false, between the two adaptive_relax ages when it is true
 aim_prior_deg = 1.0           # P(hit) knows a shooter is swinging through the target: 1 sigma per axis of the true miss
                               # over frames that have a solution (fire/solver.py _geometry). 0 = no such prior
@@ -194,9 +199,11 @@ aim_prior_evidence = 0.2      # ... and the prior only counts as far as the meas
 adaptive = true               # the bar follows the engagement (fire/policy.py); false = the two fixed bars above
 min_hit_probability_floor = 0.2    # adaptive: never fire below this, whatever the excuse (a perfect aim with nothing
                               # known about the swing reads 0.25 from the prior alone)
-adaptive_reach = 0.85         # adaptive: this share of what a PERFECT aim would be worth right now is enough. It does
-                              # most of the work: 0.40 with it alone 61 %, without 57 %
-adaptive_regret = 0.9         # adaptive: this share of a chance the target already offered and lost is enough
+adaptive_reach = 0.7          # adaptive: this share of what a PERFECT aim would be worth right now is enough. It does
+                              # the work when the delay is long or the swing rough (was 0.85: at 198 ms 51 -> 56 %)
+adaptive_regret = 0.0         # adaptive: this share of a chance the target already offered and lost is enough.
+                              # 0 = off: with the short delay the next top is usually the better one (0.9: 94.4 ->
+                              # 93.0 % at 48 ms, 55.6 -> 56.7 % at 198 ms)
 adaptive_relax_from_ms = 200.0     # adaptive: the bar slides from min_hit_probability to the settled bar between
 adaptive_relax_to_ms = 700.0       # these two track ages (shots on the bench go at a median track age of 0.24 s)
 subframe = true               # send the command at the instant of closest approach inside the frame period, not only on
@@ -288,6 +295,13 @@ servo_cmd_to_break_ms = 155.0 # measured on this gun (MG996R at 7.0 V, rest 1420
                               # `tbot latency-recoil --write` (calib/latency.json then overrides this)
 pq12_cmd_to_break_ms = 900.0  # 6.7 mm at 6-10 mm/s [INFERENCE]
 sim_cmd_to_break_ms = 155.0   # what the solver ASSUMES of the simulated actuator (its real delay: actuator.sim.delay_ms)
+servo_cmd_to_break_rest_ms = 0.0   # the same delay when the lever starts from REST, for a gun whose figure above was
+                              # measured from the pre-travel position (actuator.servo.preload_frac): the first
+                              # ~150 ms of a press, after preload_max_s, with pre-travel off (fire/trigger.py).
+                              # 0 = no second figure: one delay whatever the lever is doing. A measurement in
+                              # calib/latency.json (actuator.servo.from_rest.cmd_to_break_ms) overrides this
+servo_transit_jitter_frac = 0.1    # a command sent while the lever is still moving to the pre-travel: its break
+                              # time is uncertain by this share of the time the lever has been moving [INFERENCE]
 none_cmd_to_break_ms = 100.0
 jitter_ms = 2.0               # 1-sigma shot to shot. Measured 1.0 ms (microphone, 10 shots) and 1.4 ms (recoil, 2): the
                               # PWM starts with the command, so the 50 Hz frame does not quantise it (that would be 5.8 ms)

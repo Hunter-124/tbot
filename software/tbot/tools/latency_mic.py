@@ -79,10 +79,16 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--out", default=None, help="run directory (default runs/latency-mic-<time>)")
     ap.add_argument("--notes", default="")
     ap.add_argument("--no-write", action="store_true")
+    ap.add_argument("--from-rest", action="store_true",
+                    help="measure with the pre-travel OFF (lever starts from rest) and store it as the from-rest "
+                         "delay (actuator.<type>.from_rest), which the solver uses whenever the lever is not "
+                         "waiting at the pre-travel (fire/trigger.py)")
     ap.add_argument("--led", action="store_true",
                     help="light the latency LED at each fire command (video timing reference)")
     args = ap.parse_args(argv)
     cfg, calib = load_from_args(args)
+    if args.from_rest:
+        cfg.actuator.servo.preload_frac = 0.0
     log = lambda s: print(s, flush=True)  # noqa: E731
     out = Path(args.out or f"runs/latency-mic-{time.strftime('%Y%m%d-%H%M%S')}")
     out.mkdir(parents=True, exist_ok=True)
@@ -170,13 +176,16 @@ def main(argv: list[str] | None = None) -> int:
     log(f"cmd->break = bang - lock time {lock_ms:.1f} ms: mean {st['mean']:.2f}  p50 {st['p50']:.2f}")
     if not args.no_write:
         kind = str(cfg.actuator.type)
-        update_json(calib.path("latency.json"), {"actuator": {kind: {
+        record = {
             "cmd_to_break_ms": st, "cmd_to_bang_ms": st_bang, "lock_time_ms": lock_ms,
             "method": "mic", "device": args.device, "run": str(out),
             "mic_latency_ms": args.mic_latency_ms, "mic_distance_m": args.mic_distance_m,
             "fire_us": float(cfg.actuator.servo.fire_us), "rest_us": float(cfg.actuator.servo.rest_us),
-            "notes": args.notes, "created": now_iso()}}, "created": now_iso()})
-        log(f"wrote {calib.path('latency.json')} [actuator.{kind}]")
+            "notes": args.notes, "created": now_iso()}
+        where = f"actuator.{kind}.from_rest" if args.from_rest else f"actuator.{kind}"
+        update_json(calib.path("latency.json"),
+                    {"actuator": {kind: {"from_rest": record} if args.from_rest else record}, "created": now_iso()})
+        log(f"wrote {calib.path('latency.json')} [{where}]")
     return 0
 
 

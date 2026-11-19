@@ -767,3 +767,53 @@ outgoing 0/6: young tracks fired on the prior, as noted when it was set); `fire.
 P(hit) on old tracks reads well on virtual clays, but the real presses suggest it is still low (P 0.32 -> 62 %
 hit over 8 frames): too few to act on. On `104751`, today's detector sees 1 detection in the armed frames where
 the day's saw 31 (the press the gun fired and broke): worth a look from the detector side.
+
+## 2026-11-19: what the 38.5 ms trigger is worth, and the software re-tuned for it
+
+Pre-travel (60 % of rest -> break while the button is held) and the PWM frame restart took command -> break from
+191.7 +/- 1.4 ms to **38.5 +/- 1.1 ms** (48 ms to the muzzle). The solver read the new figure from
+`calib/latency.json` at once; virtual clays through the range-day swings went from 63-68 % to **92 %** with
+nothing else changed. The gun error at the shot is now 0.09-0.10 deg p50 (was ~0.7): **the target prediction
+(0.18-0.22 deg) is the larger half**, where it was a quarter. Two things were still set for the old trigger.
+
+**1. The delay depends on where the lever is** (`tbot/fire/trigger.py`, `TriggerDelay`). 38.5 ms is true only
+while the lever waits at the pre-travel. The solver assumed it always; it is now:
+
+| lever | when | delay used |
+|---|---|---|
+| moving | first ~153 ms of a press (191.7 - 38.5) | from-rest delay minus time since the press: the command just keeps the lever going, so the sear breaks when a from-rest shot sent at the press would have |
+| settling / parked | after that | 38.5 ms (for 60 ms after arrival with extra spread) |
+| let go | held longer than `actuator.servo.preload_max_s` (30 s): servo limp, lever sagged by an unknown amount | the middle of the two, known to +/- 44 ms: P(hit) then rarely clears the bar. Release and press again |
+| spent | after a shot of the same press (lever back at rest) | from rest |
+| pre-travel off / break not marked | always | from rest |
+
+The from-rest figure is `calib/latency.json actuator.servo.from_rest.cmd_to_break_ms` (the gun: 191.7 +/- 1.4,
+microphone, 2026-11-18; `tbot latency-mic --from-rest` re-measures it) or `latency.servo_cmd_to_break_rest_ms`.
+Without one there is a single delay, as before. A dry run has no actuator object, so the model works from the
+press, the shots and the clock alone and plans exactly as a live run does. Telemetry: `decision.fire_delay_ms`,
+`decision.trigger_state`; the recoil check compares each shot with the delay it was planned with, and
+`tbot latency-recoil` only uses shots fired from the parked lever. **Not measured:** the moving-lever delay is a
+model (the spread given to it is `latency.servo_transit_jitter_frac` x the time moved, [INFERENCE]); a shot in
+the first 150 ms of a press is rare, and before today it was planned 150 ms wrong.
+
+**2. The bar** (`fire.min_hit_probability` 0.40 -> **0.50**, `_settled` 0.25 -> **0.45**, `adaptive_reach`
+0.85 -> **0.70**, `adaptive_regret` 0.9 -> **off**). The old levels were for a trigger whose best aim was worth
+0.3-0.9; now it is worth 0.9+, and a shot taken at 0.25-0.4 mostly throws away a better one a few frames later.
+`reach` at 0.7 lowers the bar by itself when the delay is long, so one rule serves both. Virtual clays, 6 presses
+x 120-150 clays, mean of recorded frame times (quick shooter) and a steady 80 fps (deliberate and quick),
+clays hit / hits per shot:
+
+| | 48 ms to the muzzle (parked) | 198 ms (from rest) |
+|---|---|---|
+| before (0.40 / 0.25, reach 0.85, regret 0.9) | 92.2 % / 94 % | 54.5 % |
+| **now (0.50 / 0.45, reach 0.70, regret off)** | **94.4 % / 97 %** (80 fps: 96.0 % / 97.7 %) | **55.6 %** |
+| 0.50 / 0.45, reach 0.85, regret off | 94.5 % | 51.2 % |
+
+Checked and left alone: `fire.aim_prior_deg` 1.0 (0.7 gives the same clays hit and a worse-calibrated P(hit):
+frames given 0.55 hit 52-57 % against 73 %; at 1.0 P(hit) is now on the cautious side above 0.5 - given 0.55
+hit 73 %, 0.71 hit 91 %); `fire.horizon_frames` 3.
+
+**Open:** the virtual clays are built around the path the bore took (a chance always exists) and their
+detections are ideal, so 94 % is the rule's share of the chances, not a forecast for the range. The recoil of
+the first live shots (`shot N: recoil ... ms after the command`) is the real check of the 38.5 ms; a second
+shot of a press (doubles) starts from rest - re-arming the pre-travel after the first is not done.

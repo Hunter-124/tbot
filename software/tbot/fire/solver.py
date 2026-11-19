@@ -165,6 +165,17 @@ class FireSolver:
         self.policy = FirePolicy.from_config(cfg)
         self._aim_prior = math.radians(float(getattr(cfg.fire, "aim_prior_deg", 0.0) or 0.0))
         self._evidence = float(getattr(cfg.fire, "aim_prior_evidence", 0.0) or 0.0)
+        # fire/trigger.py TriggerDelay, set by the pipeline: the delay for the state the lever is in (still moving
+        # to the pre-travel, parked there, let go). None = the one delay of the budget, whenever the command goes.
+        self.trigger = None
+        self._lock_barrel_s = (float(latency.lock_time_ms) + float(latency.barrel_time_ms)) / 1000.0
+
+    def _delay(self, t_ns: int, armed: bool) -> tuple[float, float]:
+        """(decision -> shot leaves the muzzle, its 1-sigma), seconds, for a command sent at t_ns."""
+        if self.trigger is None:
+            return self.latency.fire_delay_s(self._atype), self.latency.fire_jitter_s(self._atype)
+        ms, jitter_ms = self.trigger.at(t_ns, armed)
+        return ms / 1000.0 + self._lock_barrel_s, jitter_ms / 1000.0
 
     def evaluate(
         self,
@@ -187,8 +198,9 @@ class FireSolver:
         alpha_fn = getattr(attitude, "alpha_g", None)
         alpha = (np.asarray(alpha_fn(now_ns), dtype=np.float64).reshape(3) if callable(alpha_fn)
                  else np.zeros(3, dtype=np.float64))
-        delay_s = self.latency.fire_delay_s(self._atype)
-        jitter_s = self.latency.fire_jitter_s(self._atype)
+        self._armed = bool(armed)
+        delay_s, jitter_s = self._delay(now_ns, self._armed)
+        trigger_state = getattr(self.trigger, "state", None)
         fc = self.cfg.fire
         # How much the swing rate has changed lately: a hand that is changing its mind will change it again
         # (the uncertainty model in _geometry).
@@ -304,7 +316,8 @@ class FireSolver:
             extra={
                 "armed": bool(armed),
                 "actuator": self._atype,
-                "fire_delay_s": delay_s,
+                "fire_delay_s": (g["t_exit_ns"] - int(fire_ns)) * 1e-9,  # of the command this solution is for
+                "trigger_state": trigger_state,
                 "dist_m": g["dist"],
                 "clay_el_rad": g["clay_el"],
                 "track_sigma_rad": g["track_sigma"],
@@ -369,6 +382,9 @@ class FireSolver:
         extrapolated from now, but the swing uncertainty is that of a decision made then. Otherwise waiting
         always looks worse than it will be (the uncertainty grows with the square of the time ahead) and the
         shot goes early."""
+        if self.trigger is not None and int(decide_ns) != int(now_ns):
+            # a command sent later finds the lever further along (fire/trigger.py)
+            delay_s, jitter_s = self._delay(int(decide_ns), getattr(self, "_armed", True))
         t_exit_ns = int(decide_ns) + int(round(delay_s * 1e9))
         dt_exit = (t_exit_ns - now_ns) * 1e-9
         if alpha is None:

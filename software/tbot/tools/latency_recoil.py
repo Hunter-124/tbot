@@ -68,6 +68,8 @@ def collect(paths: list[Path]) -> tuple[list[float], int, int]:
             had = True
             if ev["type"] == "no_recoil":
                 missing += 1
+            elif ev.get("trigger_state") not in (None, "parked"):
+                continue  # the lever was not waiting at the pre-travel: not the delay being calibrated here
             elif ev.get("delay_ms") is not None and MIN_SANE_MS <= float(ev["delay_ms"]) <= MAX_SANE_MS:
                 delays.append(float(ev["delay_ms"]))
         sources += had
