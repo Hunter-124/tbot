@@ -180,6 +180,45 @@ class FireSolver:
         self._hold_gain = float(getattr(fc, "hold_min_gain", 0.0) or 0.0)
         self._hold_track = None
         self._hold_since_ns = 0
+        # a target must have been SEEN to travel across the world before it is shot at (fire.min_travel_deg)
+        self._min_travel = math.radians(float(getattr(fc, "min_travel_deg", 0.0) or 0.0))
+        self._born: dict[int, list] = {}  # track id -> [direction when first seen, farthest it has been from it]
+
+    def _note_only(self, tracker, now_ns: int) -> None:
+        """Keep the first-seen directions up to date on a frame without a target."""
+        class _None:
+            track_id = None
+        self._travel(tracker, _None, now_ns)
+
+    def _travel(self, tracker, track, now_ns: int) -> float | None:
+        """How far the target has been from where it was first seen, radians (None: this tracker does not list
+        its tracks). A clay crosses degrees of sky in a tenth of a second; a speck of scenery that the swinging
+        bore happens to pass over stays where it was born (2026-11-19, backyard: a tree-edge speck shot 110 ms
+        after it appeared had moved 0.4 deg; the clay hit that morning 11.6 deg in 600 ms)."""
+        tracks = getattr(tracker, "tracks", None)
+        if tracks is None:
+            return None
+        born = self._born
+        alive = set()
+        for t in tracks:
+            tid = t.track_id
+            alive.add(tid)
+            try:
+                d = np.asarray(tracker.predict_dir(t, now_ns), dtype=np.float64).reshape(3)
+            except Exception:  # noqa: BLE001 - a track without a state yet
+                continue
+            rec = born.get(tid)
+            if rec is None:
+                born[tid] = [d, 0.0]
+            else:
+                a = _angle_between(rec[0], d)
+                if a > rec[1]:
+                    rec[1] = a
+        if len(born) > len(alive):
+            for tid in [k for k in born if k not in alive]:
+                del born[tid]
+        rec = born.get(track.track_id)
+        return rec[1] if rec is not None else 0.0
 
     def _solve_range(self, track: Track) -> tuple[float, float]:
         """(range to solve at, its 1 sigma), metres. The tracker's own, except for a target whose apparent size
@@ -219,8 +258,11 @@ class FireSolver:
         except TypeError:  # a tracker without the bore-aware choice (test stand-ins)
             track = tracker.best(accept) if accept is not None else tracker.best()
         if track is None:
+            if self._min_travel > 0.0:
+                self._note_only(tracker, now_ns)
             reason = "no confirmed track" if armed else "no confirmed track (not armed)"
             return FireDecision(fire=False, t_ns=now_ns, reason=reason)
+        travel = self._travel(tracker, track, now_ns) if self._min_travel > 0.0 else None
 
         omega = np.asarray(attitude.omega_g(now_ns), dtype=np.float64).reshape(3)
         alpha_fn = getattr(attitude, "alpha_g", None)
@@ -253,12 +295,18 @@ class FireSolver:
             u = v / speed if speed > 1e-6 else np.array([1.0, 0.0, 0.0])
             Svv = np.asarray(track.S, dtype=np.float64)[3:6, 3:6]
             speed_hi = speed + k_sig * math.sqrt(max(float(u @ Svv @ u), 0.0))
+        age_ms = (now_ns - int(track.first_t_ns)) * 1e-6 if getattr(track, "first_t_ns", None) else float("inf")
         if track.hits < fc.min_track_hits:
             reason = "track young"
+        elif age_ms < float(getattr(fc, "min_track_age_ms", 0.0) or 0.0):
+            # too new for the scenery filter to have had its say (it needs detector.static_min_age_ms of history)
+            reason = f"track young ({age_ms:.0f} ms)"
         elif track.misses > int(getattr(fc, "max_target_misses", 1_000_000)):
             reason = f"target not seen for {track.misses} frames"
         elif speed_hi < float(fc.min_clay_speed_mps):
             reason = f"too slow for a clay ({speed:.1f} m/s)"
+        elif travel is not None and travel < self._min_travel:
+            reason = f"not seen moving yet ({math.degrees(travel):.1f} deg)"
         elif not (fc.min_range_m <= float(track.range_m)
                   <= (max(self._far_limit, fc.max_range_m) if self._far_assume > 0.0 else fc.max_range_m)):
             reason = "range out of window"

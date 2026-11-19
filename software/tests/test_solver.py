@@ -301,13 +301,13 @@ def test_incoming_clay_with_the_bore_on_it_fires(scene_cfg):
     assert fired is not None, sorted({d.reason for d in decisions})
     # There is no lead to wait for, so the solver fires as soon as the filter has settled enough for
     # P(hit) to clear the gate; before that the young track's own uncertainty holds the shot.
-    assert fired <= 20
+    assert fired <= 26  # ... and never before fire.min_track_age_ms (200 ms = 20 frames here)
     d = decisions[fired]
     # (it fires while the filter is still settling: the rate estimate is small, not yet zero)
     assert d.extra["clay_rate_rad_s"] < 0.05, "a radially incoming clay has no angular velocity"
     assert d.p_hit >= d.extra["bar"] >= cfg.fire.min_hit_probability_floor  # the bar of that frame (fire/policy.py)
     assert d.miss_rad < d.pattern_rad
-    assert all(x.reason.startswith("p_hit") for x in decisions[cfg.fire.min_track_hits:fired])
+    assert all(x.reason.startswith(("p_hit", "track young (")) for x in decisions[cfg.fire.min_track_hits:fired])
     mature = decisions[fired + 20]
     assert mature.p_hit > 0.97 and mature.miss_rad < 0.3 * mature.pattern_rad
     assert mature.sigma_rad < 0.4 * mature.pattern_rad  # the floor: what the steadiest hand still does
@@ -450,3 +450,21 @@ def test_a_target_that_reads_too_far_is_solved_at_the_assumed_range(scene_cfg):
     cfg.fire.far_range_assume_m = 0.0
     T.range_m = 70.0
     assert FireSolver(cfg, scene.shot, scene.mount, scene.latency)._solve_range(T) == (70.0, 7.0)
+
+
+def test_a_target_just_born_is_not_shot_at(scene_cfg):
+    """fire.min_track_age_ms: a track younger than this is refused whatever its P(hit) (a speck of scenery is a
+    firing solution until the scenery filter has had time to reject it); off, the same swing fires earlier."""
+    cfg, scene = scene_cfg
+    delay = scene.latency.fire_delay_s("servo")
+    rate, best_frame = 0.5, 12   # the best moment comes 120 ms after the target appears
+    az_i, el_i = scene.ideal_aim(_slow_crosser, T0 + best_frame * DT_NS, delay)
+    att = SwingAttitude(az_i - rate * (best_frame / FPS + delay), el_i, rate)
+    assert cfg.fire.min_track_age_ms >= 150.0  # as shipped
+    decisions = _run(cfg, scene, att, _slow_crosser, 60)
+    fired = _first_fire(decisions)
+    assert fired is None or fired * DT_NS >= cfg.fire.min_track_age_ms * 1e6
+    assert any(d.reason.startswith("track young (") for d in decisions)
+    cfg.fire.min_track_age_ms = 0.0
+    early = _first_fire(_run(cfg, scene, att, _slow_crosser, 60))
+    assert early is not None and (fired is None or early <= fired)

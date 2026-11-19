@@ -224,6 +224,15 @@ target_nearest_bore = true    # target = the moving confirmed track nearest the 
                               # ones (scenery) last. false = the track with the most hits (a tree speck, in trees: 2026-11-19)
 max_target_misses = 1         # never fire on a target missing from the last 2 frames: it is coasting on its prediction (it
                               # broke, went behind something, or the shooter swung off it: 2026-11-19 replay of 092601)
+min_track_age_ms = 200.0      # never fire at a target first seen less than this long ago: the scenery filter needs
+                              # detector.static_min_age_ms of history before it can call a speck scenery, and until then
+                              # a speck the swinging bore passes over is a firing solution. 2026-11-19 backyard: a
+                              # tree-edge speck shot 110 ms after it appeared, a ceiling shadow after 180 ms. Virtual
+                              # clays 95.2 -> 95.2 % (hits per shot 96.6 -> 98.0 %), quick shooter + dropouts 95.2 ->
+                              # 92.4 %; 250 ms costs 3 points, 300 ms 9. 0 = off
+min_travel_deg = 0.0          # a target must have been SEEN this far from where it first appeared before it is shot at
+                              # (fire/solver.py _travel). 0 = off: real swings are 10-30 deg/s, so even 1 deg costs
+                              # virtual clays 95.2 -> 93.1 %
 far_range_assume_m = 25.0     # a target whose SIZE reads beyond max_range_m is not refused: it is solved at this range,
 far_range_sigma_m = 9.0       # known this badly (the lead then only clears the bar when it hardly depends on the range: a
 far_range_limit_m = 120.0     # slow crossing, a going-away or incoming clay), unless it reads beyond this limit. A clay

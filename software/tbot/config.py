@@ -211,6 +211,8 @@ class FireConfig:
     min_clay_speed_sigmas: float = 0.0
     target_nearest_bore: bool = False
     max_target_misses: int = 1000000
+    min_travel_deg: float = 0.0
+    min_track_age_ms: float = 0.0
     far_range_assume_m: float = 0.0
     far_range_sigma_m: float = 9.0
     far_range_limit_m: float = 120.0
