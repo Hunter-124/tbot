@@ -50,7 +50,7 @@ class MeasureParams(ctypes.Structure):
     ]
 
 
-SCENERY_ABI = 1      # TBOT_SCENERY_ABI in _measure.c
+SCENERY_ABI = 3      # TBOT_SCENERY_ABI in _measure.c
 SCENERY_MAX_OLD = 4  # SCENERY_MAX_OLD (= clutter.COMPARE_FRAMES)
 SCENERY_LISTED = 24  # SCENERY_LISTED (= clutter.STATIC_LISTED)
 RAYS_GIVEN, RAYS_FISHEYE, RAYS_PINHOLE, RAYS_PINHOLE_IDEAL = -1, 0, 1, 2
@@ -76,6 +76,12 @@ class SceneryParams(ctypes.Structure):
         ("size_tol", ctypes.c_double),
         ("protect", _ptr), ("n_protect", ctypes.c_int32), ("protect_cos", ctypes.c_double),
         ("focus", _ptr), ("focus_cos", _ptr), ("n_focus", ctypes.c_int32), ("others_max", ctypes.c_int32),
+        ("drift_on", ctypes.c_int32), ("ifov", ctypes.c_double), ("t_now", ctypes.c_int64),
+        ("old_t", ctypes.c_int64 * SCENERY_MAX_OLD),
+        ("drift_bin", ctypes.c_double), ("drift_max", ctypes.c_double), ("drift_peak_ratio", ctypes.c_double),
+        ("drift_gain", ctypes.c_double), ("drift_box", ctypes.c_int32), ("drift_min_votes", ctypes.c_int32),
+        ("drift_x", ctypes.c_double), ("drift_y", ctypes.c_double), ("drift_updates", ctypes.c_int32),
+        ("drift_votes", ctypes.c_int32), ("drift_grid", _ptr), ("drift_ii", _ptr), ("drift_side", ctypes.c_int32),
         ("dirs", _ptr), ("keep", _ptr), ("flags", _ptr), ("static_px", _ptr),
         ("n_keep", ctypes.c_int32), ("n_static", ctypes.c_int32), ("n_new", ctypes.c_int32),
         ("n_focus_kept", ctypes.c_int32), ("n_listed", ctypes.c_int32),

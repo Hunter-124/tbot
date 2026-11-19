@@ -57,11 +57,16 @@ def _same(nat, ref, a, b, where):
     assert a.tolist() == b.tolist(), where
     assert nat.n_static == ref.n_static and nat.n_new == ref.n_new and nat.n_focus == ref.n_focus, where
     assert nat.static_px == ref.static_px, where
+    assert nat.drift == ref.drift and nat.drift_updates == ref.drift_updates, where
+    assert nat.drift_votes == ref.drift_votes, where
     assert nat.native_used and not ref.native_used, where
 
 
 @pytest.mark.parametrize("cam_i", range(5))
-def test_swinging_through_scenery_gives_the_same_candidates(cam_i):
+@pytest.mark.parametrize("bias_dps", [0.0, 3.0])
+def test_swinging_through_scenery_gives_the_same_candidates(cam_i, bias_dps):
+    """bias_dps: the attitude the filter is given drifts at this rate (a gyro bias, about the camera's y axis),
+    so fixed scenery slides across its world and only the drift estimate lets it be called scenery."""
     cfg = load_config()
     cam = _cams(cfg)[cam_i]
     mount = MountModel.from_config(cfg, {"rpy_deg": [0.4, -1.9, -1.7]})
@@ -73,10 +78,16 @@ def test_swinging_through_scenery_gives_the_same_candidates(cam_i):
     scen_cam /= np.linalg.norm(scen_cam, axis=1, keepdims=True)
     scen_w = scen_cam @ (_rot(0, 0, 0) @ R_gc).T   # camera -> world at the start
     checked = static_seen = 0
+    bias_cam = np.array([0.0, math.radians(bias_dps), 0.0])   # rad/s about the camera's own axes
     for k in range(160):
         t = 1_000_000_000 + k * 10_000_000
         R_wg = _rot(0.004 * k + 0.002 * math.sin(k / 7), 0.001 * k, 0.0005 * math.sin(k / 5))
         R_wc = R_wg @ R_gc
+        # what the IMU says: the true attitude times the rotation the bias has added by now (camera frame)
+        ang = bias_cam * (k * 0.010)
+        th = float(np.linalg.norm(ang))
+        E = np.eye(3) if th == 0 else _axis_angle(ang / th, th)
+        R_wg_imu = R_wc @ E @ R_gc.T
         cam_dirs = scen_w @ R_wc   # world -> this camera (rows)
         ok = cam_dirs[:, 2] > 0.2
         px = np.asarray(cam.ray_to_pixel(cam_dirs[ok]))
@@ -104,13 +115,24 @@ def test_swinging_through_scenery_gives_the_same_candidates(cam_i):
             if k % 8 == 1:
                 kw["focus_radius_rad"] = [40 * nat.ifov, 5 * nat.ifov]
         for filt in (nat, ref):
-            filt.begin(t, R_wg, **kw)
+            filt.begin(t, R_wg_imu, **kw)
         args = (uv, areas, w, h) if k % 13 else (uv,)   # now and then without sizes
         a, b = nat.filter(*args), ref.filter(*args)
         _same(nat, ref, a, b, f"frame {k}")
         checked += n
         static_seen += nat.n_static
     assert checked > 3000 and static_seen > 1000   # the scenery was there and was found
+    if bias_dps:
+        # a turn about the camera's y axis slides the picture along x, ~bias / ifov px/s (not exactly: the error
+        # the bias has built up turns with the gun, which adds its own slide while the gun swings)
+        expect = math.radians(bias_dps) / nat.ifov
+        assert nat.drift_updates > 50
+        assert abs(abs(nat.drift[0]) - expect) < 0.3 * expect and abs(nat.drift[1]) < 0.2 * expect, nat.drift
+
+
+def _axis_angle(a, th):
+    K = np.array([[0, -a[2], a[1]], [a[2], 0, -a[0]], [-a[1], a[0], 0]])
+    return np.eye(3) + math.sin(th) * K + (1 - math.cos(th)) * (K @ K)
 
 
 def test_reset_and_a_clock_going_back():
@@ -136,33 +158,39 @@ def _presses():
     return sorted(d for d in PRESSES.iterdir() if (d / "frames.bin").is_file() and (d / "imu.csv").is_file())
 
 
-@pytest.mark.parametrize("press", _presses(), ids=lambda p: p.name)
-def test_range_presses_give_the_same_scenery_and_detections(press):
-    """The whole pipeline over a recorded press with its IMU: the filter sees real clutter and attitude."""
+@pytest.mark.skipif(not _presses(), reason="range presses not present")
+def test_range_presses_give_the_same_scenery_and_detections():
+    """The whole pipeline over the recorded presses with their IMU and the calibration of the day: the filter
+    sees real clutter, a real gyro bias and the attitude the gun had."""
     from tbot.app.run import Pipeline
     from tbot.camera.replay import ReplaySource
     from tbot.hw.gpio import open_gpio
+    from tbot.tools.rescore import _calibration
 
-    runs = []
-    for native in ("true", "false"):
-        # detector.native also switches the measurement kernel: both runs then differ only by rounding there
-        cfg = load_config(sets=["gpio.backend=sim", "record.mode=off", "stream.enabled=false",
-                                f"detector.native={native}"])
-        calib = load_calibration(cfg)
-        gpio = open_gpio(cfg)
-        pipe = Pipeline(cfg, calib, ReplaySource(str(press), realtime=False), gpio=gpio)
-        gpio.inject(int(cfg.arming.pin), 0 if cfg.arming.active_low else 1)
-        out = []
-        used = 0
-        while (tele := pipe.step()) is not None:
-            c = pipe.clutter
-            out.append((c.n_static, c.n_new, c.n_focus, tuple(map(tuple, c.static_px)),
-                        tuple((round(d["u"], 2), round(d["v"], 2)) for d in tele.get("detections", []))))
-            used += bool(c is not None and c.native_used)
-        pipe.close()
-        runs.append((out, used))
-    (a, used_a), (b, used_b) = runs
-    assert len(a) == len(b) and used_a > 0 and used_b == 0
-    assert sum(x[0] for x in a) > 0, "no scenery in this press"
-    for k, (x, y) in enumerate(zip(a, b)):
-        assert x == y, f"{press.name} frame {k}"
+    static = updates = 0
+    for press in _presses():
+        runs = []
+        for native in ("true", "false"):
+            # detector.native also switches the measurement kernel; positions are compared to 0.01 px
+            cfg = load_config(sets=["gpio.backend=sim", "record.mode=off", "stream.enabled=false",
+                                    f"detector.native={native}"])
+            src = ReplaySource(str(press), realtime=False)
+            gpio = open_gpio(cfg)
+            pipe = Pipeline(cfg, _calibration(src.meta, cfg), src, gpio=gpio)
+            gpio.inject(int(cfg.arming.pin), 0 if cfg.arming.active_low else 1)
+            out = []
+            used = 0
+            while pipe.step() is not None:
+                c = pipe.clutter
+                out.append((c.n_static, c.n_new, c.n_focus, tuple(map(tuple, c.static_px)), c.drift, c.drift_votes,
+                            tuple((round(d.u, 2), round(d.v, 2)) for d in pipe.detections)))
+                used += bool(c.native_used)
+            pipe.close()
+            runs.append((out, used, c.drift_updates))
+        (a, used_a, upd), (b, used_b, _) = runs
+        assert len(a) == len(b) and used_a > 0 and used_b == 0
+        for k, (x, y) in enumerate(zip(a, b)):
+            assert x == y, f"{press.name} frame {k}"
+        static += sum(x[0] for x in a)
+        updates += upd
+    assert static > 1000 and updates > 100   # the scenery and its drift were there

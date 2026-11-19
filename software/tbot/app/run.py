@@ -731,6 +731,9 @@ class Pipeline:
                       round(float(d.snr), 1), round(float(d.contrast), 1), *d.bbox, float(d.area_px)]
                      for d in self.detections],
             "static": self.clutter.static_px if self.detector.candidate_filter is not None else None,
+            # how fast fixed scenery slides in the IMU's world (camera x / y, deg/s): an uncorrected gyro bias
+            "scenery_drift_dps": ([round(math.degrees(v * self.clutter.ifov), 3) for v in self.clutter.drift]
+                                  if self.clutter is not None and self.clutter.drift_updates else None),
             "R_wg": [float(x) for x in R_wg.ravel()],
             "tracks": [
                 {
@@ -853,6 +856,9 @@ class Pipeline:
             hstr += f"  lost {tele['lost']}"
         if tele.get("cam_restarts"):
             hstr += f"  CAMERA RESTARTS {tele['cam_restarts']}"
+        drift = tele.get("scenery_drift_dps")
+        if drift and math.hypot(*drift) >= 1.0:   # the gyro bias the scenery shows (StaticFilter.drift)
+            hstr += f"  gyro drift {math.hypot(*drift):.1f} dps"
         line = (
             f"[{self.frames:6d}] {tele['fps']:5.1f} fps  age {tele['age_ms']:5.1f} ms  "
             f"cpu {tele['stage_ms']['total']:5.1f} ms  det {tele['n_detections']}  trk {len(tele['tracks'])}  "

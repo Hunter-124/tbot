@@ -548,7 +548,7 @@ TBOT_API int tbot_measure(const tbot_measure_params *p, const int32_t *lids, int
  * products are summed left to right where NumPy may use BLAS, so a distance can differ from it in the last
  * bit (only a candidate exactly on a tolerance edge could be judged differently). */
 
-#define TBOT_SCENERY_ABI 1
+#define TBOT_SCENERY_ABI 3
 #define SCENERY_MAX_OLD 4    /* clutter.COMPARE_FRAMES */
 #define SCENERY_LISTED 24    /* clutter.STATIC_LISTED */
 
@@ -585,6 +585,19 @@ typedef struct {
     const double *focus_cos;    /* (n_focus) */
     int32_t n_focus;
     int32_t others_max;
+    /* scenery drift (StaticFilter._update_drift): estimated here from this frame's votes and applied */
+    int32_t drift_on;
+    double ifov;                /* rad per px at the centre */
+    int64_t t_now;
+    int64_t old_t[SCENERY_MAX_OLD];
+    double drift_bin, drift_max, drift_peak_ratio, drift_gain;
+    int32_t drift_box, drift_min_votes;
+    double drift_x, drift_y;    /* in/out: px/s along the camera x / y */
+    int32_t drift_updates;      /* in/out */
+    int32_t drift_votes;        /* out: votes in this frame's peak, 0 = no estimate from this frame */
+    int32_t *drift_grid;        /* scratch, side * side with side = 2 * round(drift_max / drift_bin) + 1 */
+    int32_t *drift_ii;          /* scratch, (side + 1)^2 */
+    int32_t drift_side;
     /* outputs */
     double *dirs;               /* (n,3) world directions */
     intptr_t *keep;             /* (n) candidates to keep, best first: keep[0..n_keep) */
@@ -672,6 +685,93 @@ static void merge_sort(intptr_t *idx, intptr_t *tmp, int32_t n, const uint8_t *f
     }
 }
 
+/* StaticFilter._update_drift: vote (c - d) / age of every pair of this frame and an old one on a grid of
+ * drift_bin px/s, take the densest (2 box + 1)^2 window, fold its centroid into drift_x / drift_y.
+ * Returns -1 when out of memory. */
+static int update_drift(tbot_scenery_params *p) {
+    const double *R = p->R_now;
+    double X0 = R[0], X1 = R[3], X2 = R[6], Y0 = R[1], Y1 = R[4], Y2 = R[7];
+    int32_t nb = (int32_t)nearbyint(p->drift_max / p->drift_bin);
+    int32_t side = 2 * nb + 1;
+    int64_t total = 0;
+    p->drift_votes = 0;
+    if (side != p->drift_side || !p->drift_grid || !p->drift_ii) return -1;
+    int32_t *grid = p->drift_grid;
+    memset(grid, 0, (size_t)side * side * sizeof(int32_t));
+    double *cxy = (double *)malloc((size_t)p->n * 2 * sizeof(double));
+    if (!cxy) return -1;
+    for (int32_t i = 0; i < p->n; i++) {
+        const double *c = p->dirs + 3 * (size_t)i;
+        cxy[2 * i] = c[0] * X0 + c[1] * X1 + c[2] * X2;
+        cxy[2 * i + 1] = c[0] * Y0 + c[1] * Y1 + c[2] * Y2;
+    }
+    for (int f = 0; f < p->n_old; f++) {
+        double inv = 1.0 / ((double)(p->t_now - p->old_t[f]) * 1e-9 * p->ifov);
+        const double *D = p->old_dirs[f];
+        for (int32_t m = 0; m < p->old_m[f]; m++) {
+            const double *d = D + 3 * (size_t)m;
+            double dx = d[0] * X0 + d[1] * X1 + d[2] * X2;
+            double dy = d[0] * Y0 + d[1] * Y1 + d[2] * Y2;
+            for (int32_t i = 0; i < p->n; i++) {
+                double rx = (cxy[2 * i] - dx) * inv, ry = (cxy[2 * i + 1] - dy) * inv;
+                if (!(fabs(rx) < p->drift_max && fabs(ry) < p->drift_max)) continue;
+                int64_t ix = (int64_t)floor(rx / p->drift_bin + 0.5) + nb;
+                int64_t iy = (int64_t)floor(ry / p->drift_bin + 0.5) + nb;
+                grid[iy * side + ix]++;
+                total++;
+            }
+        }
+    }
+    free(cxy);
+    if (total < p->drift_min_votes) return 0;
+    int32_t b = p->drift_box, k = 2 * b + 1, nw = side - 2 * b, s1 = side + 1;
+    int64_t peak = -1;
+    int32_t wy = 0, wx = 0;
+    int32_t *ii = p->drift_ii;   /* integral image of the grid */
+    memset(ii, 0, (size_t)s1 * sizeof(int32_t));
+    for (int32_t y = 0; y < side; y++) {
+        ii[(y + 1) * s1] = 0;
+        int32_t row = 0;
+        for (int32_t x = 0; x < side; x++) {
+            row += grid[y * side + x];
+            ii[(y + 1) * s1 + x + 1] = ii[y * s1 + x + 1] + row;
+        }
+    }
+    for (int32_t y = 0; y < nw; y++) {
+        for (int32_t x = 0; x < nw; x++) {
+            int64_t sum = (int64_t)ii[(y + k) * s1 + x + k] - ii[y * s1 + x + k] - ii[(y + k) * s1 + x] + ii[y * s1 + x];
+            if (sum > peak) {
+                peak = sum;
+                wy = y;
+                wx = x;
+            }
+        }
+    }
+    double even = (double)(total * k * k) / (double)(side * side);
+    if (peak < p->drift_min_votes || (double)peak < p->drift_peak_ratio * even) return 0;
+    double sy = 0.0, sx = 0.0;
+    for (int32_t yy = 0; yy < k; yy++) {
+        for (int32_t xx = 0; xx < k; xx++) {
+            double v = (double)grid[(wy + yy) * side + (wx + xx)];
+            sy += v * (double)(yy - b);
+            sx += v * (double)(xx - b);
+        }
+    }
+    double my = sy / (double)peak + (double)(wy + b - nb);
+    double mx = sx / (double)peak + (double)(wx + b - nb);
+    double ux = mx * p->drift_bin, uy = my * p->drift_bin;
+    if (p->drift_updates == 0) {
+        p->drift_x = ux;
+        p->drift_y = uy;
+    } else {
+        p->drift_x = p->drift_x + p->drift_gain * (ux - p->drift_x);
+        p->drift_y = p->drift_y + p->drift_gain * (uy - p->drift_y);
+    }
+    p->drift_updates++;
+    p->drift_votes = (int32_t)peak;
+    return 0;
+}
+
 TBOT_API int tbot_scenery_abi(void) { return TBOT_SCENERY_ABI; }
 
 TBOT_API int tbot_scenery_params_size(void) { return (int)sizeof(tbot_scenery_params); }
@@ -702,6 +802,36 @@ TBOT_API int tbot_scenery(tbot_scenery_params *p) {
     }
 
     int sized = p->widths && p->heights;
+    double *shifted = NULL;   /* the old directions moved by the drift, when there is one */
+    const double *odirs[SCENERY_MAX_OLD];
+    for (int f = 0; f < p->n_old; f++) odirs[f] = p->old_dirs[f];
+    p->drift_votes = 0;
+    if (p->n_old > 0 && p->drift_on) {
+        if (update_drift(p) != 0) return -1;
+        double ux = p->drift_x, uy = p->drift_y;
+        if (ux != 0.0 || uy != 0.0) {
+            size_t total = 0;
+            for (int f = 0; f < p->n_old; f++) total += (size_t)p->old_m[f];
+            shifted = (double *)malloc(total * 3 * sizeof(double));
+            if (!shifted) return -1;
+            double X[3] = {R[0], R[3], R[6]}, Y[3] = {R[1], R[4], R[7]};
+            double *w = shifted;
+            for (int f = 0; f < p->n_old; f++) {
+                double a = (double)(p->t_now - p->old_t[f]) * 1e-9 * p->ifov;
+                double sx = ux * a, sy = uy * a;
+                double s0 = sx * X[0] + sy * Y[0], s1 = sx * X[1] + sy * Y[1], s2 = sx * X[2] + sy * Y[2];
+                const double *D = p->old_dirs[f];
+                odirs[f] = w;
+                for (int32_t m = 0; m < p->old_m[f]; m++, w += 3) {
+                    double d0 = D[3 * m] + s0, d1 = D[3 * m + 1] + s1, d2 = D[3 * m + 2] + s2;
+                    double nrm = sqrt(d0 * d0 + d1 * d1 + d2 * d2);
+                    w[0] = d0 / nrm;
+                    w[1] = d1 / nrm;
+                    w[2] = d2 / nrm;
+                }
+            }
+        }
+    }
     if (p->n_old > 0) {
         double g[SCENERY_MAX_OLD][3], gg[SCENERY_MAX_OLD], tol[SCENERY_MAX_OLD];
         double zx = R[2], zy = R[5], zz = R[8];   /* optical axis in the world */
@@ -731,7 +861,7 @@ TBOT_API int tbot_scenery(tbot_scenery_params *p) {
                 double cg = dot3(c, g[f]), ggf = gg[f] > 1e-12 ? gg[f] : 1e-12;
                 double lim = tol[f] + st;
                 lim *= lim;
-                const double *D = p->old_dirs[f];
+                const double *D = odirs[f];
                 for (int32_t m = 0; m < p->old_m[f]; m++) {
                     const double *dd = D + 3 * (size_t)m;
                     double e2 = 2.0 - 2.0 * dot3(c, dd);   /* |c - d|^2 for unit vectors */
@@ -757,6 +887,7 @@ TBOT_API int tbot_scenery(tbot_scenery_params *p) {
     } else {
         for (int32_t i = 0; i < n; i++) p->flags[i] = 2;   /* no history: nothing is known yet */
     }
+    free(shifted);
 
     if (p->n_protect > 0) {
         for (int32_t i = 0; i < n; i++) {

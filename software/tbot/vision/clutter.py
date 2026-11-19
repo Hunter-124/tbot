@@ -21,9 +21,19 @@ segment trailing each old candidate, not a circle around it: a clay swung with m
 opposite way, and a circle wide enough for a fence at 6 m would swallow a quarter of a cluttered frame.
 Compared against a few frames `static_min_age_ms` .. `static_max_age_ms` old.
 
+Drift (`static_drift`). "Fixed in the world" is the IMU's world, and a gyro bias turns that world slowly: on
+the range presses of 2026-11-17 by ~2.9 deg/s (measured against the optical flow of the tree line, the same
+on every press), which slides fixed scenery 10-25 px across the age window, far outside any tolerance. The
+filter measures that slide itself: every pair of a candidate now and one in an old frame votes for
+(c - d) / age, in pixels a second along the camera's own x / y (the frame a gyro bias lives in); scenery
+votes the same rate, clays and chance pairings scatter. A clear peak is folded into `drift`, and the old
+candidates are moved by drift x age before they are compared. On pasted clays in the range-press trees
+(108 clays): clay found in 81 % of the frames it was in view (63 % without the drift, 82 % with no filter),
+called scenery in 2 % (18 %), scenery dropped 5.9 a frame (3.1).
+
 Limits, by design:
   * a clay with almost no angular motion (dead straight away or straight in, below ~tol / min_age =
-    1.7 deg/s by default), or one drifting slowly against the swing, looks exactly like scenery here.
+    0.6 deg/s by default), or one drifting slowly against the swing, looks exactly like scenery here.
     `protect` keeps candidates near a track that has already been seen crossing the sky, so a clay that
     slows down is not lost; one that never moved across the sky is.
   * scenery nearer than static_min_range_m shifts more than allowed and passes as a slow mover (the tracker's
@@ -48,6 +58,15 @@ COMPARE_FRAMES = 4    # old frames a candidate is compared with, spread over the
 TURN_TOL = 0.01       # extra tolerance per radian turned (focal length +-0.3 %, IMU/camera timing)
 STATIC_LISTED = 24    # dropped candidates reported per frame (telemetry / overlay)
 SIZE_TOL = 0.15       # extra matching tolerance as a fraction of a candidate's own extent
+# Scenery drift (see StaticFilter.drift): the rate, in pixels a second along the camera's own x / y, at which
+# the IMU's world lets fixed scenery slide - what a gyro bias does (2.9 deg/s = ~100 px/s on the 2026-11-17
+# range presses). Every candidate pair of this frame and an old one votes for (c - d) / age on a grid.
+DRIFT_BIN_PXS = 4.0     # grid step, px/s (0.5 px at the oldest comparison frame: well inside static_tol_px)
+DRIFT_MAX_PXS = 320.0   # votes beyond this are not drift (9 deg/s with the 12 mm lens; the gyro is not that bad)
+DRIFT_BOX = 2           # the peak is the most votes in a (2 * DRIFT_BOX + 1)^2 window of cells
+DRIFT_MIN_VOTES = 8     # a frame's estimate is used only with at least this many votes in its peak ...
+DRIFT_PEAK_RATIO = 4.0  # ... and this many times what a window gets when the same votes fall evenly
+DRIFT_GAIN = 0.25       # each accepted frame moves the estimate this share of the way (the first one: all of it)
 
 
 class StaticFilter:
@@ -82,10 +101,16 @@ class StaticFilter:
         self._flags = np.zeros(0, np.uint8)
         self._spx = np.zeros((_native.SCENERY_LISTED, 2), np.float64)
         self.native_used = False   # last frame went through the C kernel
+        self.drift = (0.0, 0.0)    # scenery drift in the IMU's world, px/s along the camera x / y (see filter)
+        self.drift_updates = 0
+        self.drift_votes = 0       # last frame: votes in the peak (0 = no estimate from this frame)
 
     def reset(self) -> None:
         self._hist.clear()
         self._R_wc = None
+        self.drift = (0.0, 0.0)
+        self.drift_updates = 0
+        self.drift_votes = 0
         self.static_px = []
         self.n_static = self.n_new = 0
 
@@ -186,6 +211,25 @@ class StaticFilter:
         dirs = rays @ R_now.T
         static = None
         new = None  # no history yet (start-up, after a reset): nothing is known
+        self.drift_votes = 0
+        if old and bool(getattr(det, "static_drift", True)):
+            self._update_drift(dirs, old, R_now, t)
+            ux, uy = self.drift
+            if ux or uy:
+                # the old directions moved to where the drift has taken them by now
+                X, Y = R_now[:, 0].tolist(), R_now[:, 1].tolist()
+                shifted = []
+                for h in old:
+                    a = (t - h[0]) * 1e-9 * self.ifov
+                    sx, sy = ux * a, uy * a
+                    d = h[2] + np.array([sx * X[0] + sy * Y[0], sx * X[1] + sy * Y[1], sx * X[2] + sy * Y[2]])
+                    d /= np.sqrt(d[:, 0] * d[:, 0] + d[:, 1] * d[:, 1] + d[:, 2] * d[:, 2])[:, None]
+                    shifted.append((h[0], h[1], d))
+                old_m = shifted
+            else:
+                old_m = old
+        else:
+            old_m = old
         if old:
             tol0 = float(det.static_tol_px) * self.ifov
             lever = float(det.static_lever_m)
@@ -193,7 +237,7 @@ class StaticFilter:
             r = R_now.ravel().tolist()
             zx, zy, zz = r[2], r[5], r[8]  # optical axis in the world
             tols, gs, counts = [], [], []
-            for _t, R_f, d_f in old:
+            for _t, R_f, d_f in old_m:
                 f = R_f.ravel().tolist()
                 tr = sum(a * b for a, b in zip(f, r))  # trace(R_f^T R_now)
                 turn = math.acos(min(1.0, max(-1.0, 0.5 * (tr - 1.0))))
@@ -203,7 +247,7 @@ class StaticFilter:
                 gs.append((-(dx - along * zx), -(dy - along * zy), -(dz - along * zz)))
                 tols.append(tol0 + TURN_TOL * turn)
                 counts.append(len(d_f))
-            D = old[0][2] if len(old) == 1 else np.concatenate([h[2] for h in old])   # (M, 3)
+            D = old_m[0][2] if len(old_m) == 1 else np.concatenate([h[2] for h in old_m])   # (M, 3)
             G = np.repeat(np.array(gs, dtype=np.float64), counts, axis=0)               # (M, 3)
             tol = np.repeat(np.array(tols, dtype=np.float64), counts)                   # (M,)
             gg = np.einsum("ij,ij->i", G, G)
@@ -264,6 +308,57 @@ class StaticFilter:
             keep = np.concatenate((keep[near], others))
         return keep
 
+    def _update_drift(self, dirs, old, R_now, t) -> None:
+        """Vote for the rate at which scenery slides in the IMU's world (camera x / y, px/s) and fold a clear
+        winner into self.drift. Fixed scenery seen now and in an old frame gives (c - d) / age = the drift for
+        every pair it forms; a clay, noise or a pairing of two different specks gives a vote anywhere."""
+        # products written out component by component, in the order _measure.c sums them (a matmul may not)
+        X, Y = R_now[:, 0].tolist(), R_now[:, 1].tolist()
+        cx = dirs[:, 0] * X[0] + dirs[:, 1] * X[1] + dirs[:, 2] * X[2]
+        cy = dirs[:, 0] * Y[0] + dirs[:, 1] * Y[1] + dirs[:, 2] * Y[2]
+        nb = int(round(DRIFT_MAX_PXS / DRIFT_BIN_PXS))
+        side = 2 * nb + 1
+        grid = np.zeros(side * side, np.int64)
+        total = 0
+        for h in old:
+            inv = 1.0 / ((t - h[0]) * 1e-9 * self.ifov)
+            D = h[2]
+            dx = D[:, 0] * X[0] + D[:, 1] * X[1] + D[:, 2] * X[2]
+            dy = D[:, 0] * Y[0] + D[:, 1] * Y[1] + D[:, 2] * Y[2]
+            rx = (cx[:, None] - dx[None, :]) * inv
+            ry = (cy[:, None] - dy[None, :]) * inv
+            ok = (np.abs(rx) < DRIFT_MAX_PXS) & (np.abs(ry) < DRIFT_MAX_PXS)
+            ix = np.floor(rx[ok] / DRIFT_BIN_PXS + 0.5).astype(np.int64) + nb
+            iy = np.floor(ry[ok] / DRIFT_BIN_PXS + 0.5).astype(np.int64) + nb
+            np.add.at(grid, iy * side + ix, 1)
+            total += int(ok.sum())
+        if total < DRIFT_MIN_VOTES:
+            return
+        g = grid.reshape(side, side)
+        b = DRIFT_BOX
+        c = np.zeros((side + 1, side + 1), np.int64)
+        c[1:, 1:] = g.cumsum(0).cumsum(1)
+        k = 2 * b + 1
+        win = c[k:, k:] - c[:-k, k:] - c[k:, :-k] + c[:-k, :-k]   # window sums, (side - 2b)^2
+        j = int(np.argmax(win))
+        peak = int(win.flat[j])
+        even = total * k * k / float(side * side)
+        if peak < DRIFT_MIN_VOTES or peak < DRIFT_PEAK_RATIO * even:
+            return
+        wy, wx = divmod(j, win.shape[1])
+        sub = g[wy:wy + k, wx:wx + k]
+        offs = (np.arange(k) - b).astype(np.float64)
+        my = float((sub.sum(axis=1) * offs).sum()) / peak + (wy + b - nb)
+        mx = float((sub.sum(axis=0) * offs).sum()) / peak + (wx + b - nb)
+        ux, uy = mx * DRIFT_BIN_PXS, my * DRIFT_BIN_PXS
+        if self.drift_updates == 0:
+            self.drift = (ux, uy)
+        else:
+            dx, dy = self.drift
+            self.drift = (dx + DRIFT_GAIN * (ux - dx), dy + DRIFT_GAIN * (uy - dy))
+        self.drift_updates += 1
+        self.drift_votes = peak
+
     # ------------------------------------------------------------------ native (tbot/vision/_measure.c)
     def _native_params(self) -> _native.SceneryParams:
         """The per-camera part of the kernel's parameters (once)."""
@@ -292,6 +387,14 @@ class StaticFilter:
         for i, v in enumerate(self._view):
             p.view[i] = v
         p.static_px = self._spx.ctypes.data
+        p.ifov = self.ifov
+        p.drift_bin, p.drift_max, p.drift_peak_ratio, p.drift_gain = (DRIFT_BIN_PXS, DRIFT_MAX_PXS, DRIFT_PEAK_RATIO,
+                                                                       DRIFT_GAIN)
+        p.drift_box, p.drift_min_votes = DRIFT_BOX, DRIFT_MIN_VOTES
+        side = 2 * int(round(DRIFT_MAX_PXS / DRIFT_BIN_PXS)) + 1
+        self._drift_scratch = (np.zeros(side * side, np.int32), np.zeros((side + 1) * (side + 1), np.int32))
+        p.drift_grid, p.drift_ii = self._drift_scratch[0].ctypes.data, self._drift_scratch[1].ctypes.data
+        p.drift_side = side
         return p
 
     @staticmethod
@@ -321,8 +424,13 @@ class StaticFilter:
         p.uv = uv.ctypes.data
         p.R_now = R_now.ctypes.data
         p.n_old = len(old)
+        p.t_now = self._t_ns
+        p.drift_on = 1 if bool(getattr(det, "static_drift", True)) else 0
+        p.drift_x, p.drift_y = self.drift
+        p.drift_updates = self.drift_updates
         for i, h in enumerate(old):
             # entries the native path made carry their arrays' addresses (each .ctypes costs a few us)
+            p.old_t[i] = h[0]
             p.old_m[i] = len(h[2])
             p.old_R[i], p.old_dirs[i] = (h[3], h[4]) if len(h) > 4 else (h[1].ctypes.data, h[2].ctypes.data)
         p.tol0 = float(det.static_tol_px) * self.ifov
@@ -358,6 +466,9 @@ class StaticFilter:
         if rc != 0:
             return None
         self._hist.append((self._t_ns, R_now, dirs, p.R_now, d_addr))
+        self.drift = (p.drift_x, p.drift_y)
+        self.drift_updates = int(p.drift_updates)
+        self.drift_votes = int(p.drift_votes)
         self.n_static = int(p.n_static)
         self.n_new = int(p.n_new)
         self.n_focus = int(p.n_focus_kept)

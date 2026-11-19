@@ -678,3 +678,52 @@ On the gun (Pi `config/local.toml`, `calib/`), all bench, gun unloaded:
   `gun.lock_time_ms` on top, so the lock time was counted twice (6 ms late). It now writes
   `cmd_to_break_ms = cmd_to_bang_ms - gun.lock_time_ms` and keeps `cmd_to_bang_ms` beside it. Today's file was
   corrected by hand the same way before the fix.
+
+## Scenery filter: in C, and it now measures the gyro drift (2026-11-18, day)
+
+Checked against the nine range presses of 2026-11-17, replayed with the calibration they were recorded with
+(`tbot rescore` does the same; the laptop's own `calib/` is empty, so a plain replay has the wrong camera).
+
+**Why it dropped so little in the trees.** Optical flow of the tree line (corners tracked between
+consecutive frames, 660 pairs, every press) against the attitude: axes and scale are right (flow = 1.00 x
+predicted on the clean presses), but every frame pair carries the same error, **~2.9 deg/s** (2.5 along the
+camera's x, 1.4 along y, 0.5-1.2 deg/s spread), at any swing rate: an uncorrected gyro bias. A shift of the
+IMU timing by +-10 ms or a gyro scale of 0.6-1.1 changes nothing. Over the filter's 50-250 ms window that bias
+slides fixed scenery 5-25 px; the tolerance was 3 px, so leaf gaps and branch tips passed as movers.
+`attitude.auto_bias` cannot help on a held gun (it learns only at rest) and a press replay starts from zero.
+The bias also tilts the speed gate, but not the lead: the clay and the bore are both seen in the same turning
+world.
+
+**What changed** (`tbot/vision/clutter.py`, `_measure.c`):
+- `detector.static_drift` (on): the filter estimates the slide itself. Every pair of a candidate now and one
+  in an old frame votes for (c - d) / age on a 4 px/s grid along the camera's x / y; scenery agrees, clays
+  and chance pairings scatter; a clear peak (8+ votes, 4x an even spread) is folded into the estimate (gain
+  0.25) and the old candidates are moved by drift x age before matching. On the presses it settles at
+  ~2.9 deg/s within a second of a cluttered view.
+- `static_min_age_ms` 50 -> **100**, `static_tol_px` 3 -> **2**: with the drift gone the match can be tight, and
+  the longer baseline separates slow clays (scenery now means under ~0.6 deg/s against the world, was 1.7).
+- Telemetry `scenery_drift_dps` per frame, and `gyro drift N dps` on the status line from 1 deg/s.
+- The whole per-frame pass runs in C (`tbot_scenery`, same library as the measurement kernel; Python kept as
+  the reference and fallback, `detector.native = false` / `TBOT_NATIVE=0`). Same decisions, counts, order
+  and drift estimate as the Python on random swings through scenery (five camera models, with and without a
+  simulated 3 deg/s bias) and through the whole pipeline on all nine presses (`tests/test_native_scenery.py`).
+  Laptop, presses: 1.43 ms (Python, with the drift) -> **0.25 ms**; the Python pass before today was 0.54.
+  Pi 3B: not measured yet (the Pi was off the network); expect ~1 ms against the 2.3 ms of the Python.
+
+**Measured** (pasted-clay bench: 108 virtual clays, 6-14 px, dark and light, 3-50 deg/s across the IMU's
+world, drawn into the real press frames and run through the real detector, filter and tracker):
+
+| | clay found (in-view frames) | clay called scenery | other detections / frame | scenery dropped / frame |
+|---|---|---|---|---|
+| filter as it was | 62.6 % | 18.4 % | 3.54 | 3.1 |
+| **now** | **80.8 %** | **2.2 %** | **3.31** | **5.9** |
+| filter off | 81.9 % | 0 | 3.89 | 0 |
+
+Slow clays gained most (3 deg/s: 37 -> 87 % found). Worst press for clutter (`105335`, tree line filling half
+the frame): 12.5 -> ~40 scenery candidates dropped a frame. `tbot sim --seeds 6`: 19/54 clays broken from 28
+shots (17/54 from 24 before). `tbot rescore`: 8 shots, 3/7 scored would have hit (6 shots, 3/6 before; one
+planned hit on `104603` became a 0.78 deg miss against a 0.75 deg pattern - seven shots do not separate them).
+
+**Open:** the drift estimate is the gyro bias seen from the camera; feeding it back into the attitude (bias
+correction while the gun is held) would straighten the speed gate and every replay too. Not done: it changes
+the attitude every other stage uses, a day-of-range change too far.

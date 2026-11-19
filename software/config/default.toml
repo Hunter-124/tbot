@@ -101,11 +101,15 @@ followed_others_max = 0       # 0 = off. N: in a frame where the main establishe
                               # 5-11 % of its detections, so it is off. Established targets are measured first either way
 static_reject = true          # scenery filter (vision/clutter.py; needs the IMU): drop candidates that keep their WORLD
                               # direction while the gun turns, before they are measured. They show as grey crosses
-static_tol_px = 3.0           # ... within this many pixels (centroid jitter, IMU timing),
+static_tol_px = 2.0           # ... within this many pixels (centroid jitter, IMU timing; 3.0 before the drift below:
+                              # pasted clays in the range-press trees, 2.0 calls 2 % of clay frames scenery, 3.0 called 18 %),
 static_lever_m = 0.9          # allowing for parallax: the camera is this far ahead of the point the shooter turns
 static_min_range_m = 6.0      # about [INFERENCE], so scenery from this range out to infinity trails its old place
-static_min_age_ms = 50.0      # compared with where candidates were this long ago ... (a clay slower than
-static_max_age_ms = 250.0     # tol / min_age = 1.7 deg/s across the sky cannot be told from scenery)
+static_min_age_ms = 100.0     # compared with where candidates were this long ago ... (a clay slower than
+static_max_age_ms = 250.0     # tol / min_age = 0.6 deg/s across the sky cannot be told from scenery; was 50 ms)
+static_drift = true           # ... after measuring how fast the IMU's world lets the scenery slide (a gyro bias:
+                              # ~2.9 deg/s on the 2026-11-17 range presses, 5-25 px over the age window) and moving
+                              # the old candidates by that much (StaticFilter.drift)
 native = true                 # measure candidates in the C kernel when it is built (scripts/build_native.sh); false, or
                               # TBOT_NATIVE=0 in the environment = the Python loop (the reference; same detections)
 psf_px = 1.2                  # 4-sigma diameter of the system blur (pixel box alone = 1.15 px); calibrate: tbot calib-detector --psf [INFERENCE]

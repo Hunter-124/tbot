@@ -105,7 +105,9 @@ leave it still for ~5 s, shoot. It stays that way until `tbotctl boot dry` - do 
 Watch the status line for heat (`!THR`, warning at 75 C) and `UV` (pack sagging under the servo). `lost N`
 there counts frames the camera sent that never arrived: a few an hour is nothing, a steady climb means the
 Pi is overloaded (a tool running beside the pipeline) or the CSI link is marginal. Don't run other tools on
-the gun while shooting.
+the gun while shooting. `gyro drift N dps` is the gyro bias the scenery filter measures against the trees
+(~3 deg/s on 2026-11-17): it is allowed for, but above ~6 dps let the gun rest on the rack for a few seconds
+(the attitude re-zeroes its gyro when the gun is still) and power-cycle if it stays.
 
 ## D. Bring the data home
 

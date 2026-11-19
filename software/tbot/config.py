@@ -100,11 +100,12 @@ class DetectorConfig:
     min_size_frac: float = 0.4
     followed_others_max: int = 0
     static_reject: bool = True
-    static_tol_px: float = 3.0
+    static_tol_px: float = 2.0
     static_lever_m: float = 0.9
     static_min_range_m: float = 6.0
-    static_min_age_ms: float = 50.0
+    static_min_age_ms: float = 100.0
     static_max_age_ms: float = 250.0
+    static_drift: bool = True
     native: bool = True
 
 
