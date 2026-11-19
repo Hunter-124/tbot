@@ -305,8 +305,9 @@ chip = 0
 latency_led_pin = 27
 break_sense_pin = 22
 status_led_pin = 26           # the ready light (hw/status_led.py): LED + 220-330 ohm from this GPIO (header pin 37) to
-                              # ground (pin 39, two pins along the same row). Solid = ready and LIVE, press and go; slow blink = ready but a dry
-                              # run; fast blink = running, not ready (camera / IMU); off = booting or stopped.
+                              # ground (pin 39, two pins along the same row). Flashing once a second = ready
+                              # and LIVE, press and go; solid = the button is held (armed); a short blip every 2 s =
+                              # ready but a dry run; flicker = running, not ready (camera / IMU); off = booting or stopped.
                               # -1 = none
 status_led_active_high = true # false = the LED hangs between 3.3 V and the pin
 

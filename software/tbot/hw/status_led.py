@@ -1,8 +1,9 @@
 """The ready light: one LED that says whether a press of the arming button will be acted on.
 
-    solid       READY and LIVE: the pipeline is turning, the camera and the IMU are fresh, the trigger is driven
-    slow blink  ready, but a DRY RUN (or the paper-fire test mode): nothing will pull the trigger
-    fast blink  running but not ready: no fresh frame, or the IMU / attitude is not there yet
+    solid       ARMED: the button is held, the gun is live and ready - it is looking for its shot
+    flashing    READY and LIVE, button up (once a second): press and go
+    short blip  ready, but a DRY RUN (or the paper-fire test mode): a blip every 2 s, held or not - never solid
+    flicker     running but not ready (5 a second): no fresh frame, or the IMU / attitude is not there yet
     off         not running (still booting, stopped, no power)
 
 The pipeline reports its state once a frame (`set`); a thread of its own draws the pattern, and calls the state
@@ -19,19 +20,23 @@ import time
 
 log = logging.getLogger("tbot.led")
 
-OFF, WAIT, DRY, READY = "off", "wait", "dry", "ready"
+OFF, WAIT, DRY, READY, ARMED = "off", "wait", "dry", "ready", "armed"
 STALE_S = 0.6        # no report for this long = not ready (the idle loop reports 15 times a second)
 TICK_S = 0.025
-WAIT_PERIOD_S = 0.2  # fast blink
-DRY_PERIOD_S = 2.0   # slow blink
+WAIT_PERIOD_S = 0.2  # flicker
+READY_PERIOD_S = 1.0 # flashing: half a second on, half off
+DRY_PERIOD_S = 2.0   # one short blip in each
+DRY_BLIP_S = 0.12
 
 
 def level_for(state: str, t_s: float) -> int:
     """The LED level (1 = lit) of a state at time t_s."""
-    if state == READY:
+    if state == ARMED:
         return 1
+    if state == READY:
+        return 1 if (t_s % READY_PERIOD_S) < 0.5 * READY_PERIOD_S else 0
     if state == DRY:
-        return 1 if (t_s % DRY_PERIOD_S) < 0.5 * DRY_PERIOD_S else 0
+        return 1 if (t_s % DRY_PERIOD_S) < DRY_BLIP_S else 0
     if state == WAIT:
         return 1 if (t_s % WAIT_PERIOD_S) < 0.5 * WAIT_PERIOD_S else 0
     return 0

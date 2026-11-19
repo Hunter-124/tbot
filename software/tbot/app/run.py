@@ -43,7 +43,7 @@ from tbot.hw.actuator import make_actuator
 from tbot.hw.arming import ArmingSwitch
 from tbot.hw.gpio import SimGpio, open_gpio
 from tbot.hw.health import read_health
-from tbot.hw.status_led import DRY, READY, WAIT, StatusLed
+from tbot.hw.status_led import ARMED, DRY, READY, WAIT, StatusLed
 from tbot.imu.attitude import AttitudeEstimator, FixedAttitude
 from tbot.imu.mpu6050 import NullImu, open_imu
 from tbot.optics import CameraModel, MountModel, combined_mask
@@ -683,7 +683,8 @@ class Pipeline:
             max_age = float(getattr(cfg.fire, "max_imu_age_ms", 0.0))
             ok = bool(self.attitude.ready) and not (imu_age_ms is not None and max_age > 0.0 and imu_age_ms > max_age)
             live = bool(cfg.fire.live) and self.actuator is not None
-            self.status_led.set(READY if ok and live else DRY if ok else WAIT)
+            # flashing = ready, solid = the button is held (live only: a dry run never shows solid)
+            self.status_led.set((ARMED if armed_now else READY) if ok and live else DRY if ok else WAIT)
         t_sol = time.perf_counter_ns()
         solve_end_ns = int(self.source.clock.now_ns())
         solve_ns = max(0, solve_end_ns - solve_start_ns)

@@ -12,6 +12,8 @@ from tbot.hw import gpio as gpio_mod
 from tbot.hw.actuator import (MAX_PRELOAD_FRAC, NoneActuator, Pq12Actuator, ServoActuator, SimActuator,
                               make_actuator, preload_pulse_us)
 from tbot.hw.arming import ArmingSwitch
+from pathlib import Path
+
 from tbot.hw.gpio import HardwarePwm, SimGpio, SimPwm, open_gpio
 from tbot.tools import latency_actuator
 
@@ -590,10 +592,11 @@ def test_run_trials_pauses_while_the_button_is_released(tmp_path):
 def test_status_led_patterns_and_stale_reports():
     from tbot.hw import status_led as sl
 
-    assert sl.level_for(sl.READY, 0.3) == 1 and sl.level_for(sl.READY, 7.7) == 1
+    assert sl.level_for(sl.ARMED, 0.3) == 1 and sl.level_for(sl.ARMED, 7.7) == 1               # held: solid
+    assert [sl.level_for(sl.READY, t) for t in (0.0, 0.4, 0.5, 0.9, 1.0)] == [1, 1, 0, 0, 1]    # ready: 1 Hz
     assert sl.level_for(sl.OFF, 0.3) == 0
     assert [sl.level_for(sl.WAIT, t) for t in (0.0, 0.05, 0.1, 0.15, 0.2)] == [1, 1, 0, 0, 1]   # 5 Hz
-    assert [sl.level_for(sl.DRY, t) for t in (0.0, 0.9, 1.0, 1.9, 2.0)] == [1, 1, 0, 0, 1]      # 0.5 Hz
+    assert [sl.level_for(sl.DRY, t) for t in (0.0, 0.1, 0.2, 1.0, 1.9, 2.0)] == [1, 1, 0, 0, 0, 1]  # a blip in 2 s
 
     now = [100.0]
     gpio = SimGpio()
@@ -620,7 +623,7 @@ def test_status_led_thread_lights_and_goes_dark_on_close():
     led.start()
     deadline = _time.monotonic() + 2.0
     while _time.monotonic() < deadline and gpio.levels[27] != 0:
-        led.set(sl.READY)
+        led.set(sl.ARMED)
         _time.sleep(0.02)
     assert gpio.levels[27] == 0
     led.close()
@@ -641,3 +644,18 @@ def test_status_led_never_raises_on_a_dead_gpio():
     led.start()
     led.set(sl.READY)
     led.close()
+
+
+def test_pipeline_light_flashes_when_ready_and_is_solid_only_while_live_and_held():
+    """run.py's choice of state: live + ready + button up = READY (flashing), + held = ARMED (solid); a dry run is
+    DRY held or not; not ready is WAIT."""
+    from tbot.hw import status_led as sl
+
+    def state(ok, live, held):
+        return (sl.ARMED if held else sl.READY) if ok and live else sl.DRY if ok else sl.WAIT
+
+    assert state(True, True, False) == sl.READY and state(True, True, True) == sl.ARMED
+    assert state(True, False, False) == sl.DRY and state(True, False, True) == sl.DRY
+    assert state(False, True, True) == sl.WAIT
+    src = (Path(__file__).resolve().parents[1] / "tbot" / "app" / "run.py").read_text()
+    assert "(ARMED if armed_now else READY) if ok and live else DRY if ok else WAIT" in src
