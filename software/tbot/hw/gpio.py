@@ -364,10 +364,15 @@ class HardwarePwm:
         duty_ns = int(round(max(0.0, min(float(us) * 1000.0, float(self.period_ns)))))
         with self._lock:
             if not self._enabled:
+                # width first, then switch on: the first pulse out is already the right one. (The other way
+                # round the frame starts with the old width - zero after disable() - and the new one lands in
+                # the middle of it: a first pulse of the wrong length, on the trigger side for this lever.)
+                self._write_attr("duty_cycle", duty_ns)
                 self._write_attr("enable", 1)
                 self._enabled = True
                 self._t_on_ns = time.monotonic_ns()
-            self._write_attr("duty_cycle", duty_ns)
+            else:
+                self._write_attr("duty_cycle", duty_ns)
             self.pulse_us = duty_ns / 1000.0
 
     def restart_pulse_us(self, us: float) -> None:
@@ -392,7 +397,20 @@ class HardwarePwm:
         """Stop emitting pulses (servo goes limp, PWM pin idles low)."""
         with self._lock:
             if self._enabled:
-                self._write_attr("duty_cycle", 0)
+                # Never cut a pulse short: a servo reads a truncated pulse as a command further toward the
+                # short-pulse end of its travel, which on this gun is the trigger side. Wait out the pulse that
+                # is going out (as restart_pulse_us does), set the width to zero - a width change takes effect
+                # with the next frame - let that empty frame begin, and only then stop the channel. The frame
+                # phase is only an estimate after a long hold (two clocks), hence both waits.
+                if self.pulse_us:
+                    wait = restart_wait_ns(time.monotonic_ns() - self._t_on_ns, int(round(self.pulse_us * 1000.0)),
+                                           self.period_ns)
+                    if wait:
+                        time.sleep(wait / 1e9)
+                    self._write_attr("duty_cycle", 0)
+                    time.sleep((self.period_ns + 2_000_000) / 1e9)
+                else:
+                    self._write_attr("duty_cycle", 0)
                 self._write_attr("enable", 0)
                 self._enabled = False
             self.pulse_us = None

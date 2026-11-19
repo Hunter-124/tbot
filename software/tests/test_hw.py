@@ -335,6 +335,46 @@ def test_hardware_pwm_restart_toggles_enable_around_the_new_duty(tmp_path, monke
     assert writes[1:] == [("enable", "0"), ("duty_cycle", "1100000"), ("enable", "1")]
 
 
+def test_hardware_pwm_never_cuts_or_misshapes_a_pulse_when_stopping_and_starting(tmp_path, monkeypatch):
+    """2026-11-19: an uncommanded second shot 0.1 s after the lever went limp. Stopping the channel in the middle of
+    a pulse, or switching it on before the width is set, sends the servo one pulse of the wrong (shorter) length,
+    and shorter is the trigger side."""
+    from tbot.hw import gpio as gpio_mod
+
+    ch = tmp_path / "pwmchip0" / "pwm0"
+    ch.mkdir(parents=True)
+    for name in ("period", "duty_cycle", "enable"):
+        (ch / name).write_text("0")
+    monkeypatch.setattr(gpio_mod, "PWM_SYSFS_ROOT", str(tmp_path))
+    writes: list[tuple[str, str]] = []
+    orig = gpio_mod.HardwarePwm._write_attr
+
+    def spy(self, name, value, where=None):
+        writes.append((name, str(value)))
+        return orig(self, name, value, where)
+
+    monkeypatch.setattr(gpio_mod.HardwarePwm, "_write_attr", spy)
+    monkeypatch.setattr(gpio_mod.time, "sleep", lambda s: writes.append(("sleep", f"{s:.6f}")))
+    pwm = HardwarePwm(0, 0, 50.0)
+    pwm.disable()
+    writes.clear()
+    pwm.set_pulse_us(1497.0)  # from limp: the width is there before the channel is switched on
+    assert writes == [("duty_cycle", "1497000"), ("enable", "1")]
+    writes.clear()
+    pwm._t_on_ns = time.monotonic_ns()  # the pulse is going out right now
+    pwm.disable()
+    names = [w[0] for w in writes]
+    assert names == ["sleep", "duty_cycle", "sleep", "enable"]
+    assert 0.0015 < float(writes[0][1]) <= 0.0019            # the rest of the 1497 us pulse plus the guard
+    assert writes[1] == ("duty_cycle", "0")
+    assert float(writes[2][1]) >= 0.020                      # one whole frame: the empty one has begun
+    assert writes[3] == ("enable", "0")
+    assert pwm.pulse_us is None
+    writes.clear()
+    pwm.disable()  # already off: nothing is written, nothing waits
+    assert writes == []
+
+
 def test_servo_pre_travel_times_out_to_limp():
     cfg = _preload_cfg(max_s=0.05)
     gpio, arming = build(cfg)

@@ -225,6 +225,39 @@ def test_telemetry_shape_from_a_live_step(tmp_path):
     assert tele["ae"] is None            # this source has no auto-exposure
 
 
+def test_shot_box_is_on_disk_at_the_command_and_off_without_a_log_file(tmp_path, monkeypatch):
+    """2026-11-19: the gun lost power at the shot and every unsaved press went with it. The fire event and its
+    frame go to shots.jsonl beside the log file at once; with no log file (tests, bench, sim) nothing is written."""
+    import json as _json
+    import threading as _threading
+
+    cfg, calib = base_cfg(tmp_path)
+    source = StallingSource(n_frames=2)
+    pipe = Pipeline(cfg, calib, source)
+    try:
+        assert pipe._shot_box_path is None
+        pipe._shot_box({"event": {"type": "fire"}})  # no path: a no-op
+        pipe._shot_box_path = tmp_path / "logs" / "shots.jsonl"
+        pipe._shot_box({"event": {"type": "fire", "shots": 1}, "frame": {"dets": np.zeros((1, 2))}})
+        pipe._event({"type": "recoil", "t_ns": 5, "delay_ms": 66.0})
+        for t in _threading.enumerate():
+            if t.name == "shot-box":
+                t.join(5.0)
+        lines = [_json.loads(x) for x in pipe._shot_box_path.read_text().splitlines()]
+        assert sorted(x["event"]["type"] for x in lines) == ["fire", "recoil"]
+        assert [x for x in lines if x["event"]["type"] == "fire"][0]["frame"]["dets"] == [[0.0, 0.0]]
+    finally:
+        pipe.close()
+
+    monkeypatch.setenv("TBOT_LOG_FILE", str(tmp_path / "logs" / "run.log"))
+    source = StallingSource(n_frames=2)
+    pipe = Pipeline(cfg, calib, source)
+    try:
+        assert pipe._shot_box_path == tmp_path / "logs" / "shots.jsonl"
+    finally:
+        pipe.close()
+
+
 def test_exposure_out_of_range_is_in_the_telemetry_and_warned_once(tmp_path, caplog):
     from tbot.camera.autoexposure import AeStatus
 

@@ -186,6 +186,10 @@ class Pipeline:
 
         self.server: DebugServer | None = None
         self.recorder = None
+        # shots.jsonl beside the service's log file (scripts/tbot-run.sh sets TBOT_LOG_FILE): see _shot_box
+        _lf = os.environ.get("TBOT_LOG_FILE")
+        self._shot_box_path = resolve_path(_lf).with_name("shots.jsonl") if _lf else None
+        self._shot_box_lock = threading.Lock()
         self._recorder_is_writer = False
         self._press_ns: int | None = None  # source-clock time the current press began (armed recording)
         self._clip_procs: list = []
@@ -465,8 +469,35 @@ class Pipeline:
         ev["trigger_state"] = state
         self._event(ev)
 
+    def _shot_box(self, record: dict) -> None:
+        """Append one record to logs/shots.jsonl and force it onto the SD card NOW (background thread).
+
+        A press is saved seconds after the button is let go. On 2026-11-19 (afternoon) the gun lost power at the
+        shot again and again, and everything about those shots was lost with it: of some twenty clays shot at,
+        five presses reached the card. This file is a few kB a shot, written the moment the command goes out, so
+        what the gun saw and decided survives a power cut a tenth of a second later."""
+        path = self._shot_box_path
+        if path is None:
+            return
+
+        def write() -> None:
+            try:
+                line = json.dumps(jsonable(record)) + "\n"
+                with self._shot_box_lock:
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    with open(path, "a") as f:
+                        f.write(line)
+                        f.flush()
+                        os.fsync(f.fileno())
+            except Exception as exc:  # noqa: BLE001 - a diagnostic file must never cost a shot
+                log.debug("shot box: %s", exc)
+
+        threading.Thread(target=write, name="shot-box", daemon=True).start()
+
     def _event(self, ev: dict) -> None:
         self.events.append(ev)
+        if ev.get("type") in ("recoil", "no_recoil"):
+            self._shot_box({"wall": time.strftime("%Y-%m-%d %H:%M:%S"), "event": ev})
         if self.recorder is not None:
             if self._recorder_is_writer:
                 self.recorder.add_event(ev)
@@ -838,6 +869,7 @@ class Pipeline:
                 "shots": self.shots,
             }
             self._event(ev)
+            self._shot_box({"wall": time.strftime("%Y-%m-%d %H:%M:%S"), "event": ev, "frame": tele})
 
         self._record(frame, samples, tele)
         if fired and self.recorder is not None and not self._recorder_is_writer and self._press_ns is None:
