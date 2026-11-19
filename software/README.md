@@ -69,6 +69,9 @@ Plug the gun's Ethernet into the laptop, power it on and open **TBOT Console** (
 camera focus, boresight wizard, trigger servo setup, every setting, diagnostics, modes and power. No internet needed;
 any browser also works at `http://169.254.20.20/`. [docs/CONSOLE.md](docs/CONSOLE.md).
 
+Or just run **`launch_console.bat`** (Windows, double-click) / **`./launch_console.sh`** (Linux, macOS) in this
+folder. Add `dev` (`launch_console.bat dev`) to open it on a stand-in gun on this computer, with no gun connected.
+
 ## Quick start on the laptop
 
 No hardware at all — synthetic scene, simulated gun swing, simulated IMU and GPIO:

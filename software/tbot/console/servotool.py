@@ -36,7 +36,9 @@ def state(j: ServoJog) -> dict:
             "min_us": j.min_us, "max_us": j.max_us, "limits_set": j.limits_set, "step_us": j.step_us,
             "armed": bool(j.armed), "driving": bool(getattr(j.pwm, "pulse_us", None)),
             "burst_ms": j.burst_s * 1e3, "max_jump_us": j.max_jump_us,
-            "hold_ms": float(j.cfg.actuator.servo.hold_ms), "sim": isinstance(j.gpio, SimGpio)}
+            "hold_ms": float(j.cfg.actuator.servo.hold_ms), "sim": isinstance(j.gpio, SimGpio),
+            "break_us": j.break_us, "preload_frac": j.preload_frac, "preload_us": j.preload_us,
+            "preload_max_s": float(getattr(j.cfg.actuator.servo, "preload_max_s", 30.0))}
 
 
 def main(argv: list[str] | None = None) -> int:

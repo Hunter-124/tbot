@@ -245,6 +245,11 @@ min_us = 0.0                  # calibrated travel limits of THIS lever (tbot jog
 max_us = 0.0                  # calibrated: the jog then creeps (max_jump_us per move) and the actuator will not fire
 max_jump_us = 50.0            # jog, before limits are set: the biggest change allowed in one move
 jog_burst_ms = 400.0          # `tbot jog servo`: each move drives for this long, then goes limp
+break_us = 0.0                # pulse where the sear breaks (Trigger page: Set as BREAK). 0 = not marked: no pre-travel
+preload_frac = 0.5            # while the arming button is HELD the lever waits this fraction of the way from rest_us
+                              # to break_us, so a shot only travels the rest (shorter command -> break). 0 = off;
+                              # capped at 0.9. Re-measure the trigger delay (tbot latency-mic) after changing it
+preload_max_s = 30.0          # stop holding the pre-travel (go limp) after the button has been held this long; 0 = no limit
 
 [actuator.pq12]
 pin_extend = 23

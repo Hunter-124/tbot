@@ -287,7 +287,7 @@ class Console:
                 out[name] = None
         try:
             servo = {k: self.effective(f"actuator.servo.{k}") for k in ("rest_us", "fire_us", "min_us", "max_us",
-                                                                         "hold_ms")}
+                                                                         "hold_ms", "break_us", "preload_frac")}
         except KeyError:
             servo = {}
         out["servo"] = servo
@@ -555,6 +555,18 @@ class Handler(BaseHTTPRequestHandler):
         changes = {f"actuator.servo.{k}": v for k, v in vals.items()}
         if b.get("hold_ms") is not None:
             changes["actuator.servo.hold_ms"] = float(b["hold_ms"])
+        if b.get("break_us") is not None:
+            brk = float(b["break_us"])
+            if brk and not min(vals["rest_us"], vals["fire_us"]) < brk <= max(vals["rest_us"], vals["fire_us"]):
+                raise ApiError(400, f"break {brk:.0f} us must lie between rest and fire")
+            changes["actuator.servo.break_us"] = brk
+        if b.get("preload_frac") is not None:
+            from tbot.hw.actuator import MAX_PRELOAD_FRAC
+
+            frac = float(b["preload_frac"])
+            if not 0.0 <= frac <= MAX_PRELOAD_FRAC:
+                raise ApiError(400, f"pre-travel must be 0-{MAX_PRELOAD_FRAC * 100:.0f} % of the way to the break")
+            changes["actuator.servo.preload_frac"] = frac
         return self.c.write_config(changes, [])
 
     def _tool(self, method: str, parts: list[str], q: dict) -> None:

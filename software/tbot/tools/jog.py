@@ -27,7 +27,7 @@ import time
 from typing import Any, Callable, Iterable
 
 from tbot.config import Config, add_common_args, load_from_args, save_local_overrides
-from tbot.hw.actuator import Pq12Actuator, ServoActuator
+from tbot.hw.actuator import MAX_PRELOAD_FRAC, Pq12Actuator, ServoActuator, preload_pulse_us
 from tbot.hw.arming import ArmingSwitch
 from tbot.hw.gpio import Gpio, HardwarePwm, LgpioGpio, SimGpio, SimPwm, open_gpio
 
@@ -186,6 +186,8 @@ class ServoJog(JogRepl):
         self.pwm = pwm
         self.rest_us = _clamp_pulse(s.rest_us)
         self.fire_us = _clamp_pulse(s.fire_us)
+        self.break_us = float(getattr(s, "break_us", 0.0) or 0.0)  # sear break (0 = not marked)
+        self.preload_frac = float(getattr(s, "preload_frac", 0.0) or 0.0)
         self.step_us = abs(float(step_us)) or DEFAULT_STEP_US
         # Calibrated travel limits (0 = not yet). Until both are set, moves creep: at most max_jump_us per move,
         # starting near NEUTRAL_US - the lever's valid travel is small and the trigger is somewhere inside it.
@@ -244,16 +246,27 @@ class ServoJog(JogRepl):
                     "toward each end with + / -, then mark it with lo / hi)")
         return None
 
+    @property
+    def preload_us(self) -> float | None:
+        """Where the lever waits while the button is held in a real session (None = no pre-travel)."""
+        return preload_pulse_us(self.rest_us, self.fire_us, self.break_us, self.preload_frac,
+                                self.min_us, self.max_us)
+
     def _sync_actuator(self) -> None:
         act = self._actuator
         if act is not None:
             act.rest_us = self.rest_us
             act.fire_us = self.fire_us
+            act.break_us = self.break_us
+            act.preload_frac = self.preload_frac
+            act.min_us, act.max_us = self.min_us, self.max_us
+            act.check_travel()
 
     def _ensure_actuator(self) -> ServoActuator:
         if self._actuator is None:
             # One actuator for the whole session: each one subscribes to the interlock for life.
-            self._actuator = ServoActuator(self.cfg, self.pwm, self.arming)
+            # No automatic pre-travel on each press here: jog moves are bursts; `test` does the pre-travel itself.
+            self._actuator = ServoActuator(self.cfg, self.pwm, self.arming, preload=False)
         self._sync_actuator()
         return self._actuator
 
@@ -295,7 +308,16 @@ class ServoJog(JogRepl):
             self.log(f"travel {self.min_us:.0f}-{self.max_us:.0f} us"
                      + ("" if self.limits_set else "  (mark the other end too)"))
             return True
-        if cmd in ("rest", "fire") and self.current_us is None:
+        if cmd == "preload":
+            value = _as_float(args[0], self.log) if args else None
+            if value is None or not 0.0 <= value <= MAX_PRELOAD_FRAC:
+                self.log(f"usage: preload <fraction 0-{MAX_PRELOAD_FRAC:g}>  (0 = off)")
+            else:
+                self.preload_frac = float(value)
+                self._sync_actuator()
+                self._log_preload()
+            return True
+        if cmd in ("rest", "fire", "break") and self.current_us is None:
             self.log(f"move the lever to the {cmd} position first, then `{cmd}`")
             return True
         if cmd == "rest":
@@ -309,6 +331,12 @@ class ServoJog(JogRepl):
             self._sync_actuator()
             self.log(f"fire_us = {self.fire_us:.0f} us")
             return True
+        if cmd == "break":
+            self.break_us = self.current_us
+            self._sync_actuator()
+            self.log(f"break_us = {self.break_us:.0f} us (the sear breaks here)")
+            self._log_preload()
+            return True
         if cmd == "test":
             self._cmd_test()
             return True
@@ -318,6 +346,15 @@ class ServoJog(JogRepl):
             return True
         self.log(f"unknown command {cmd!r}\n{self.help_text()}")
         return True
+
+    def _log_preload(self) -> None:
+        pre = self.preload_us
+        if pre is not None:
+            self.log(f"pre-travel {self.preload_frac:.0%} of rest -> break = {pre:.0f} us while the button is held")
+        elif self.preload_frac <= 0.0:
+            self.log("pre-travel off")
+        else:
+            self.log("pre-travel inactive: mark BREAK between rest and fire (inside the travel limits)")
 
     def _cmd_test(self) -> None:
         if self.rest_us == self.fire_us:
@@ -335,6 +372,18 @@ class ServoJog(JogRepl):
             return
         act = self._ensure_actuator()
         hold_s = max(0.0, float(self.cfg.actuator.servo.hold_ms) / 1000.0)
+        pre = self.preload_us
+        if pre is not None:  # like a real press: wait at the pre-travel first, then fire from there
+            self.log(f"test: pre-travel {pre:.0f} us for {self.burst_s * 1e3:.0f} ms")
+            self.pwm.set_pulse_us(pre)
+            deadline = time.monotonic() + (0.0 if getattr(self.pwm, "is_sim", False) else self.burst_s)
+            while time.monotonic() < deadline and self.armed:
+                time.sleep(POLL_S)
+            if not self.armed:
+                act.abort()
+                self.pwm.disable()
+                self._refuse("test")
+                return
         self.log(f"test: {self.fire_us:.0f} us for {hold_s * 1e3:.0f} ms, back to {self.rest_us:.0f} us, then limp")
         if not act.fire(time.monotonic_ns()):
             self.log("fire refused (not armed / busy)")
@@ -358,8 +407,11 @@ class ServoJog(JogRepl):
                 self.log(f"refused: {name} {us:.0f} us is outside the travel {self.min_us:.0f}-{self.max_us:.0f} us")
                 return
         self._save({"actuator": {"servo": {"rest_us": float(self.rest_us), "fire_us": float(self.fire_us),
-                                           "min_us": float(self.min_us), "max_us": float(self.max_us)}}},
-                   f"rest_us={self.rest_us:.0f} fire_us={self.fire_us:.0f} "
+                                           "min_us": float(self.min_us), "max_us": float(self.max_us),
+                                           "break_us": float(self.break_us),
+                                           "preload_frac": float(self.preload_frac)}}},
+                   f"rest_us={self.rest_us:.0f} fire_us={self.fire_us:.0f} break_us={self.break_us:.0f} "
+                   f"preload_frac={self.preload_frac:g} "
                    f"travel {self.min_us:.0f}-{self.max_us:.0f} us")
 
     # -- text ---------------------------------------------------------------------------------
@@ -370,9 +422,11 @@ class ServoJog(JogRepl):
             "           lo / hi  mark the current pulse as an end of the lever's valid travel (moves outside are\n"
             "                 refused; until both are set each move is limited to max_jump_us)\n"
             "           rest  mark the current pulse as rest_us (lever just off the trigger)\n"
-            "           fire  mark the current pulse as fire_us (sear breaks)\n"
+            "           fire  mark the current pulse as fire_us (a little past the sear break)\n"
+            "           break  mark the current pulse as break_us (exactly where the sear breaks)\n"
+            "           preload <f>  while the button is held the lever waits f of the way rest -> break (0 = off)\n"
             "           test  one full fire/rest cycle through the real actuator\n"
-            "           save  write rest_us/fire_us/min_us/max_us to config/local.toml | show | q"
+            "           save  write rest/fire/break/min/max_us + preload_frac to config/local.toml | show | q"
         )
 
     def status_text(self) -> str:
@@ -382,6 +436,8 @@ class ServoJog(JogRepl):
                 f"({'driving' if getattr(self.pwm, 'pulse_us', None) else 'limp'})  "
                 f"travel {f'{self.min_us:.0f}-{self.max_us:.0f}' if self.limits_set else 'NOT SET'}  "
                 f"rest {self.rest_us:.0f}  fire {self.fire_us:.0f}  "
+                f"break {f'{self.break_us:.0f}' if self.break_us else '-'}  "
+                f"pre {f'{self.preload_us:.0f}' if self.preload_us is not None else 'off'}  "
                 f"step {self.step_us:.0f}  armed {'YES' if self.armed else 'no'}")
 
     def close(self) -> None:

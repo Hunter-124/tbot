@@ -47,7 +47,7 @@ COMMON_KEYS = [
     "shot.muzzle_velocity_mps", "shot.pattern_radius_ref_m", "shot.pattern_ref_range_m",
     "fire.min_hit_probability", "fire.min_range_m", "fire.max_range_m", "fire.max_shots_per_arm",
     "record.mode", "record.preroll_s", "record.postroll_s", "record.clip", "record.min_free_mb",
-    "actuator.servo.hold_ms",
+    "actuator.servo.hold_ms", "actuator.servo.preload_frac",
 ]
 
 _UNITS = [

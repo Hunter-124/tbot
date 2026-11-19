@@ -233,6 +233,9 @@ class ServoConfig:
     min_us: float = 0.0
     max_us: float = 0.0
     max_jump_us: float = 50.0
+    break_us: float = 0.0
+    preload_frac: float = 0.5
+    preload_max_s: float = 30.0
 
 
 @dataclass

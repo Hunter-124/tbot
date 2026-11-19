@@ -23,6 +23,29 @@ from tbot.hw.gpio import Gpio, HardwarePwm, LgpioGpio, SimGpio, SimPwm
 #: SimActuator hold between the simulated break and the simulated return to rest (no config key exists).
 SIM_HOLD_MS = 50.0
 
+#: Highest allowed actuator.servo.preload_frac: the pre-travel always stops well short of the sear break.
+MAX_PRELOAD_FRAC = 0.9
+
+
+def preload_pulse_us(rest_us: float, fire_us: float, break_us: float, frac: float,
+                     min_us: float = 0.0, max_us: float = 0.0) -> float | None:
+    """Pulse the lever waits at while the arming button is held: `frac` of the way from rest to the break.
+
+    None (no pre-travel) unless the break is marked, lies between rest and fire, and the result is inside the
+    calibrated travel. frac is clamped to [0, MAX_PRELOAD_FRAC], so this can never reach the break itself.
+    """
+    rest_us, fire_us, break_us = float(rest_us), float(fire_us), float(break_us or 0.0)
+    frac = min(MAX_PRELOAD_FRAC, max(0.0, float(frac or 0.0)))
+    if frac <= 0.0 or break_us <= 0.0 or rest_us == fire_us:
+        return None
+    lo_, hi_ = min(rest_us, fire_us), max(rest_us, fire_us)
+    if not lo_ < break_us <= hi_ or break_us == rest_us:
+        return None  # the break must lie between rest and fire
+    us = rest_us + frac * (break_us - rest_us)
+    if 0.0 < min_us < max_us and not min_us <= us <= max_us:
+        return None
+    return us
+
 
 class Actuator(Protocol):
     kind: str
@@ -100,11 +123,18 @@ class ServoActuator(_BaseActuator):
     trigger - stalls at full current for as long as the pulse is held, so nothing here ever holds a pulse.
     fire(): fire pulse for hold_ms -> rest pulse for return_ms -> PWM off. Releasing the button mid-cycle drives
     rest for return_ms and then goes limp; releasing it while idle sends nothing at all.
+
+    Pre-travel (actuator.servo.preload_frac / break_us): the one pulse held for longer, and ONLY while the arming
+    button is held. On the press the lever moves preload_frac of the way from rest to the sear break and waits
+    there, so a shot travels only the remaining part (shorter command -> break). Release = rest burst, then limp.
+    The wait ends (limp) after preload_max_s even if the button stays held. The pre-travel position is short of
+    the break by construction, so the servo is holding the trigger spring part-way, not stalling against a stop.
     """
 
     kind = "servo"
 
-    def __init__(self, cfg: Config, pwm: HardwarePwm | SimPwm, arming: ArmingSwitch | None):
+    def __init__(self, cfg: Config, pwm: HardwarePwm | SimPwm, arming: ArmingSwitch | None, *,
+                 preload: bool = True):
         super().__init__(arming)
         s = cfg.actuator.servo
         self.pwm = pwm
@@ -114,22 +144,78 @@ class ServoActuator(_BaseActuator):
         self.return_s = max(0.0, float(getattr(s, "return_ms", 250.0)) / 1000.0)
         self._settle_s = 0.0 if getattr(pwm, "is_sim", False) else min(0.06, 2.0 / float(s.frame_hz))
         self._driving = False
+        self._preloaded = False
+        self.preload_enabled = bool(preload)
+        self.break_us = float(getattr(s, "break_us", 0.0) or 0.0)
+        self.preload_frac = float(getattr(s, "preload_frac", 0.0) or 0.0)
+        self.preload_max_s = max(0.0, float(getattr(s, "preload_max_s", 30.0) or 0.0))
         lo, hi = float(getattr(s, "min_us", 0.0) or 0.0), float(getattr(s, "max_us", 0.0) or 0.0)
+        self.min_us, self.max_us = lo, hi
         self.travel_error: str | None = None
+        self.check_travel()
+        self._limp()
+
+    def check_travel(self) -> str | None:
+        """Re-validate rest/fire against the travel limits (call again after changing any of them)."""
+        lo, hi = self.min_us, self.max_us
+        err = None
         if 0.0 < lo < hi:
             for name, us in (("rest_us", self.rest_us), ("fire_us", self.fire_us)):
                 if not lo <= us <= hi:
-                    self.travel_error = f"actuator.servo.{name}={us:.0f} us is outside the travel {lo:.0f}-{hi:.0f} us"
-        elif not getattr(pwm, "is_sim", False):
-            self.travel_error = ("servo travel limits are not calibrated (actuator.servo.min_us/max_us): "
-                                 "run `tbot jog servo` and save lo / hi / rest / fire")
-        self._limp()
+                    err = f"actuator.servo.{name}={us:.0f} us is outside the travel {lo:.0f}-{hi:.0f} us"
+        elif not getattr(self.pwm, "is_sim", False):
+            err = ("servo travel limits are not calibrated (actuator.servo.min_us/max_us): "
+                   "run `tbot jog servo` and save lo / hi / rest / fire")
+        self.travel_error = err
+        return err
 
     def _limp(self) -> None:
         """Stop the pulse train: the servo stops driving (no stall current)."""
         with self._lock:
             self.pwm.disable()
             self._driving = False
+            self._preloaded = False
+
+    # -- pre-travel ---------------------------------------------------------------------------
+    @property
+    def preload_us(self) -> float | None:
+        """The pre-travel pulse, or None when it is off / not calibrated."""
+        if not self.preload_enabled:
+            return None
+        return preload_pulse_us(self.rest_us, self.fire_us, self.break_us, self.preload_frac,
+                                self.min_us, self.max_us)
+
+    @property
+    def preloaded(self) -> bool:
+        with self._lock:
+            return self._preloaded
+
+    def _on_arming(self, armed: bool, t_ns: int) -> None:
+        if armed:
+            self._start_preload()
+        else:
+            self.abort()
+
+    def _start_preload(self) -> None:
+        pre = self.preload_us
+        if pre is None or self.travel_error or not self._armed():
+            return
+        with self._lock:
+            if self._closed or self._busy or not self._armed():
+                return
+            self._cancel_timers()
+            self.pwm.set_pulse_us(pre)
+            self._driving = True
+            self._preloaded = True
+            if self.preload_max_s > 0.0:
+                self._schedule(self.preload_max_s, self._end_preload)
+
+    def _end_preload(self) -> None:
+        with self._lock:
+            if self._preloaded and not self._busy:
+                self.pwm.disable()  # held too long: let go (the next shot then travels from wherever it sags to)
+                self._driving = False
+                self._preloaded = False
 
     def _drive_rest_then_limp(self) -> None:
         with self._lock:  # schedule under the lock: whoever sees the state change also sees the limp timer
@@ -168,6 +254,7 @@ class ServoActuator(_BaseActuator):
             self.last_rest_ns = None
             self._busy = True
             self._driving = True
+            self._preloaded = False
             self.pwm.set_pulse_us(self.fire_us)
         self._forget_finished()
         self._schedule(self.hold_s, self._return_to_rest)
@@ -188,6 +275,7 @@ class ServoActuator(_BaseActuator):
             was_busy = self._busy
             was_driving = self._driving
             self._busy = False
+            self._preloaded = False
             if was_busy:
                 self.last_rest_ns = time.monotonic_ns()
         if was_busy or was_driving:

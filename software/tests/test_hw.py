@@ -9,7 +9,8 @@ import pytest
 
 from tbot.config import load_config
 from tbot.hw import gpio as gpio_mod
-from tbot.hw.actuator import (NoneActuator, Pq12Actuator, ServoActuator, SimActuator, make_actuator)
+from tbot.hw.actuator import (MAX_PRELOAD_FRAC, NoneActuator, Pq12Actuator, ServoActuator, SimActuator,
+                              make_actuator, preload_pulse_us)
 from tbot.hw.arming import ArmingSwitch
 from tbot.hw.gpio import HardwarePwm, SimGpio, SimPwm, open_gpio
 from tbot.tools import latency_actuator
@@ -213,6 +214,82 @@ def test_servo_release_while_idle_sends_nothing():
     gpio.inject(cfg.arming.pin, 1)
     time.sleep(0.05)
     assert _driven(pwm) == [] and pwm.pulse_us is None
+
+
+# --------------------------------------------------------------------------------------------- servo pre-travel
+def _preload_cfg(frac: float = 0.5, max_s: float = 30.0):
+    cfg = make_cfg()
+    s = cfg.actuator.servo
+    s.rest_us, s.fire_us, s.break_us = 1420.0, 1530.0, 1510.0
+    s.min_us, s.max_us = 1400.0, 1550.0
+    s.preload_frac, s.preload_max_s = frac, max_s
+    s.hold_ms, s.return_ms = 30.0, 30.0
+    return cfg
+
+
+def test_preload_pulse_is_the_fraction_of_rest_to_break_and_never_reaches_it():
+    assert preload_pulse_us(1420, 1530, 1510, 0.5) == pytest.approx(1465.0)
+    assert preload_pulse_us(1670, 1330, 1400, 0.5) == pytest.approx(1535.0)  # reversed lever
+    assert preload_pulse_us(1420, 1530, 1510, 5.0) == pytest.approx(1420 + MAX_PRELOAD_FRAC * 90)  # capped
+    assert preload_pulse_us(1420, 1530, 0.0, 0.5) is None  # break not marked
+    assert preload_pulse_us(1420, 1530, 1510, 0.0) is None  # off
+    assert preload_pulse_us(1420, 1530, 1600, 0.5) is None  # break beyond fire
+    assert preload_pulse_us(1420, 1530, 1400, 0.5) is None  # break on the wrong side of rest
+    assert preload_pulse_us(1420, 1530, 1510, 0.5, 1470.0, 1550.0) is None  # outside the travel
+
+
+def test_servo_pre_travels_while_held_and_rests_then_limps_on_release():
+    cfg = _preload_cfg()
+    gpio, arming = build(cfg)
+    pwm = SimPwm(0, 0, cfg.actuator.servo.frame_hz)
+    act = ServoActuator(cfg, pwm, arming)
+    assert act.preload_us == pytest.approx(1465.0)
+    arm(gpio, cfg, arming)
+    assert wait_for(lambda: pwm.pulse_us is not None, 0.5)
+    assert pwm.pulse_us == pytest.approx(1465.0) and act.preloaded
+    time.sleep(0.1)
+    assert pwm.pulse_us == pytest.approx(1465.0)  # held for as long as the button is
+    gpio.inject(cfg.arming.pin, 1)
+    assert pwm.pulse_us == pytest.approx(1420.0) and not act.preloaded
+    assert wait_for(lambda: pwm.pulse_us is None, 0.5)
+    assert [round(us) for us in _driven(pwm)] == [1465, 1420]
+
+
+def test_servo_fires_from_the_pre_travel_and_does_not_re_preload_after_the_shot():
+    cfg = _preload_cfg()
+    gpio, arming = build(cfg)
+    pwm = SimPwm(0, 0, cfg.actuator.servo.frame_hz)
+    act = ServoActuator(cfg, pwm, arming)
+    arm(gpio, cfg, arming)
+    assert wait_for(lambda: act.preloaded, 0.5)
+    assert act.fire(time.monotonic_ns()) is True
+    assert pwm.pulse_us == pytest.approx(1530.0) and not act.preloaded
+    assert wait_for(lambda: pwm.pulse_us is None, 0.5)  # rest, then limp, button still held
+    assert [round(us) for us in _driven(pwm)] == [1465, 1530, 1420]
+
+
+def test_servo_pre_travel_times_out_to_limp():
+    cfg = _preload_cfg(max_s=0.05)
+    gpio, arming = build(cfg)
+    pwm = SimPwm(0, 0, cfg.actuator.servo.frame_hz)
+    act = ServoActuator(cfg, pwm, arming)
+    arm(gpio, cfg, arming)
+    assert wait_for(lambda: act.preloaded, 0.5)
+    assert wait_for(lambda: pwm.pulse_us is None, 0.5)
+    assert arming.armed and not act.preloaded
+
+
+def test_servo_without_a_marked_break_or_with_preload_disabled_does_nothing_on_press():
+    for tweak in ("no_break", "disabled"):
+        cfg = _preload_cfg()
+        if tweak == "no_break":
+            cfg.actuator.servo.break_us = 0.0
+        gpio, arming = build(cfg)
+        pwm = SimPwm(0, 0, cfg.actuator.servo.frame_hz)
+        ServoActuator(cfg, pwm, arming, preload=(tweak != "disabled"))
+        arm(gpio, cfg, arming)
+        time.sleep(0.05)
+        assert _driven(pwm) == [], tweak
 
 
 # --------------------------------------------------------------------------------------------- pq12

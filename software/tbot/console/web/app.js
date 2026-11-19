@@ -972,7 +972,7 @@ PAGES.calibration = {
           b && b.rpy_deg ? `<dt>Pitch</dt><dd>${b.rpy_deg[1].toFixed(3)}°</dd><dt>Yaw</dt><dd>${b.rpy_deg[2].toFixed(3)}°</dd><dt>Roll</dt><dd>${b.rpy_deg[0].toFixed(3)}°</dd>` : "",
           calAge(cal.boresight), `<a class="btn primary" href="#/boresight">${icon("laser")}Calibrate / check</a>`),
         card("trigger", "Trigger servo", "Rest and fire pulse widths of the MG996R. Gun unloaded; moves only while you hold the arming button.",
-          cal.servo.rest_us ? `<dt>Rest</dt><dd>${cal.servo.rest_us} µs</dd><dt>Fire</dt><dd>${cal.servo.fire_us} µs</dd><dt>Travel</dt><dd>${cal.servo.min_us}–${cal.servo.max_us} µs</dd><dt>Hold</dt><dd>${cal.servo.hold_ms} ms</dd>` : "",
+          cal.servo.rest_us ? `<dt>Rest</dt><dd>${cal.servo.rest_us} µs</dd><dt>Fire</dt><dd>${cal.servo.fire_us} µs</dd><dt>Travel</dt><dd>${cal.servo.min_us}–${cal.servo.max_us} µs</dd><dt>Hold</dt><dd>${cal.servo.hold_ms} ms</dd><dt>Break</dt><dd>${cal.servo.break_us ? `${cal.servo.break_us} µs` : "not marked"}</dd><dt>Pre-travel</dt><dd>${cal.servo.break_us && cal.servo.preload_frac ? `${Math.round(cal.servo.preload_frac * 100)} %` : "off"}</dd>` : "",
           cal.servo.max_us ? '<span class="badge ok">Set</span>' : '<span class="badge danger">Not set</span>', `<a class="btn primary" href="#/trigger">${icon("trigger")}Set up servo</a>`),
         card("timer", "Trigger delay", "Command to sear break: the solver leads the clay by this. Re-measure after any change to the servo or linkage.",
           isNum(delay) ? `<dt>Command → break</dt><dd>${delay.toFixed(1)} ms</dd>` : "",
@@ -1317,11 +1317,13 @@ PAGES.trigger = {
             <span class="hint">${st.driving ? "driving" : "limp"} · each move is a ${st.burst_ms.toFixed(0)} ms burst${st.sim ? " · SIMULATED" : ""}</span></div>
         </div>
         <div class="card"><div class="card-h"><h3>Lever travel</h3><div class="right">${st.limits_set ? `<span class="badge ok">limits ${lo.toFixed(0)}–${hi.toFixed(0)} µs</span>` : `<span class="badge warn">limits not set: moves creep ${st.max_jump_us.toFixed(0)} µs at a time</span>`}</div></div>
-          <div class="travel">
+          <div class="travel" style="margin-bottom:${st.break_us || st.preload_us ? 16 : 0}px">
             <div class="rail"></div>
             ${st.limits_set ? `<div class="range" style="left:${pos(lo)}%;width:${pos(hi) - pos(lo)}%"></div>` : ""}
             <div class="tick rest" style="left:${pos(st.rest_us)}%"><span>REST ${st.rest_us.toFixed(0)}</span></div>
             <div class="tick fire" style="left:${pos(st.fire_us)}%"><span>FIRE ${st.fire_us.toFixed(0)}</span></div>
+            ${st.break_us ? `<div class="tick brk" style="left:${pos(st.break_us)}%"><span>BREAK ${st.break_us.toFixed(0)}</span></div>` : ""}
+            ${st.preload_us ? `<div class="tick pre" style="left:${pos(st.preload_us)}%"><span>PRE ${st.preload_us.toFixed(0)}</span></div>` : ""}
             ${cur ? `<div class="cur" style="left:${pos(cur)}%" data-v="${cur.toFixed(0)}"></div>` : ""}
           </div>
           <div class="jog" style="margin-top:22px">${[-50, -10, -5, 5, 10, 50].map((d) => `<button class="btn" data-d="${d}" ${st.armed ? "" : "disabled"}>${d > 0 ? "+" : "−"}${Math.abs(d)}</button>`).join("")}</div>
@@ -1332,19 +1334,27 @@ PAGES.trigger = {
           <div class="btn-row">
             <button class="btn" data-l="lo" ${cur ? "" : "disabled"}>Mark low end</button><button class="btn" data-l="hi" ${cur ? "" : "disabled"}>Mark high end</button>
             <button class="btn" data-l="rest" ${cur ? "" : "disabled"} style="border-color:var(--ok)">Set as REST</button>
-            <button class="btn" data-l="fire" ${cur ? "" : "disabled"} style="border-color:var(--danger)">Set as FIRE</button></div>
-          <p class="small muted" style="margin:10px 0 0"><b>Rest</b>: the lever just off the trigger. <b>Fire</b>: a little past where the sear breaks. Low/high ends: as far as the lever may ever go.</p></div>
+            <button class="btn" data-l="fire" ${cur ? "" : "disabled"} style="border-color:var(--danger)">Set as FIRE</button>
+            <button class="btn" data-l="break" ${cur ? "" : "disabled"} style="border-color:var(--warn)">Set as BREAK</button></div>
+          <p class="small muted" style="margin:10px 0 0"><b>Rest</b>: the lever just off the trigger. <b>Break</b>: exactly where the sear breaks (creep toward it in 5 µs steps). <b>Fire</b>: a little past the break. Low/high ends: as far as the lever may ever go.</p></div>
         <div class="card"><div class="card-h"><h3>Log</h3></div><pre class="term" id="t-log" style="max-height:220px"></pre></div>`;
       $("#t-side").innerHTML = `
         <div class="card"><div class="card-h"><h3>Test & save</h3></div>
           <button class="btn lg" id="t-test" style="width:100%" ${st.armed && st.limits_set ? "" : "disabled"}>${icon("target")}Test one fire cycle</button>
-          <p class="small muted">Fire pulse for the hold time, back to rest, then limp — exactly what a shot does. Recock between tests.</p>
+          <p class="small muted">${st.preload_us ? "Pre-travel, then the" : "The"} fire pulse for the hold time, back to rest, then limp — exactly what a shot does. Recock between tests.</p>
           <div class="field"><label>Hold at fire</label><div class="input-group"><input class="input mono" id="t-hold" type="number" min="50" max="1500" step="10" value="${st.hold_ms}"><span class="addon">ms</span></div></div>
+          <div class="field"><label>Pre-travel while the button is held</label>
+            <div style="display:flex;gap:10px;align-items:center"><input id="t-pre-r" type="range" min="0" max="90" step="5" value="${Math.round(st.preload_frac * 100)}" style="flex:1">
+              <div class="input-group" style="width:110px"><input class="input mono" id="t-pre" type="number" min="0" max="90" step="5" value="${Math.round(st.preload_frac * 100)}"><span class="addon">%</span></div></div>
+            <p class="small muted" style="margin:6px 0 0">${st.preload_us
+              ? `Holding the button parks the lever at <b class="mono">${st.preload_us.toFixed(0)} µs</b>, ${Math.round(st.preload_frac * 100)} % of the way from rest to the break, so a shot only travels the rest of the way. Released = rest, then limp; after ${st.preload_max_s.toFixed(0)} s held it goes limp anyway.`
+              : st.preload_frac > 0 ? `<span style="color:var(--warn)">Inactive: mark <b>BREAK</b> (between rest and fire, inside the travel limits) to turn it on.</span>` : "Off: every shot travels the whole way from rest."}</p>
+            ${st.preload_us ? `<button class="btn" id="t-pre-go" style="margin-top:8px" ${st.armed ? "" : "disabled"}>Go to pre-travel (${st.preload_us.toFixed(0)} µs)</button>` : ""}</div>
           <hr class="sep" style="margin:14px 0">
-          <dl class="kv"><dt>Rest</dt><dd>${st.rest_us.toFixed(0)} µs</dd><dt>Fire</dt><dd>${st.fire_us.toFixed(0)} µs</dd><dt>Travel</dt><dd>${st.limits_set ? `${lo.toFixed(0)}–${hi.toFixed(0)} µs` : "not set"}</dd></dl>
+          <dl class="kv"><dt>Rest</dt><dd>${st.rest_us.toFixed(0)} µs</dd><dt>Break</dt><dd>${st.break_us ? `${st.break_us.toFixed(0)} µs` : "not marked"}</dd><dt>Fire</dt><dd>${st.fire_us.toFixed(0)} µs</dd><dt>Pre-travel</dt><dd>${st.preload_us ? `${st.preload_us.toFixed(0)} µs (${Math.round(st.preload_frac * 100)} %)` : "off"}</dd><dt>Travel</dt><dd>${st.limits_set ? `${lo.toFixed(0)}–${hi.toFixed(0)} µs` : "not set"}</dd></dl>
           <button class="btn primary" id="t-save" style="width:100%;margin-top:14px" ${st.limits_set ? "" : "disabled"}>${icon("check")}Save to the gun</button>
           <p class="small muted" style="margin:8px 0 0">Writes <span class="mono">config/local.toml</span> (comments kept, old file backed up). The pipeline uses it from its next start.</p></div>
-        <div class="card"><div class="card-h"><h3>After a change</h3></div><p class="small muted" style="margin:0">Re-measure the trigger delay (command → break) on the Pi with <span class="mono">tbot latency-mic</span>: the solver leads the clay by it.</p></div>`;
+        <div class="card"><div class="card-h"><h3>After a change</h3></div><p class="small muted" style="margin:0">Re-measure the trigger delay (command → break) on the Pi with <span class="mono">tbot latency-mic</span>: the solver leads the clay by it. Changing the pre-travel changes that delay too.</p></div>`;
       $("#t-log").textContent = logLines.slice(-80).join("\n");
       $("#t-log").scrollTop = 1e9;
       $$("[data-d]").forEach((b) => b.onclick = () => sendTool({ line: (+b.dataset.d > 0 ? "+" : "") + b.dataset.d }));
@@ -1352,10 +1362,15 @@ PAGES.trigger = {
       $("#t-gob").onclick = () => { const v = parseFloat($("#t-go").value); if (isNum(v)) sendTool({ line: String(v) }); };
       $("#t-go").onkeydown = (e) => { if (e.key === "Enter") $("#t-gob").click(); };
       $("#t-test").onclick = () => sendTool({ line: "test" });
+      const setPre = (pct) => { const f = clamp(pct, 0, 90) / 100; if (isNum(f)) sendTool({ line: `preload ${f}` }); };
+      $("#t-pre-r").oninput = () => { $("#t-pre").value = $("#t-pre-r").value; };
+      $("#t-pre-r").onchange = () => setPre(parseFloat($("#t-pre-r").value));
+      $("#t-pre").onchange = () => setPre(parseFloat($("#t-pre").value));
+      const preGo = $("#t-pre-go"); if (preGo) preGo.onclick = () => sendTool({ line: st.preload_us.toFixed(0) });
       const sim = $("#t-sim"); if (sim) sim.onclick = () => sendTool({ cmd: "sim_button", held: !st.armed });
       $("#t-save").onclick = async () => {
         try {
-          const r = await api("servo/save", { body: { rest_us: st.rest_us, fire_us: st.fire_us, min_us: st.min_us, max_us: st.max_us, hold_ms: parseFloat($("#t-hold").value) } });
+          const r = await api("servo/save", { body: { rest_us: st.rest_us, fire_us: st.fire_us, min_us: st.min_us, max_us: st.max_us, hold_ms: parseFloat($("#t-hold").value), break_us: st.break_us, preload_frac: st.preload_frac } });
           toast(r.changed ? "Servo settings saved." : "Nothing changed.", "ok");
         } catch (e) { toast(e.message, "err"); }
       };

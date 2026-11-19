@@ -375,6 +375,9 @@ input[type=range] { accent-color: var(--accent); width: 100%; }
 .travel .tick span { position: absolute; top: 26px; left: 50%; transform: translateX(-50%); font-size: 11px; font-weight: 650; white-space: nowrap; }
 .travel .tick.rest { background: var(--ok); color: var(--ok); }
 .travel .tick.fire { background: var(--danger); color: var(--danger); }
+.travel .tick.brk { background: var(--warn); color: var(--warn); }
+.travel .tick.pre { background: var(--accent); color: var(--accent); }
+.travel .tick.brk span, .travel .tick.pre span { top: 40px; }
 .travel .cur { position: absolute; top: 10px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: var(--text); box-shadow: 0 0 0 3px var(--bg); transition: left .2s; }
 .travel .cur::after { content: attr(data-v); position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%); font-size: 11px; font-weight: 700; white-space: nowrap; color: var(--text); }
 .jog { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
