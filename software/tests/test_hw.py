@@ -584,3 +584,60 @@ def test_run_trials_pauses_while_the_button_is_released(tmp_path):
     )
     assert none == []
     assert act.fire_times == [t.cmd_ns for t in trials]
+
+
+# ------------------------------------------------------------------ the ready light
+def test_status_led_patterns_and_stale_reports():
+    from tbot.hw import status_led as sl
+
+    assert sl.level_for(sl.READY, 0.3) == 1 and sl.level_for(sl.READY, 7.7) == 1
+    assert sl.level_for(sl.OFF, 0.3) == 0
+    assert [sl.level_for(sl.WAIT, t) for t in (0.0, 0.05, 0.1, 0.15, 0.2)] == [1, 1, 0, 0, 1]   # 5 Hz
+    assert [sl.level_for(sl.DRY, t) for t in (0.0, 0.9, 1.0, 1.9, 2.0)] == [1, 1, 0, 0, 1]      # 0.5 Hz
+
+    now = [100.0]
+    gpio = SimGpio()
+    led = sl.StatusLed(gpio, 27, clock=lambda: now[0])
+    assert gpio.modes[27] == "out" and gpio.levels[27] == 0
+    led.set(sl.READY)
+    assert led.shown() == sl.READY
+    now[0] += sl.STALE_S + 0.1          # the frame loop stopped reporting: no longer "ready"
+    assert led.shown() == sl.WAIT
+    led.set(sl.DRY)
+    assert led.shown() == sl.DRY
+    led.close()
+    assert gpio.levels[27] == 0
+
+
+def test_status_led_thread_lights_and_goes_dark_on_close():
+    import time as _time
+
+    from tbot.hw import status_led as sl
+
+    gpio = SimGpio()
+    led = sl.StatusLed(gpio, 27, active_high=False)   # LED between 3.3 V and the pin: lit = level 0
+    assert gpio.levels[27] == 1
+    led.start()
+    deadline = _time.monotonic() + 2.0
+    while _time.monotonic() < deadline and gpio.levels[27] != 0:
+        led.set(sl.READY)
+        _time.sleep(0.02)
+    assert gpio.levels[27] == 0
+    led.close()
+    assert gpio.levels[27] == 1
+
+
+def test_status_led_never_raises_on_a_dead_gpio():
+    from tbot.hw import status_led as sl
+
+    class Dead:
+        def setup_output(self, pin, level=0):
+            raise OSError("no such pin")
+
+        def write(self, pin, level):
+            raise OSError("gone")
+
+    led = sl.StatusLed(Dead(), 27)
+    led.start()
+    led.set(sl.READY)
+    led.close()
