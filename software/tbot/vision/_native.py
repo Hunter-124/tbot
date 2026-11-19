@@ -50,6 +50,38 @@ class MeasureParams(ctypes.Structure):
     ]
 
 
+SCENERY_ABI = 1      # TBOT_SCENERY_ABI in _measure.c
+SCENERY_MAX_OLD = 4  # SCENERY_MAX_OLD (= clutter.COMPARE_FRAMES)
+SCENERY_LISTED = 24  # SCENERY_LISTED (= clutter.STATIC_LISTED)
+RAYS_GIVEN, RAYS_FISHEYE, RAYS_PINHOLE, RAYS_PINHOLE_IDEAL = -1, 0, 1, 2
+ARR_TYPES = {np.dtype(np.float64): 0, np.dtype(np.int64): 1, np.dtype(np.int32): 2}
+
+
+class SceneryParams(ctypes.Structure):
+    """tbot_scenery_params in _measure.c, field for field."""
+
+    _fields_ = [
+        ("n", ctypes.c_int32), ("model", ctypes.c_int32),
+        ("uv", _ptr), ("rays", _ptr),
+        ("fx", ctypes.c_double), ("fy", ctypes.c_double), ("cx", ctypes.c_double), ("cy", ctypes.c_double),
+        ("skew", ctypes.c_double), ("k", ctypes.c_double * 8),
+        ("newton_iters", ctypes.c_int32), ("undistort_iters", ctypes.c_int32), ("newton_tol", ctypes.c_double),
+        ("R_now", _ptr),
+        ("n_old", ctypes.c_int32), ("old_m", ctypes.c_int32 * SCENERY_MAX_OLD),
+        ("old_R", _ptr * SCENERY_MAX_OLD), ("old_dirs", _ptr * SCENERY_MAX_OLD),
+        ("tol0", ctypes.c_double), ("turn_tol", ctypes.c_double), ("lever", ctypes.c_double),
+        ("lam_max", ctypes.c_double), ("view", ctypes.c_double * 4),
+        ("areas", _ptr), ("widths", _ptr), ("heights", _ptr),
+        ("areas_t", ctypes.c_int32), ("widths_t", ctypes.c_int32), ("heights_t", ctypes.c_int32),
+        ("size_tol", ctypes.c_double),
+        ("protect", _ptr), ("n_protect", ctypes.c_int32), ("protect_cos", ctypes.c_double),
+        ("focus", _ptr), ("focus_cos", _ptr), ("n_focus", ctypes.c_int32), ("others_max", ctypes.c_int32),
+        ("dirs", _ptr), ("keep", _ptr), ("flags", _ptr), ("static_px", _ptr),
+        ("n_keep", ctypes.c_int32), ("n_static", ctypes.c_int32), ("n_new", ctypes.c_int32),
+        ("n_focus_kept", ctypes.c_int32), ("n_listed", ctypes.c_int32),
+    ]
+
+
 def library_path() -> Path:
     """Where scripts/build_native.sh puts the library: next to the C file."""
     ext = ".dll" if sys.platform == "win32" else ".dylib" if sys.platform == "darwin" else ".so"
@@ -90,7 +122,40 @@ def _load() -> ctypes.CDLL | None:
     lib.tbot_measure.restype = ctypes.c_int
     lib.tbot_measure.argtypes = [ctypes.POINTER(MeasureParams), _ptr, ctypes.c_int32, _ptr]
     status = f"loaded ({path.name})"
+    _load_scenery(lib)
     return lib
+
+
+scenery_status = "not loaded"   # the scenery filter's kernel (tbot bench prints it)
+_scenery = None
+
+
+def _load_scenery(lib: ctypes.CDLL) -> None:
+    """The scenery filter's entry point in the same library; a library built before it has none."""
+    global _scenery, scenery_status
+    try:
+        lib.tbot_scenery_abi.restype = ctypes.c_int
+        lib.tbot_scenery_params_size.restype = ctypes.c_int
+        abi, size = int(lib.tbot_scenery_abi()), int(lib.tbot_scenery_params_size())
+    except AttributeError:
+        scenery_status = "not in this build (rebuild with scripts/build_native.sh)"
+        return
+    if abi != SCENERY_ABI or size != ctypes.sizeof(SceneryParams):
+        scenery_status = f"stale (ABI {abi}, struct {size} bytes): rebuild with scripts/build_native.sh"
+        log.warning("native scenery filter: %s; using the Python path", scenery_status)
+        return
+    fn = lib.tbot_scenery
+    fn.restype = ctypes.c_int
+    fn.argtypes = [ctypes.c_void_p]
+    _scenery = fn
+    scenery_status = "loaded"
+
+
+def scenery_kernel():
+    """tbot_scenery from the loaded library, or None (not built, stale, switched off)."""
+    if kernel() is None:
+        return None
+    return _scenery
 
 
 def kernel() -> ctypes.CDLL | None:
@@ -112,8 +177,10 @@ def describe(enabled: bool = True) -> str:
 
 def reload() -> ctypes.CDLL | None:
     """Forget the cached result and look again (tests; after a rebuild or an environment change)."""
-    global _tried
+    global _tried, _scenery, scenery_status
     _tried = False
+    _scenery = None
+    scenery_status = "not loaded"
     return kernel()
 
 

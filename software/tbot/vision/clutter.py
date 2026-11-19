@@ -33,10 +33,13 @@ Limits, by design:
 
 from __future__ import annotations
 
+import ctypes
 import math
 from collections import deque
 
 import numpy as np
+
+from tbot.vision import _native
 
 __all__ = ["StaticFilter"]
 
@@ -74,6 +77,11 @@ class StaticFilter:
                                                      [0.5 * w, h - 1 - m]], dtype=np.float64))).reshape(4, 3)
         self._view = (float(edge[0, 0] / edge[0, 2]), float(edge[1, 0] / edge[1, 2]),
                       float(edge[2, 1] / edge[2, 2]), float(edge[3, 1] / edge[3, 2]))
+        self._focus_cos_arr: np.ndarray | None = None
+        self._np: _native.SceneryParams | None = None   # native kernel parameters, filled on first use
+        self._flags = np.zeros(0, np.uint8)
+        self._spx = np.zeros((_native.SCENERY_LISTED, 2), np.float64)
+        self.native_used = False   # last frame went through the C kernel
 
     def reset(self) -> None:
         self._hist.clear()
@@ -98,20 +106,22 @@ class StaticFilter:
         self._R_wc = np.asarray(R_wg, dtype=np.float64).reshape(3, 3) @ self._R_gc
         if focus_dirs_w is not None and len(focus_dirs_w):
             f = np.asarray(focus_dirs_w, dtype=np.float64).reshape(-1, 3)
-            self._focus = f / np.maximum(np.linalg.norm(f, axis=1, keepdims=True), 1e-12)
+            # C order: the native kernel reads it as rows
+            self._focus = np.ascontiguousarray(f / np.maximum(np.linalg.norm(f, axis=1, keepdims=True), 1e-12))
             floor = float(protect_px) * self.ifov
             if focus_radius_rad is not None and len(focus_radius_rad) == len(f):
                 self._focus_cos = np.cos(np.minimum(np.maximum(np.asarray(focus_radius_rad, dtype=np.float64),
                                                                floor), 0.5 * math.pi))
             else:
                 self._focus_cos = math.cos(floor)
+            self._focus_cos_arr = None   # made when the native kernel needs it
             self._others_max = max(0, int(others_max))
         else:
             self._focus = None
         self.n_focus = 0
         if protect_dirs_w is not None and len(protect_dirs_w):
             p = np.asarray(protect_dirs_w, dtype=np.float64).reshape(-1, 3)
-            self._protect = p / np.maximum(np.linalg.norm(p, axis=1, keepdims=True), 1e-12)
+            self._protect = np.ascontiguousarray(p / np.maximum(np.linalg.norm(p, axis=1, keepdims=True), 1e-12))
             self._protect_cos = math.cos(float(protect_px) * self.ifov)
         else:
             self._protect = None
@@ -146,10 +156,7 @@ class StaticFilter:
         n = int(len(uv))
         if n == 0 or self._R_wc is None:
             return np.arange(n)
-        uv = np.asarray(uv, dtype=np.float64).reshape(n, 2)
-        rays = np.asarray(self.cam.pixel_to_ray(uv), dtype=np.float64).reshape(n, 3)
-        R_now = self._R_wc
-        dirs = rays @ R_now.T
+        uv = np.ascontiguousarray(uv, dtype=np.float64).reshape(n, 2)
         t = self._t_ns
         min_age = float(det.static_min_age_ms) * 1e6
         max_age = float(det.static_max_age_ms) * 1e6
@@ -159,9 +166,26 @@ class StaticFilter:
         while hist and t - hist[0][0] > max_age:
             hist.popleft()
 
+        old = [h for h in self._old_frames(t, min_age) if len(h[2])]
+        self.native_used = False
+        fn = _native.scenery_kernel() if bool(getattr(det, "native", True)) else None
+        if fn is not None:
+            keep = self._filter_native(fn, uv, areas, widths, heights, old, det)
+            if keep is not None:
+                self.native_used = True
+                return keep
+        return self._filter_python(uv, areas, widths, heights, old, det)
+
+    def _filter_python(self, uv, areas, widths, heights, old, det) -> np.ndarray:
+        """The reference for _measure.c's tbot_scenery (and the path when the library is not built)."""
+        n = int(len(uv))
+        hist = self._hist
+        t = self._t_ns
+        R_now = self._R_wc
+        rays = np.asarray(self.cam.pixel_to_ray(uv), dtype=np.float64).reshape(n, 3)
+        dirs = rays @ R_now.T
         static = None
         new = None  # no history yet (start-up, after a reset): nothing is known
-        old = [h for h in self._old_frames(t, min_age) if len(h[2])]
         if old:
             tol0 = float(det.static_tol_px) * self.ifov
             lever = float(det.static_lever_m)
@@ -239,3 +263,102 @@ class StaticFilter:
                 others = others[:self._others_max]
             keep = np.concatenate((keep[near], others))
         return keep
+
+    # ------------------------------------------------------------------ native (tbot/vision/_measure.c)
+    def _native_params(self) -> _native.SceneryParams:
+        """The per-camera part of the kernel's parameters (once)."""
+        p = _native.SceneryParams()
+        cam = self.cam
+        fast = getattr(cam, "_fast", None)
+        if fast is None:
+            p.model = _native.RAYS_GIVEN   # a model with no plain-float form: rays from cam.pixel_to_ray
+        else:
+            fx, fy, cx, cy, skew, k = fast
+            p.fx, p.fy, p.cx, p.cy, p.skew = fx, fy, cx, cy, skew
+            if cam.model == "fisheye":
+                p.model = _native.RAYS_FISHEYE
+            elif k is None:
+                p.model = _native.RAYS_PINHOLE_IDEAL
+            else:
+                p.model = _native.RAYS_PINHOLE
+            for i, v in enumerate(k or ()):
+                p.k[i] = float(v)
+        from tbot import optics
+        p.newton_iters = int(optics._NEWTON_ITERS)
+        p.undistort_iters = int(optics._UNDISTORT_ITERS)
+        p.newton_tol = float(optics._NEWTON_TOL)
+        p.turn_tol = TURN_TOL
+        p.size_tol = SIZE_TOL * self.ifov
+        for i, v in enumerate(self._view):
+            p.view[i] = v
+        p.static_px = self._spx.ctypes.data
+        return p
+
+    @staticmethod
+    def _arr(a):
+        """(address, type code, keep-alive) of a candidate attribute array for the kernel."""
+        if a is None:
+            return None, 0, None
+        if not isinstance(a, np.ndarray) or a.dtype not in _native.ARR_TYPES or not a.flags.c_contiguous:
+            a = np.ascontiguousarray(a, dtype=np.float64)
+        return a.ctypes.data, _native.ARR_TYPES[a.dtype], a
+
+    def _filter_native(self, fn, uv, areas, widths, heights, old, det) -> np.ndarray | None:
+        n = int(len(uv))
+        if len(old) > _native.SCENERY_MAX_OLD:
+            return None
+        p = self._np
+        if p is None:
+            p = self._np = self._native_params()
+        R_now = self._R_wc
+        if not R_now.flags.c_contiguous:
+            R_now = self._R_wc = np.ascontiguousarray(R_now)
+        rays = None
+        if p.model == _native.RAYS_GIVEN:
+            rays = np.ascontiguousarray(self.cam.pixel_to_ray(uv), dtype=np.float64).reshape(n, 3)
+            p.rays = rays.ctypes.data
+        p.n = n
+        p.uv = uv.ctypes.data
+        p.R_now = R_now.ctypes.data
+        p.n_old = len(old)
+        for i, (_t, R_f, d_f) in enumerate(old):
+            p.old_m[i] = len(d_f)
+            p.old_R[i] = R_f.ctypes.data
+            p.old_dirs[i] = d_f.ctypes.data
+        p.tol0 = float(det.static_tol_px) * self.ifov
+        p.lever = float(det.static_lever_m)
+        p.lam_max = 1.0 / max(float(det.static_min_range_m), 0.5)
+        sized = widths is not None and heights is not None
+        a_p, a_t, a_keep = self._arr(areas if sized else None)
+        w_p, w_t, w_keep = self._arr(widths if sized else None)
+        h_p, h_t, h_keep = self._arr(heights if sized else None)
+        p.areas, p.areas_t, p.widths, p.widths_t, p.heights, p.heights_t = a_p, a_t, w_p, w_t, h_p, h_t
+        if self._protect is not None:
+            p.protect, p.n_protect, p.protect_cos = self._protect.ctypes.data, len(self._protect), self._protect_cos
+        else:
+            p.protect, p.n_protect = None, 0
+        if self._focus is not None:
+            fc = self._focus_cos_arr
+            if fc is None:
+                fc = self._focus_cos_arr = np.ascontiguousarray(
+                    np.broadcast_to(np.asarray(self._focus_cos, dtype=np.float64), (len(self._focus),)))
+            p.focus, p.focus_cos, p.n_focus, p.others_max = (self._focus.ctypes.data, fc.ctypes.data,
+                                                             len(self._focus), self._others_max)
+        else:
+            p.focus, p.focus_cos, p.n_focus = None, None, 0
+        dirs = np.empty((n, 3), np.float64)
+        keep = np.empty(n, np.intp)
+        if self._flags.size < n:
+            self._flags = np.zeros(max(n, 2 * self._flags.size, 64), np.uint8)
+        p.dirs, p.keep, p.flags = dirs.ctypes.data, keep.ctypes.data, self._flags.ctypes.data
+        rc = fn(ctypes.addressof(p))
+        del a_keep, w_keep, h_keep, rays
+        if rc != 0:
+            return None
+        self._hist.append((self._t_ns, R_now, dirs))
+        self.n_static = int(p.n_static)
+        self.n_new = int(p.n_new)
+        self.n_focus = int(p.n_focus_kept)
+        if self.n_static:
+            self.static_px = self._spx[:p.n_listed].tolist()
+        return keep[:p.n_keep]

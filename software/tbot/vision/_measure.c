@@ -11,11 +11,16 @@
  * every argmax takes the first maximum in row-major order. The moments differ from the Python only by
  * rounding (expf against NumPy's float32 exp, and the summation order of cv2.moments): ~1e-6 px.
  *
- * Build: scripts/build_native.sh (cc -O2 -shared -fPIC -ffp-contract=off). Change TBOT_MEASURE_ABI here and
- * in _native.py together whenever a signature or struct changes: a stale library is then refused.
+ * The same library also holds the scenery filter's per-frame pass (tbot_scenery, at the end of this file;
+ * StaticFilter.filter in tbot/vision/clutter.py is its reference and fallback).
+ *
+ * Build: scripts/build_native.sh (cc -O2 -shared -fPIC -ffp-contract=off). Change TBOT_MEASURE_ABI (or
+ * TBOT_SCENERY_ABI) here and in _native.py together whenever a signature or struct changes: a stale library
+ * is then refused.
  */
 #include <math.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 
 #if defined(_WIN32)
@@ -533,5 +538,303 @@ TBOT_API int tbot_measure(const tbot_measure_params *p, const int32_t *lids, int
         memset(o, 0, OUT_COLS * sizeof(double));
         o[0] = (double)measure_one(p, lids[k], o, cbuf, fa, fb, fc);
     }
+    return 0;
+}
+
+/* ======================================================================= scenery filter (vision/clutter.py)
+ * One frame of StaticFilter.filter after the comparison frames have been picked: pixel -> camera ray ->
+ * world direction, the parallax-segment match against the old frames, the "was it in view then" test,
+ * the protected tracks, the priority order and the focus split. Same statements as the Python; dot
+ * products are summed left to right where NumPy may use BLAS, so a distance can differ from it in the last
+ * bit (only a candidate exactly on a tolerance edge could be judged differently). */
+
+#define TBOT_SCENERY_ABI 1
+#define SCENERY_MAX_OLD 4    /* clutter.COMPARE_FRAMES */
+#define SCENERY_LISTED 24    /* clutter.STATIC_LISTED */
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
+enum { RAYS_GIVEN = -1, RAYS_FISHEYE = 0, RAYS_PINHOLE = 1, RAYS_PINHOLE_IDEAL = 2 };
+enum { ARR_F64 = 0, ARR_I64 = 1, ARR_I32 = 2 };
+
+typedef struct {
+    int32_t n;                  /* candidates */
+    int32_t model;              /* RAYS_*: how rays are made from uv (RAYS_GIVEN: read from rays) */
+    const double *uv;           /* (n,2) full-resolution pixels */
+    const double *rays;         /* (n,3) camera-frame unit rays when model == RAYS_GIVEN */
+    double fx, fy, cx, cy, skew;
+    double k[8];                /* fisheye k1..k4, or pinhole k1 k2 p1 p2 k3 k4 k5 k6 */
+    int32_t newton_iters, undistort_iters;
+    double newton_tol;
+    const double *R_now;        /* 3x3 row-major, camera -> world, this frame */
+    int32_t n_old;              /* comparison frames (each with at least one direction), oldest first */
+    int32_t old_m[SCENERY_MAX_OLD];
+    const double *old_R[SCENERY_MAX_OLD];
+    const double *old_dirs[SCENERY_MAX_OLD];   /* (m,3) world directions */
+    double tol0, turn_tol, lever, lam_max;
+    double view[4];             /* x0, x1, y0, y1 on the tangent plane of the camera frame */
+    const void *areas, *widths, *heights;      /* (n) or NULL, element types ARR_* */
+    int32_t areas_t, widths_t, heights_t;
+    double size_tol;            /* SIZE_TOL * ifov: extra tolerance per pixel of a candidate's extent */
+    const double *protect;      /* (n_protect,3) unit world directions */
+    int32_t n_protect;
+    double protect_cos;
+    const double *focus;        /* (n_focus,3) unit world directions, the main target first */
+    const double *focus_cos;    /* (n_focus) */
+    int32_t n_focus;
+    int32_t others_max;
+    /* outputs */
+    double *dirs;               /* (n,3) world directions */
+    intptr_t *keep;             /* (n) candidates to keep, best first: keep[0..n_keep) */
+    uint8_t *flags;             /* (n) bit 0 scenery, bit 1 new (not in view in the newest comparison frame) */
+    double *static_px;          /* (SCENERY_LISTED,2) the first scenery candidates, uv rounded to 0.1 px */
+    int32_t n_keep, n_static, n_new, n_focus_kept, n_listed;
+} tbot_scenery_params;
+
+static double arr_at(const void *a, int32_t t, intptr_t i) {
+    switch (t) {
+    case ARR_I64: return (double)((const int64_t *)a)[i];
+    case ARR_I32: return (double)((const int32_t *)a)[i];
+    default: return ((const double *)a)[i];
+    }
+}
+
+/* CameraModel.ray_xyz */
+static void ray_of(const tbot_scenery_params *p, double u, double v, double *r) {
+    if (p->model == RAYS_FISHEYE) {
+        double y = (v - p->cy) / p->fy;
+        double x = (u - p->cx) / p->fx - p->skew * y;
+        double theta_d = hypot(x, y);
+        double k1 = p->k[0], k2 = p->k[1], k3 = p->k[2], k4 = p->k[3];
+        double theta = fmin(fmax(theta_d, 0.0), M_PI);
+        for (int it = 0; it < p->newton_iters; it++) {
+            double t2 = theta * theta;
+            double f = theta * (1.0 + t2 * (k1 + t2 * (k2 + t2 * (k3 + t2 * k4)))) - theta_d;
+            double df = 1.0 + t2 * (3.0 * k1 + t2 * (5.0 * k2 + t2 * (7.0 * k3 + t2 * 9.0 * k4)));
+            if (fabs(df) < 1e-12) df = 1e-12;
+            double step = f / df;
+            theta = fmin(fmax(theta - step, 0.0), M_PI);
+            if (fabs(step) < p->newton_tol) break;
+        }
+        double scale = theta_d > 0.0 ? sin(theta) / theta_d : 0.0;
+        r[0] = x * scale;
+        r[1] = y * scale;
+        r[2] = cos(theta);
+        return;
+    }
+    double x0 = (u - p->cx) / p->fx, y0 = (v - p->cy) / p->fy;
+    double x = x0, y = y0;
+    if (p->model == RAYS_PINHOLE) {
+        double k1 = p->k[0], k2 = p->k[1], p1 = p->k[2], p2 = p->k[3];
+        double k3 = p->k[4], k4 = p->k[5], k5 = p->k[6], k6 = p->k[7];
+        for (int it = 0; it < p->undistort_iters; it++) {
+            double r2 = x * x + y * y;
+            double icdist = (1.0 + ((k6 * r2 + k5) * r2 + k4) * r2) / (1.0 + ((k3 * r2 + k2) * r2 + k1) * r2);
+            if (icdist < 0.0) {
+                x = x0;
+                y = y0;
+                break;
+            }
+            double dx = 2.0 * p1 * x * y + p2 * (r2 + 2.0 * x * x);
+            double dy = p1 * (r2 + 2.0 * y * y) + 2.0 * p2 * x * y;
+            x = (x0 - dx) * icdist;
+            y = (y0 - dy) * icdist;
+        }
+    }
+    double norm = sqrt(x * x + y * y + 1.0);
+    r[0] = x / norm;
+    r[1] = y / norm;
+    r[2] = 1.0 / norm;
+}
+
+static inline double dot3(const double *a, const double *b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
+
+/* order of np.lexsort((-fill, new)): new ones last, then the larger fill first; stable */
+static int before(const uint8_t *flags, const double *fill, intptr_t a, intptr_t b) {
+    int na = (flags[a] >> 1) & 1, nb = (flags[b] >> 1) & 1;
+    if (na != nb) return na < nb;
+    return -fill[a] < -fill[b];
+}
+
+static void merge_sort(intptr_t *idx, intptr_t *tmp, int32_t n, const uint8_t *flags, const double *fill) {
+    for (int32_t width = 1; width < n; width *= 2) {
+        for (int32_t lo = 0; lo < n; lo += 2 * width) {
+            int32_t mid = lo + width < n ? lo + width : n;
+            int32_t hi = lo + 2 * width < n ? lo + 2 * width : n;
+            int32_t i = lo, j = mid, k = lo;
+            while (i < mid && j < hi) tmp[k++] = before(flags, fill, idx[j], idx[i]) ? idx[j++] : idx[i++];
+            while (i < mid) tmp[k++] = idx[i++];
+            while (j < hi) tmp[k++] = idx[j++];
+        }
+        memcpy(idx, tmp, (size_t)n * sizeof(intptr_t));
+    }
+}
+
+TBOT_API int tbot_scenery_abi(void) { return TBOT_SCENERY_ABI; }
+
+TBOT_API int tbot_scenery_params_size(void) { return (int)sizeof(tbot_scenery_params); }
+
+/* Returns 0, or -1 for parameters the kernel does not take (the caller then runs the Python). */
+TBOT_API int tbot_scenery(tbot_scenery_params *p) {
+    if (!p) return -1;
+    int32_t n = p->n;
+    if (n < 0 || !p->R_now || !p->uv || !p->dirs || !p->keep || !p->flags || !p->static_px) return -1;
+    if (p->n_old < 0 || p->n_old > SCENERY_MAX_OLD) return -1;
+    if (p->model == RAYS_GIVEN && !p->rays) return -1;
+    if ((p->n_protect > 0 && !p->protect) || (p->n_focus > 0 && (!p->focus || !p->focus_cos))) return -1;
+    for (int f = 0; f < p->n_old; f++)
+        if (!p->old_R[f] || !p->old_dirs[f] || p->old_m[f] <= 0) return -1;
+    p->n_keep = p->n_static = p->n_new = p->n_focus_kept = p->n_listed = 0;
+    if (n == 0) return 0;
+
+    const double *R = p->R_now;
+    double ray[3];
+    for (int32_t i = 0; i < n; i++) {
+        const double *r = ray;
+        if (p->model == RAYS_GIVEN) r = p->rays + 3 * (size_t)i;
+        else ray_of(p, p->uv[2 * i], p->uv[2 * i + 1], ray);
+        double *d = p->dirs + 3 * (size_t)i;   /* rays @ R_now.T */
+        d[0] = r[0] * R[0] + r[1] * R[1] + r[2] * R[2];
+        d[1] = r[0] * R[3] + r[1] * R[4] + r[2] * R[5];
+        d[2] = r[0] * R[6] + r[1] * R[7] + r[2] * R[8];
+    }
+
+    int sized = p->widths && p->heights;
+    if (p->n_old > 0) {
+        double g[SCENERY_MAX_OLD][3], gg[SCENERY_MAX_OLD], tol[SCENERY_MAX_OLD];
+        double zx = R[2], zy = R[5], zz = R[8];   /* optical axis in the world */
+        for (int f = 0; f < p->n_old; f++) {
+            const double *F = p->old_R[f];
+            double tr = 0.0;   /* trace(R_f^T R_now) */
+            for (int q = 0; q < 9; q++) tr += F[q] * R[q];
+            double turn = acos(fmin(1.0, fmax(-1.0, 0.5 * (tr - 1.0))));
+            double dx = p->lever * (zx - F[2]), dy = p->lever * (zy - F[5]), dz = p->lever * (zz - F[8]);
+            double along = dx * zx + dy * zy + dz * zz;
+            g[f][0] = -(dx - along * zx);
+            g[f][1] = -(dy - along * zy);
+            g[f][2] = -(dz - along * zz);
+            gg[f] = dot3(g[f], g[f]);
+            tol[f] = p->tol0 + p->turn_tol * turn;
+        }
+        const double *Rt = p->old_R[p->n_old - 1];
+        for (int32_t i = 0; i < n; i++) {
+            const double *c = p->dirs + 3 * (size_t)i;
+            double st = 0.0;
+            if (sized) {
+                double w = arr_at(p->widths, p->widths_t, i), h = arr_at(p->heights, p->heights_t, i);
+                st = p->size_tol * (w > h ? w : h);
+            }
+            int is_static = 0;
+            for (int f = 0; f < p->n_old && !is_static; f++) {
+                double cg = dot3(c, g[f]), ggf = gg[f] > 1e-12 ? gg[f] : 1e-12;
+                double lim = tol[f] + st;
+                lim *= lim;
+                const double *D = p->old_dirs[f];
+                for (int32_t m = 0; m < p->old_m[f]; m++) {
+                    const double *dd = D + 3 * (size_t)m;
+                    double e2 = 2.0 - 2.0 * dot3(c, dd);   /* |c - d|^2 for unit vectors */
+                    if (e2 < 0.0) e2 = 0.0;
+                    double eg = cg - dot3(dd, g[f]);       /* (c - d) . g */
+                    double lam = eg / ggf;
+                    lam = lam < 0.0 ? 0.0 : (lam > p->lam_max ? p->lam_max : lam);
+                    e2 += lam * (lam * gg[f] - 2.0 * eg);  /* |c - d - lam g|^2 */
+                    if (e2 <= lim) {
+                        is_static = 1;
+                        break;
+                    }
+                }
+            }
+            /* the direction in the newest comparison frame's camera: then = c @ Rt */
+            double t0 = c[0] * Rt[0] + c[1] * Rt[3] + c[2] * Rt[6];
+            double t1 = c[0] * Rt[1] + c[1] * Rt[4] + c[2] * Rt[7];
+            double t2 = c[0] * Rt[2] + c[1] * Rt[5] + c[2] * Rt[8];
+            double tx = t0 / t2, ty = t1 / t2;
+            int in_view = t2 > 1e-6 && tx >= p->view[0] && tx <= p->view[1] && ty >= p->view[2] && ty <= p->view[3];
+            p->flags[i] = (uint8_t)(is_static | (in_view ? 0 : 2));
+        }
+    } else {
+        for (int32_t i = 0; i < n; i++) p->flags[i] = 2;   /* no history: nothing is known yet */
+    }
+
+    if (p->n_protect > 0) {
+        for (int32_t i = 0; i < n; i++) {
+            if (!(p->flags[i] & 1)) continue;
+            const double *c = p->dirs + 3 * (size_t)i;
+            for (int32_t j = 0; j < p->n_protect; j++) {
+                if (dot3(c, p->protect + 3 * (size_t)j) >= p->protect_cos) {
+                    p->flags[i] &= (uint8_t)~1u;
+                    break;
+                }
+            }
+        }
+    }
+
+    int32_t nk = 0;
+    for (int32_t i = 0; i < n; i++) {
+        if (p->flags[i] & 1) {
+            if (p->n_listed < SCENERY_LISTED) {   /* np.round(uv, 1): rint(x * 10) / 10 */
+                p->static_px[2 * p->n_listed] = nearbyint(p->uv[2 * i] * 10.0) / 10.0;
+                p->static_px[2 * p->n_listed + 1] = nearbyint(p->uv[2 * i + 1] * 10.0) / 10.0;
+                p->n_listed++;
+            }
+            p->n_static++;
+        } else {
+            if (p->flags[i] & 2) p->n_new++;
+            p->keep[nk++] = i;
+        }
+    }
+
+    if (nk > 1) {
+        double *fill = (double *)malloc((size_t)n * sizeof(double));
+        intptr_t *tmp = (intptr_t *)malloc((size_t)nk * sizeof(intptr_t));
+        if (!fill || !tmp) {
+            free(fill);
+            free(tmp);
+            return -1;
+        }
+        int filled = p->areas && sized;
+        for (int32_t k = 0; k < nk; k++) {
+            intptr_t i = p->keep[k];
+            if (filled) {
+                double a = arr_at(p->areas, p->areas_t, i);
+                double box = arr_at(p->widths, p->widths_t, i) * arr_at(p->heights, p->heights_t, i);
+                if (box < 1.0) box = 1.0;
+                fill[i] = a / box * sqrt(a);
+            } else {
+                fill[i] = 1.0;
+            }
+        }
+        merge_sort(p->keep, tmp, nk, p->flags, fill);
+        free(fill);
+        free(tmp);
+    }
+
+    if (p->n_focus > 0 && nk > 0) {
+        intptr_t *others = (intptr_t *)malloc((size_t)nk * sizeof(intptr_t));
+        if (!others) return -1;
+        int32_t nn = 0, no = 0, main_hit = 0;
+        for (int32_t k = 0; k < nk; k++) {
+            intptr_t i = p->keep[k];
+            const double *c = p->dirs + 3 * (size_t)i;
+            int near = 0;
+            for (int32_t j = 0; j < p->n_focus; j++) {   /* the main target is j = 0, tried first */
+                if (dot3(c, p->focus + 3 * (size_t)j) >= p->focus_cos[j]) {
+                    near = 1;
+                    if (j == 0) main_hit = 1;
+                    break;
+                }
+            }
+            if (near) p->keep[nn++] = i;
+            else others[no++] = i;
+        }
+        if (p->others_max > 0 && main_hit && no > p->others_max) no = p->others_max;
+        memcpy(p->keep + nn, others, (size_t)no * sizeof(intptr_t));
+        free(others);
+        p->n_focus_kept = nn;
+        nk = nn + no;
+    }
+    p->n_keep = nk;
     return 0;
 }
