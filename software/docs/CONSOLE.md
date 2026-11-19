@@ -48,6 +48,14 @@ The gun's clock (no battery, no NTP at the range) is set from the laptop when th
   score change. They stay there after the gun's SD card is cleaned. "Saved on this PC · open folder" in the player,
   and the footer button opens the folder. `TBOT_ARCHIVE` in the environment moves it.
 
+## Turning press recording off
+
+Settings -> **Press recording** (the card at the top) sets `record.mode` in the gun's `config/local.toml`: off =
+nothing is saved, on = `armed` (every held press). Save, then Restart in the message that appears: the pipeline
+reads the file when it starts. The service no longer passes `--record armed` (that flag beat the file). Recording
+costs the frame loop microseconds a frame (the write, JSON and fsync run on their own thread after the press), so
+leave it on unless the SD card or the seconds after a press are in question.
+
 ## Safety
 
 Nothing here weakens the safety model in the [README](../README.md#safety-model):

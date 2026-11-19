@@ -377,6 +377,11 @@ class Pipeline:
     def _on_arming_change(self, armed: bool, t_ns: int) -> None:
         """Ring recorder: a held press is one session, from the preroll before the button went down to the
         postroll after the operator lets go."""
+        if armed:
+            # in the log at once (a press is otherwise only logged when it ends): a power cut DURING a press,
+            # lever loaded and the Pi at full work, then shows as a press that started and never ended
+            th = ((getattr(self, "health", None) or {}).get("throttled") or {}).get("hex")
+            log.info("press started (Pi flags %s)", th if th is not None else "unknown")
         if self.recorder is None:
             return
         # The ring windows frames by the SOURCE clock; on hardware it is the same monotonic clock the

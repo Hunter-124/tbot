@@ -80,7 +80,7 @@ def test_the_bench_repeats_and_the_shipped_rule_beats_a_bar_nothing_reaches(stag
     open_runs = vclay.make_results([press], bench, 24, seed=5, policy=False)
     assert all(r.shot is None for r in open_runs)
     never = vclay.tally(open_runs, [vclay.replay(r, FirePolicy(0.95, 0.95)) for r in open_runs])
-    replayed = vclay.tally(open_runs, [vclay.replay(r, FirePolicy.from_config(cfg)) for r in open_runs])
+    replayed = vclay.tally(open_runs, [vclay.replay(r, FirePolicy.from_config(cfg), cfg.fire) for r in open_runs])
     assert never["hits"] < replayed["hits"]
     # replaying the shipped rule is the shipped rule
     assert replayed["shots"] == shipped["shots"] and replayed["hits"] == shipped["hits"]

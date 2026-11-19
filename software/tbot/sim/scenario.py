@@ -692,6 +692,32 @@ _SPECS: dict[str, dict] = {
         "clay": {"pos": (15.0, 0.0, -0.6), "heading_deg": 6.0, "speed": 26.0,
                  "gate_dist": 9.14, "gate_z": 1.4},
     },
+    # Radial targets: flying nearly along the line of sight, so they cross the sky at only a few deg/s and
+    # their apparent SIZE changes instead [INFERENCE: geometry chosen for that, not copied from a field].
+    "trap_dead_straight": {
+        "description": "16 yd trap target thrown dead straight away, low rise (a few deg/s across the sky)",
+        "hold_point": (16.0, 0.0, 0.0),
+        "clay": {"pos": (15.0, 0.0, -0.6), "heading_deg": 0.0, "speed": 26.0,
+                 "gate_dist": 9.14, "gate_z": 0.6},
+    },
+    "incoming_straight": {
+        "description": "incomer thrown from 45 m straight at the shooter, passing about 6 m overhead",
+        "hold_point": (47.0, 0.5, 1.2),
+        "clay": {"pos": (45.0, 0.5, 1.0), "heading_deg": 180.0, "speed": 20.0,
+                 "gate_dist": 20.0, "gate_z": 5.0},
+    },
+    "quartering_away": {
+        "description": "going away from beside the shooter, 20 deg off the line of sight",
+        "hold_point": (4.0, 2.5, 0.3),
+        "clay": {"pos": (3.0, 2.0, 0.0), "heading_deg": -12.0, "speed": 24.0,
+                 "gate_dist": 15.0, "gate_z": 2.0},
+    },
+    "quartering_in": {
+        "description": "incomer from 40 m out and 12 m left, quartering past the shooter's right",
+        "hold_point": (42.0, 13.0, 2.2),
+        "clay": {"pos": (40.0, 12.0, 2.0), "heading_deg": -165.0, "speed": 20.0,
+                 "gate_dist": 22.0, "gate_z": 4.5},
+    },
     "static_gun": {
         "description": "gun clamped on the crossing point while a skeet crossing target flies through",
         "hold_point": (19.0, 0.0, 3.0),

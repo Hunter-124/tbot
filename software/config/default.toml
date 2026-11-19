@@ -224,6 +224,18 @@ target_nearest_bore = true    # target = the moving confirmed track nearest the 
                               # ones (scenery) last. false = the track with the most hits (a tree speck, in trees: 2026-11-19)
 max_target_misses = 1         # never fire on a target missing from the last 2 frames: it is coasting on its prediction (it
                               # broke, went behind something, or the shooter swung off it: 2026-11-19 replay of 092601)
+far_range_assume_m = 25.0     # a target whose SIZE reads beyond max_range_m is not refused: it is solved at this range,
+far_range_sigma_m = 9.0       # known this badly (the lead then only clears the bar when it hardly depends on the range: a
+far_range_limit_m = 120.0     # slow crossing, a going-away or incoming clay), unless it reads beyond this limit. A clay
+                              # shows smaller than it is when only its sunlit part clears the threshold: 2026-11-19 press
+                              # 092521, the gun held ON the clay for 2.5 s at P(hit) up to 0.89, read 55-85 m, never fired.
+                              # 0 = the old rule (nothing beyond max_range_m is shot at)
+fire_now_p = 0.9              # at or above this P(hit) the shot goes NOW: the look-ahead may promise more, but a target
+                              # in trees is not sure to be there for it (092749 waited 170 ms from 0.54 to 0.98). 0 = off. Virtual
+                              # clays, 2026-11-19 swings, 48 ms: 0.9 costs nothing (95.5 %), 0.8 one point (94.5 %)
+max_hold_ms = 80.0            # ... and below it the wait for a better frame ends this long after P(hit) first cleared
+                              # the bar on this target, if it still clears it. 0 = wait as long as more is promised
+hold_min_gain = 0.0           # a later frame only counts as better when it promises this much more (0.05: 95.5 -> 94.3 %)
 duplicate_deg = 1.0           # a track this close to the target at the shot is the same clay: engaged with it
 debris_cone_deg = 2.0         # debris lockout: tracks born after a shot inside this cone around the broken clay's
 debris_spread_deg_s = 15.0    # predicted path, widening at this rate (fragments ~5 m/s at ~20 m) [INFERENCE],

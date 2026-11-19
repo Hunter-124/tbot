@@ -188,6 +188,8 @@ def test_hit_probability_matches_the_rayleigh_closed_form():
 # ------------------------------------------------------------------ decisions
 def test_leading_swing_fires_at_the_analytically_best_frame(scene_cfg):
     cfg, scene = scene_cfg
+    cfg.fire.fire_now_p = 0.0   # the look-ahead by itself: no limit on the wait for the best frame
+    cfg.fire.max_hold_ms = 0.0
     delay = scene.latency.fire_delay_s("servo")
     rate = 0.5
     best_frame = 70
@@ -259,7 +261,8 @@ def test_actuator_delay_changes_the_fire_time(scene_cfg):
     # Both actuator budgets, one scene; the slower actuator must commit much earlier in the swing.
     # (a turntable's constant rate, not a hand: 0.9 s ahead the fitted hand model would leave no chance at all)
     sets = ["tracker.jerk_psd_deg=0.2", "tracker.meas_sigma_px=0.1", "fire.gun_accel_floor_dps2=0",
-            "fire.gun_rate_drift_per_s=0", "fire.gun_rate_sigma_dps=0.7"]
+            "fire.gun_rate_drift_per_s=0", "fire.gun_rate_sigma_dps=0.7",
+            "fire.fire_now_p=0", "fire.max_hold_ms=0"]  # the top of P(hit) itself: no limit on the wait
     cfg_servo = load_config(sets=sets + ["actuator.type=servo"])
     cfg_pq12 = load_config(sets=sets + ["actuator.type=pq12"])
     scene = Scene(cfg_servo)
@@ -409,3 +412,41 @@ def test_solver_extrapolates_the_swing_with_its_angular_acceleration(scene_cfg):
     assert err_decay == pytest.approx(math.degrees(9.0 * (0.5 * delay * delay - k_acc)), rel=0.15)
     assert sig_decay >= fitted.fire.gun_accel_sigma_frac * 9.0 * k_acc * 0.99
     assert t  # keeps the frame index explicit
+
+
+def test_a_good_shot_does_not_wait_for_the_best_frame(scene_cfg):
+    """fire.fire_now_p / fire.max_hold_ms: the shot of the swing above goes before the analytically best frame,
+    not after it, and is still a hit; without them it waits for that frame."""
+    cfg, scene = scene_cfg
+    delay = scene.latency.fire_delay_s("servo")
+    rate, best_frame = 0.5, 70
+    az_i, el_i = scene.ideal_aim(_slow_crosser, T0 + best_frame * DT_NS, delay)
+    att = SwingAttitude(az_i - rate * (best_frame / FPS + delay), el_i, rate)
+    assert cfg.fire.fire_now_p > 0.0 and cfg.fire.max_hold_ms > 0.0  # as shipped
+    decisions = _run(cfg, scene, att, _slow_crosser, 160)
+    fired = _first_fire(decisions)
+    assert fired is not None and fired <= best_frame
+    waiting = [n for n, d in enumerate(decisions[:fired]) if d.reason.startswith("better in")]
+    if waiting:  # it never waits longer than max_hold_ms once the bar is cleared
+        assert (fired - waiting[0]) * DT_NS <= cfg.fire.max_hold_ms * 1e6 + DT_NS
+    d = decisions[fired]
+    assert d.miss_rad < d.pattern_rad and d.p_hit >= d.extra["bar"]
+
+
+def test_a_target_that_reads_too_far_is_solved_at_the_assumed_range(scene_cfg):
+    """fire.far_range_assume_m: a track whose size puts it beyond fire.max_range_m (a clay of which only a part
+    is detected) is not refused; it is solved at the assumed range with its wide sigma. Off = the old veto."""
+    cfg, scene = scene_cfg
+    solver = FireSolver(cfg, scene.shot, scene.mount, scene.latency)
+
+    class T:
+        range_m, range_sigma_m = 70.0, 7.0
+
+    assert cfg.fire.far_range_assume_m > 0.0
+    rng, sig = solver._solve_range(T)
+    assert rng == cfg.fire.far_range_assume_m and sig >= cfg.fire.far_range_sigma_m
+    T.range_m = 20.0
+    assert solver._solve_range(T) == (20.0, 7.0)
+    cfg.fire.far_range_assume_m = 0.0
+    T.range_m = 70.0
+    assert FireSolver(cfg, scene.shot, scene.mount, scene.latency)._solve_range(T) == (70.0, 7.0)

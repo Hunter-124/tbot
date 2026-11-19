@@ -211,6 +211,12 @@ class FireConfig:
     min_clay_speed_sigmas: float = 0.0
     target_nearest_bore: bool = False
     max_target_misses: int = 1000000
+    far_range_assume_m: float = 0.0
+    far_range_sigma_m: float = 9.0
+    far_range_limit_m: float = 120.0
+    fire_now_p: float = 0.0
+    max_hold_ms: float = 0.0
+    hold_min_gain: float = 0.0
     duplicate_deg: float = 1.0
     debris_cone_deg: float = 2.0
     debris_spread_deg_s: float = 15.0

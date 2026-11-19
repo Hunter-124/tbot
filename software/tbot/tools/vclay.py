@@ -286,6 +286,8 @@ class Bench:
         self.cfg_open.fire.min_hit_probability = 0.0
         self.cfg_open.fire.min_hit_probability_settled = 0.0
         self.cfg_open.fire.adaptive = False
+        self.cfg_open.fire.fire_now_p = 0.0   # ... and no limit on the wait: `replay` applies the rule's own
+        self.cfg_open.fire.max_hold_ms = 0.0
 
     # ------------------------------------------------------------------ the clay
     def make_clay(self, press: Press, rng: np.random.Generator, cls: str) -> VClay | None:
@@ -469,15 +471,25 @@ class Bench:
 
 
 # --------------------------------------------------------------------------------------------- rules, replayed
-def replay(result: Result, policy: FirePolicy) -> Row | None:
+def replay(result: Result, policy: FirePolicy, fire=None) -> Row | None:
     """The shot a firing rule would have taken on a clay run with policy=False (every look-ahead present):
-    the first frame at a peak of P(hit) whose P clears the rule's bar."""
+    the first frame at a peak of P(hit) whose P clears the rule's bar. `fire` (cfg.fire) adds the limits on
+    the wait for that peak as the solver applies them: fire.fire_now_p and fire.max_hold_ms."""
     policy.reset()
+    now_p = float(getattr(fire, "fire_now_p", 0.0) or 0.0) if fire is not None else 0.0
+    hold_ns = int(float(getattr(fire, "max_hold_ms", 0.0) or 0.0) * 1e6) if fire is not None else 0
+    since = None
     for row in result.rows:
         if not row.solved:
             continue
         bar = policy.bar(0, row.t_ns, row.t_ns - int(row.track_age_s * 1e9), row.p_hit, row.ceiling)
-        if row.peak and row.p_hit >= bar:
+        if row.p_hit < bar:
+            if row.p_hit < 0.5 * bar:
+                since = None
+            continue
+        if since is None:
+            since = row.t_ns
+        if row.peak or (now_p > 0.0 and row.p_hit >= now_p) or (hold_ns > 0 and row.t_ns - since >= hold_ns):
             return row
     return None
 
@@ -644,7 +656,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.policies:
         report["policies"] = {}
         for name, pol in named_policies(cfg).items():
-            shots = [replay(r, pol) for r in results]
+            shots = [replay(r, pol, cfg.fire) for r in results]
             t = tally(results, shots)
             report["policies"][name] = t
             print(_fmt(name, t))

@@ -169,6 +169,29 @@ class FireSolver:
         # to the pre-travel, parked there, let go). None = the one delay of the budget, whenever the command goes.
         self.trigger = None
         self._lock_barrel_s = (float(latency.lock_time_ms) + float(latency.barrel_time_ms)) / 1000.0
+        fc = cfg.fire
+        # a target that reads too far by its size is solved at an assumed range (fire.far_range_assume_m)
+        self._far_assume = float(getattr(fc, "far_range_assume_m", 0.0) or 0.0)
+        self._far_sigma = float(getattr(fc, "far_range_sigma_m", 9.0) or 0.0)
+        self._far_limit = float(getattr(fc, "far_range_limit_m", 120.0) or 0.0)
+        # how long a shot that already clears the bar may wait for a better frame (fire.fire_now_p, max_hold_ms)
+        self._fire_now_p = float(getattr(fc, "fire_now_p", 0.0) or 0.0)
+        self._max_hold_ns = int(float(getattr(fc, "max_hold_ms", 0.0) or 0.0) * 1e6)
+        self._hold_gain = float(getattr(fc, "hold_min_gain", 0.0) or 0.0)
+        self._hold_track = None
+        self._hold_since_ns = 0
+
+    def _solve_range(self, track: Track) -> tuple[float, float]:
+        """(range to solve at, its 1 sigma), metres. The tracker's own, except for a target whose apparent size
+        puts it beyond fire.max_range_m: a clay of which only a part clears the detector's threshold (a sunlit
+        rim, a going-away clay seen edge on) reads far too far, never too near. It is then solved at
+        fire.far_range_assume_m with fire.far_range_sigma_m, so the shot only clears the bar when the lead hardly
+        depends on the range."""
+        rng = float(track.range_m)
+        sig = float(track.range_sigma_m)
+        if self._far_assume > 0.0 and rng > float(self.cfg.fire.max_range_m):
+            return self._far_assume, max(self._far_sigma, min(sig, self._far_assume))
+        return rng, sig
 
     def _delay(self, t_ns: int, armed: bool) -> tuple[float, float]:
         """(decision -> shot leaves the muzzle, its 1-sigma), seconds, for a command sent at t_ns."""
@@ -236,7 +259,8 @@ class FireSolver:
             reason = f"target not seen for {track.misses} frames"
         elif speed_hi < float(fc.min_clay_speed_mps):
             reason = f"too slow for a clay ({speed:.1f} m/s)"
-        elif not (fc.min_range_m <= g["range_m"] <= fc.max_range_m):
+        elif not (fc.min_range_m <= float(track.range_m)
+                  <= (max(self._far_limit, fc.max_range_m) if self._far_assume > 0.0 else fc.max_range_m)):
             reason = "range out of window"
         elif g["clay_el"] < math.radians(fc.min_elevation_deg):
             reason = "below min elevation"
@@ -282,6 +306,8 @@ class FireSolver:
             ceiling = self._p_hit(0.0, g["pattern"], g["sigma"])  # what a perfect aim would be worth right now
             bar = self.policy.bar(track.track_id, now_ns, int(track.first_t_ns or 0), g["p_hit"], ceiling)
             if g["p_hit"] < bar:
+                if g["p_hit"] < 0.5 * bar and self._hold_track == track.track_id:
+                    self._hold_track = None  # the chance is gone, not just dipping: the next one has its own wait
                 reason = f"p_hit {g['p_hit']:.2f} < {bar:.2f}"
             else:
                 better_k = 0
@@ -292,8 +318,17 @@ class FireSolver:
                     )
                     future.append(gk["p_hit"])
                     work += 1.0
-                    if better_k == 0 and gk["p_hit"] > g["p_hit"]:
+                    if better_k == 0 and gk["p_hit"] > g["p_hit"] + self._hold_gain:
                         better_k = k
+                # A shot that clears the bar does not wait for ever: the frame the look-ahead promises needs the
+                # target still seen and the swing kept, and in trees neither is sure. Good enough goes now, and
+                # the wait ends max_hold_ms after this target first cleared the bar.
+                if self._hold_track != track.track_id:
+                    self._hold_track, self._hold_since_ns = track.track_id, now_ns
+                held_ns = now_ns - self._hold_since_ns
+                if better_k and ((self._fire_now_p > 0.0 and g["p_hit"] >= self._fire_now_p)
+                                 or (self._max_hold_ns > 0 and held_ns >= self._max_hold_ns)):
+                    better_k = 0
                 if better_k:
                     reason = f"better in {better_k} frames"
                 elif not armed:
@@ -445,7 +480,7 @@ class FireSolver:
 
         shot = self.shot
         tabulated = type(shot) is ShotModel
-        rng = float(track.range_m)
+        rng, rng_sigma = self._solve_range(track)
         t_arr_ns = t_exit_ns
         p_clay = rng * tracker.predict_dir(track, t_arr_ns)
         dist = _norm3(p_clay - muzzle_w)
@@ -482,7 +517,7 @@ class FireSolver:
         sigma = math.sqrt(
             track_sigma**2
             + (omega_clay * jitter_s) ** 2
-            + (omega_clay * dtof_dr * float(track.range_sigma_m)) ** 2
+            + (omega_clay * dtof_dr * rng_sigma) ** 2
             + gun_sigma**2
         )
         pattern = (max(shot._pattern_min_m, shot._pattern_ref_m * dist / shot._pattern_ref_range_m)

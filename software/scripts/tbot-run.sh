@@ -18,7 +18,9 @@ export TBOT_LOG_FILE=${TBOT_LOG_FILE:-logs/tbot-run.log}
 # Every held press of the arming button is saved under sessions/ (raw frames, IMU, per-frame telemetry, summary
 # and an annotated clip.mp4; browse them at http://<pi>:8080/clips). No continuous per-frame log: at 100 fps it
 # cost a millisecond a frame and 350 MB an hour for data the press recordings already hold.
-args=(run --stream --record armed)
+# Whether presses are saved is record.mode (default armed; config/local.toml; the TBOT Console's Settings page has
+# the "Press recording" switch). Deliberately no --record here: a command-line flag would win over the config.
+args=(run --stream)
 # live: the presses are still saved, but their clips are not rendered on the gun (a render is a second Python
 # process with OpenCV for 10-20 s after every press: memory and a core the next clay may need). Render them
 # afterwards: tbot clip sessions/<name>

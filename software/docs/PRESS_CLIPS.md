@@ -1,6 +1,6 @@
 # Recorded presses: clips and debug data
 
-`tbot run --record armed` (what the service runs) saves **every held press of the arming button** as one
+`record.mode = "armed"` (the default, what the service runs; `tbot run --record armed` by hand) saves **every held press of the arming button** as one
 session under `sessions/<date>-<time>-press/`: from `record.preroll_s` (1 s) before the button went down to
 `record.postroll_s` (0.7 s) after it came up. Nothing else is needed: hold the button, let go, it is on the SD
 card. Dry run and live behave the same.

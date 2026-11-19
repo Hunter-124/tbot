@@ -138,3 +138,24 @@ def test_key_frame_prefers_the_shot_then_best_p_hit():
     del tele[17]
     assert key_frame(rows, tele, None) == (5, "best P(hit)")
     assert key_frame(rows, {}, [12000, 16000])[1] == "press"
+
+
+def test_press_recording_switch_wins_over_the_service_script(tmp_path, monkeypatch):
+    """The Console's Press recording switch is record.mode in local.toml; the service script must not override it."""
+    from tbot.config import load_config
+
+    default_text = (ROOT / "config" / "default.toml").read_text()
+    schema = tomledit.parse_schema(default_text, "")
+    keys = {k["key"]: k for s in schema["sections"] for k in s["keys"]}
+    assert keys["record.mode"]["default"] == "armed" and "record.mode" in schema["common"]
+    off = tomledit.patch_text("", {"record.mode": tomledit.coerce("off", "armed", "record.mode")}, set())
+    local = tmp_path / "local.toml"
+    local.write_text(off)
+    monkeypatch.setenv("TBOT_LOCAL_CONFIG", str(local))
+    assert load_config().record.mode == "off"
+    back = tomledit.patch_text(off, {}, {"record.mode"})
+    local.write_text(back)
+    assert load_config().record.mode == "armed"
+    script = (ROOT / "scripts" / "tbot-run.sh").read_text()
+    assert "--record" not in [ln.split("#")[0] for ln in script.splitlines() if "args=(" in ln][0]
+    assert "args+=(--record" not in script

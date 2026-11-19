@@ -1431,6 +1431,10 @@ PAGES.settings = {
         <a href="#" data-to="raw" style="margin-top:8px">local.toml</a>`;
       $("#st-body").innerHTML = `
         <div class="callout info">${icon("info")}<div>Changes are written to <span class="mono">config/local.toml</span> on the gun (its comments are kept, the old file is backed up). The pipeline reads it when it starts.</div></div>
+        ${(() => { const rk = idx["record.mode"]; if (!rk) return ""; const rv = "record.mode" in pending ? pending["record.mode"] : resets.has("record.mode") ? rk.default : rk.value; const on = rv !== "off";
+          return `<div class="card" id="sec-rec"><div class="card-h"><div><h2>Press recording</h2><div class="sub">Save video, IMU and telemetry of every held press to the gun's SD card (record.mode).</div></div>
+            <div class="right"><label class="switch" title="Press recording on / off"><input type="checkbox" id="rec-sw" ${on ? "checked" : ""}><span></span></label></div></div>
+            <p class="small muted" style="margin:0"><b>${on ? "ON" : "OFF"}</b>${rv === "continuous" ? " (continuous: records the whole run)" : ""} — ${on ? "each press is saved when you let go of the arming button." : "nothing is saved; the Sessions page gets no new presses."} Takes effect when the pipeline restarts: save, then press Restart in the message that appears.</p></div>`; })()}
         ${common.length ? `<div class="card set-sec" id="sec-common"><div class="card-h"><div><h2>Common</h2><div class="sub">The settings you are most likely to change.</div></div></div>${common.map(row).join("")}</div>` : ""}
         ${secs.map((s) => `<div class="card set-sec" id="sec-${s.name}"><div class="card-h"><div><h2>${esc(s.title)}</h2><div class="sub">${esc(s.description || s.note)}</div></div><div class="right mono small muted">[${esc(s.name)}]</div></div>${s.keys.map(row).join("")}</div>`).join("")}
         <div class="card set-sec" id="sec-raw"><div class="card-h"><h2>local.toml</h2><div class="sub mono">${esc(schema.local_path)}</div></div><pre class="term">${esc(schema.local_text || "(empty: everything is at its default)")}</pre></div>`;
@@ -1449,6 +1453,8 @@ PAGES.settings = {
         $(`[data-row="${k.key}"]`).classList.toggle("dirty", k.key in pending);
         bar();
       }));
+      const rsw = $("#rec-sw"); if (rsw) rsw.onchange = () => { const k = idx["record.mode"]; const v = rsw.checked ? (k.default === "off" ? "armed" : k.default) : "off";
+        resets.delete(k.key); if (v === k.value) delete pending[k.key]; else pending[k.key] = v; draw(); bar(); };
       $$("[data-reset]", $("#st-body")).forEach((b) => b.onclick = () => { resets.add(b.dataset.reset); delete pending[b.dataset.reset]; draw(); bar(); });
     };
     const bar = () => {
