@@ -69,11 +69,39 @@ def stream_hash(name: str, seed: int = 3) -> str:
     return h.hexdigest()
 
 
-@pytest.mark.skipif(platform.machine().lower() not in ("amd64", "x86_64"),
-                    reason="golden hashes were recorded on x86-64")
+# The same streams on x86-64 Linux with OpenCV 5 / NumPy 2 (Fedora 44, 2026-11-19): the renderer's bytes differ
+# from the Windows build above, so that build has its own set. Recorded on the code of commit e03ff3e (the one that
+# added the Windows hashes) and equal there to the code of 2026-11-19: nothing had changed the streams in between.
+_PRE_MULTI_CLAY_SHA256_LINUX_CV5 = {
+    "skeet_crossing": "41131a5c7c4d6a2ee7b35ce04e741ebb6b27a80228054fba211a0370d21fb599",
+    "skeet_incoming": "57c33432d4004f5b28756375ffaf0fb3e2d4738d44d20a5af507244836b4e990",
+    "skeet_outgoing": "886e1dfe410463f6fbf1f034ffb56b8229c7e955fa1da4ec5dda5166d7f8d3de",
+    "trap_straightaway": "74f7237c046033cdcf332cab86a0ed6760df53e2a50b0cddfb0d0e074b2d84e5",
+    "static_gun": "6ba94992d46e11567690ae8cf903ebdaaa2ee185861263c7e2e908f52295e3cf",
+    "no_clay": "6a33efc5be01332377e3a2eff8888bcdd686c0c9e35905a9546f8741c880aee7",
+}
+
+
+def _golden_hashes() -> dict | None:
+    """The golden set of this machine's build; None where none was recorded (the bytes depend on the float and
+    OpenCV build, so a set is only good for the build it was recorded on)."""
+    if platform.machine().lower() not in ("amd64", "x86_64"):
+        return None
+    if platform.system() == "Windows":
+        return _PRE_MULTI_CLAY_SHA256
+    import cv2
+
+    if platform.system() == "Linux" and cv2.__version__.split(".")[0] == "5" and np.__version__.split(".")[0] == "2":
+        return _PRE_MULTI_CLAY_SHA256_LINUX_CV5
+    return None
+
+
 @pytest.mark.parametrize("name", SINGLE)
 def test_single_clay_scenarios_are_byte_identical_to_before_multi_clay(name):
-    assert stream_hash(name) == _PRE_MULTI_CLAY_SHA256[name]
+    golden = _golden_hashes()
+    if golden is None:
+        pytest.skip("no golden hashes recorded for this platform / OpenCV / NumPy build")
+    assert stream_hash(name) == golden[name]
 
 
 def test_single_clay_scenarios_have_exactly_one_clay():
