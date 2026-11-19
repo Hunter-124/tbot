@@ -5,7 +5,13 @@ predicts where it will be when the shot arrives, and a servo presses the trigger
 The shooter only swings the gun and holds a button.
 
 Designed, built and calibrated by one person in 23 days (2026-10-25 to 2026-11-17).
-First live range day: **two shots fired by the machine, two clays broken.**
+First live range day: **two shots fired by the machine, two clays broken.** Second range day (2026-11-19):
+rebuilt trigger, two trips, a lot of power cuts. The afternoon was somewhat successful.
+
+![The phone's view of a shot beside the gun camera's own view, lined up on the bang](docs/media/range_2026-11-19/shot_phone_and_gun_view.gif)
+
+*2026-11-19, press 160357. Left: phone video. Right: the gun camera with the tracker's overlay. The two are
+lined up on the bang. The red FIRE frame is the command; the recoil shows on the IMU 66 ms later.*
 
 ![The assembled gun: trigger servo at the guard, camera and compute module clamped under the barrel](docs/media/hero_assembled.jpg)
 
@@ -49,6 +55,8 @@ flowchart LR
 
 ## Results
 
+### 2026-11-17: first live day
+
 First live day, 2026-11-17 ([full data and analysis](software/field_data/2026-11-17-range/README.md)):
 
 | | |
@@ -81,11 +89,56 @@ What the day also showed, stated plainly:
 Every press saves the raw frames, IMU samples, per-frame decisions and events, so each one can be replayed
 through the same code on a laptop.
 
+### 2026-11-19: second range day, two trips
+
+**Morning.** About 25 clays were tried, about 5 were fired at, and 1 was hit. The Pi recorded 22 presses (four
+lost to zero-byte files). They contain 3 fire commands: one set the gun off, and the other two gave no recoil.
+The Pi kept losing power: at least 6 boots in three minutes, with no crash or shutdown in its log
+([what went wrong and what changed](software/docs/RANGE_2026-11-19.md)).
+
+**Fixed between the trips** (sections 1 to 8 of that file):
+
+- Presses are synced to the SD card as they are written, and the log reports uptime and under-voltage at each start.
+- A camera process that died no longer leaves the service unable to restart it.
+- Clip rendering moved off the gun, to the laptop console.
+- Tracking in trees: the gun shoots at the moving track nearest the bore instead of the one with the most hits.
+  Speck-born tracks no longer steal the clay. A target missing for 2 frames is never shot.
+- A clay too small to range is solved at an assumed 25 m instead of being refused. The shot goes at once when
+  P(hit) reaches 0.9.
+- A ready light on GPIO26 shows whether the gun is armed and live.
+- No shot at a target first seen less than 200 ms ago, so the gun stops shooting scenery the swing passes over.
+- `tbot find-break` finds the trigger's break point on the IMU. That afternoon the break had moved by one spline
+  tooth, and the pre-travel was tripping the hammer.
+
+**Afternoon.** Hunter's verdict: *somewhat successful*. The Pi kept 5 presses from the range. Most shots took the
+power with them before their press was written. All 3 fire commands that were kept set the gun off, with
+recoil on the IMU 62 to 70 ms after the command. It double-fired on the first one: press 160333 shows a second
+full recoil 0.36 s after the first, with no second command. Near the end it died after every shot, and the
+boots got slower.
+
+| 2026-11-19 afternoon | |
+|---|---|
+| Presses kept by the Pi at the range | 5 (more were lost to power cuts) |
+| Fire commands kept | 3, all of which set the gun off |
+| Clays broken | **[HUNTER: fill in]** |
+| Engagement range | 14 to 24 m |
+| Trigger delay, command to ignition | 62, 66 and 70 ms (44.5 ms assumed; recalibrated to 60.4 ms since) |
+| Frame rate in front of trees | 30 to 33 fps |
+
+![The gun camera tracking clays in front of the tree line and firing](docs/media/range_2026-11-19/gun_view_track_and_fire.gif)
+
+*Press 160243, from the gun's camera. Yellow rings are tracks. The magenta X is where the clay will be when the
+shot arrives, and the cyan circle is where the bore will point. The frame turns red at the fire command.*
+
+Phone clips and gun recordings are paired automatically by `software/scripts/range_media.py sync`. It uses the
+bang in the phone audio and the shot spacing inside each Pi boot, not the Pi clock, which has no battery
+([RANGE_MEDIA.md](software/docs/RANGE_MEDIA.md)).
+
 ## The engineering
 
 ### Mechanical
 
-![CAD render of the full assembly](docs/media/cad_full.jpg)
+![CAD render of the full assembly, rev AH, from gun-right and below](docs/media/cad_full.jpg)
 
 | | |
 |---|---|
@@ -98,7 +151,12 @@ worm-drive hose clamps seated in grooves, and the trigger set clamps to the guar
 - **Front module** (8 parts, 231 g): camera in the nose, Pi on one side, 3S 2600 mAh battery and two buck
   converters on the other, IMU in the clamp. M3 into brass heat-set inserts throughout.
 - **Trigger set** (4 parts, rev AH): MG996R servo mounted beside the guard with its output inside the guard; a printed cam presses the trigger's lower hook; a plug-and-saddle mount around the bow and a right-side plate that houses the arming button.
-- **22 design revisions** in three weeks (G through AB), each recorded with its reason in
+![Trigger set rev AH: the MG996R in its printed mount beside the guard](docs/media/cad_trigger.jpg)
+
+*Trigger set, rev AH (2026-11-18), from below on the servo side. The servo sits beside the guard and its output
+shaft reaches inside it, where the printed cam presses the trigger's lower hook.*
+
+- **Design revisions G through AH** in three and a half weeks, each recorded with its reason in
   [design/layout.md](design/layout.md). Every dimension the software uses comes from that file.
 - A modelled wiring harness and camera ribbon in the assembly, and an M12 × 0.5 split clamp nut to lock lens
   focus against recoil.
@@ -201,6 +259,8 @@ makes the actuator safe. All bench work is done with the gun unloaded.
 | Nov 14 to 15 | Latency measured, IMU calibrated, 3-D tracker, simulator with doubles |
 | Nov 16 | 12 mm lens fitted; focal length and laser boresight |
 | Nov 17 | Backyard tracking on birds in the morning, live fire on clays by noon |
+| Nov 18 | Trigger set rev AH: servo output inside the guard, finger cam on the trigger's lower hook |
+| Nov 19 | Second range day: morning trip, fixes at home, afternoon trip with phone video synced to the gun |
 
 ![A hawk tracked by hand for 8 seconds, as the gun camera saw it](docs/media/hawk_sequence.jpg)
 
@@ -215,7 +275,7 @@ makes the actuator safe. All bench work is done with the gun unloaded.
 | `export/` | STEP and STL of every part and the assembly |
 | `print/` | Slicer settings and G-code for an Ender 3 |
 | `software/` | The `tbot` Python package, tests, calibration data, field data, Pi provisioning |
-| `docs/media/` | Photos used in this file |
+| `docs/media/` | Photos, CAD renders and range GIFs used in this file |
 
 Units are millimetres. Gun frame: +X toward the muzzle, +Y gun-left, +Z up, origin at the trigger face.
 
