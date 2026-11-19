@@ -166,42 +166,46 @@ the board — fine for I2C, unusable as general inputs.
 
 What is **planned/wired** on the gun, from `design/BOM.md` / `design/layout.md` (wire table) plus the ready light.
 **Finding pin 1.** The header runs along one long edge of the board; the USB/Ethernet ports are on a short edge.
-Pin 1 is at the end of the header **farthest from the USB/Ethernet ports** (the SD-card end), on the row **toward
-the middle of the board**, and its solder pad on the underside is the only **square** one. Odd pins (1, 3, 5 ...)
-are that inner row; even pins (2, 4, 6 ...) are the row along the board edge. Pin 2 (5 V) is the corner pin.
+Pin 1 is at the end of the header **farthest from the USB/Ethernet ports** (the end next to the DISPLAY ribbon
+connector and the mounting hole), on the row **toward the middle of the board**; its solder pad on the underside is
+the only **square** one. Odd pins (1, 3, 5 ...) are that inner row; even pins (2, 4, 6 ...) are the row along the
+board edge. Pin 2 (5 V) is the corner pin.
 
-The diagram below is the board held **component side up, USB/Ethernet ports pointing down at you**: the header is
-then a vertical strip along the **right-hand edge**, pin 1 at the top of the left (inner) column, pin 2 at the top
-of the right (edge) column. The harness photo shows DuPont housings, not the soldered joints the BOM describes, so
-verify against the board.
+The diagram is the board **as mounted on the gun**: header up the **left** edge, HDMI on the right, DISPLAY connector
+at the bottom, USB/Ethernet at the top. Pin 1 is therefore at the **bottom**, in the column **next to the board**;
+the column along the board edge (the left one) is the even pins. The harness photo shows DuPont housings, not the
+soldered joints the BOM describes, so verify against the board.
 
 ```
-                                 inner  edge
-   IMU VCC (3V3)  <-- 3V3         (1)   (2)  5V          --> Pi power + (buck #1, 5.1 V)
-   IMU SDA        <-- GPIO2 SDA   (3)   (4)  5V
-   IMU SCL        <-- GPIO3 SCL   (5)   (6)  GND         --> Pi power - (buck #1)
-                      GPIO4       (7)   (8)  GPIO14 TXD
-   IMU GND        <-- GND         (9)  (10)  GPIO15 RXD
-   arming switch  <-- GPIO17     (11)  (12)  GPIO18 PWM0 --> servo signal
-   READY LED +    <-- GPIO27     (13)  (14)  GND         --> arming GND, servo-signal GND, READY LED -
-                      GPIO22     (15)  (16)  GPIO23
-                      3V3        (17)  (18)  GPIO24
-                      GPIO10     (19)  (20)  GND
-                      GPIO9      (21)  (22)  GPIO25
-                      GPIO11     (23)  (24)  GPIO8
-                      GND        (25)  (26)  GPIO7
-                      ID_SD      (27)  (28)  ID_SC
-                      GPIO5      (29)  (30)  GND
-                      GPIO6      (31)  (32)  GPIO12
-                      GPIO13     (33)  (34)  GND
-                      GPIO19     (35)  (36)  GPIO16
-                      GPIO26     (37)  (38)  GPIO20
-                      GND        (39)  (40)  GPIO21
-                                  ^ USB/Ethernet end
+            USB / Ethernet end (top)
+   board edge          board side
+     (even)              (odd)
+  GPIO21    (40)  (39)   GND
+  GPIO20    (38)  (37)   GPIO26
+  GPIO16    (36)  (35)   GPIO19
+  GND       (34)  (33)   GPIO13
+  GPIO12    (32)  (31)   GPIO6
+  GND       (30)  (29)   GPIO5
+  ID_SC     (28)  (27)   ID_SD
+  GPIO7     (26)  (25)   GND
+  GPIO8     (24)  (23)   GPIO11
+  GPIO25    (22)  (21)   GPIO9
+  GND       (20)  (19)   GPIO10
+  GPIO24    (18)  (17)   3V3
+  GPIO23    (16)  (15)   GPIO22
+  GND       (14)  (13)   GPIO27    <-- READY LED: 13 = LED+ (via resistor), 14 = LED-  (arming/servo GND also 14)
+  GPIO18    (12)  (11)   GPIO17    <-- 12 = servo signal, 11 = arming switch
+  GPIO15    (10)  (9)    GND       <-- 9 = IMU GND
+  GPIO14    (8)   (7)    GPIO4
+  GND       (6)   (5)    GPIO3     <-- 6 = Pi power -, 5 = IMU SCL
+  5V        (4)   (3)    GPIO2     <-- 3 = IMU SDA
+  5V        (2)   (1)    3V3       <-- 2 = Pi power + (5.1 V), 1 = IMU VCC
+            DISPLAY-connector end (bottom)
 ```
 
-Ready light: **pin 13 is the 7th pin down the inner row, pin 14 is right beside it on the edge row** (the pin
-across from it). Count from the pin-1 end, not the USB end.
+Ready light: **pins 13/14 are the 7th row up from the bottom (DISPLAY) end**; 13 is on the board side, 14 on the
+edge side. If that row is buried in the existing housings, the free top row works just as well: **pin 40 (GPIO21) =
+LED+, pin 39 (GND) = LED-**, with `gpio.status_led_pin = 21`.
 
 | Pin | Name | Wired to | Wire |
 |---|---|---|---|
