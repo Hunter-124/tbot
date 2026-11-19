@@ -662,3 +662,19 @@ three threads behind one interpreter lock) and lost ~15 frames every 20 s. Now:
   filter (2.3 ms, ~30 small NumPy calls: the next candidate for C), the rest of the detector (bg 1.3,
   threshold 2.1, components bookkeeping ~2 ms), attitude 1.1, tracker 1.3-1.9 ms.
 - Not seen outdoors: the recovery has only met a killed and a frozen process, not a real CSI fault.
+
+## Rev AH trigger set, re-zero and trigger delay (2026-11-18, day)
+
+On the gun (Pi `config/local.toml`, `calib/`), all bench, gun unloaded:
+- **Camera zero**: the pod was dropped lens-first; refocused, and the boresight had moved 0.84 deg. Re-solved
+  (pitch -1.379, yaw -2.334) and checked at 35 ft: 0.027 deg. Data and method: `calib_data/bs20ft_2026-11-18/README.md`.
+- **Servo** (new MG996R, rev AH cam inside the guard, horn fitted at 1500 us): a LOWER pulse pulls the trigger.
+  Touch 1320 us, break ~1095 us (1100 does not break). `rest_us 1340`, `fire_us 1075`, `min_us 1070`,
+  `max_us 1500`, `hold_ms 400` (with 150 ms the servo was sent back before the cam pulled through).
+- **Trigger delay**: `tbot latency-mic`, 10 trials: click (hammer fall) 197.7 +/- 1.4 ms after the command, so
+  `cmd_to_break` **191.7 ms** (was 155 with the old servo and lever). Confirm with `tbot latency-recoil` on the
+  first live shots.
+- **`tbot latency-mic` fix**: it wrote the click time as `cmd_to_break_ms`, and the budget adds
+  `gun.lock_time_ms` on top, so the lock time was counted twice (6 ms late). It now writes
+  `cmd_to_break_ms = cmd_to_bang_ms - gun.lock_time_ms` and keeps `cmd_to_bang_ms` beside it. Today's file was
+  corrected by hand the same way before the fix.

@@ -7,8 +7,10 @@ press, burst-then-limp all in force) and records the microphone around it. Relea
 On the bench the lever hitting the trigger is itself loud, so the tool does not trust "first loud sample".
 Every trial's audio is saved (trial_NN.wav) with its onset list: each transient above --onset-level after
 the command, with its time. A cocked trial shows the lever impact, then the sear/hammer; a trial with the
-hammer already down shows the impact only. cmd_to_break_ms uses the LAST strong onset inside the fire hold
-(sear + hammer fall), which is what the budget needs; check the per-trial onsets before trusting it.
+hammer already down shows the impact only. The LAST strong onset inside the fire hold is the hammer fall:
+that is command -> bang (cmd_to_bang_ms). The hammer falls gun.lock_time_ms after the sear breaks, and the
+latency budget adds that lock time itself, so cmd_to_break_ms = cmd_to_bang_ms - gun.lock_time_ms (writing the
+bang as the break counted the lock time twice). Check the per-trial onsets before trusting either.
 
 Times include mic latency (USB/ALSA, a few ms, uncalibrated) and sound flight (~0.3 ms at 10 cm); pass
 --mic-latency-ms / --mic-distance-m to remove them once known.
@@ -106,6 +108,7 @@ def main(argv: list[str] | None = None) -> int:
     time.sleep(1.0)
     flight_ms = args.mic_distance_m / SOUND_MPS * 1e3
     hold_s = float(cfg.actuator.servo.hold_ms) / 1000.0
+    lock_ms = float(cfg.gun.lock_time_ms)  # the click is the hammer fall, this long after the sear breaks
     results: list[dict] = []
     last_press = arming.press_count  # a button already held at start does not count: press again
     try:
@@ -142,7 +145,8 @@ def main(argv: list[str] | None = None) -> int:
                 in_hold = [t for t, _p in ons if t <= hold_s * 1e3 + 60.0]
                 if in_hold:
                     rec["first_onset_ms"] = in_hold[0]
-                    rec["cmd_to_break_ms"] = in_hold[-1]
+                    rec["cmd_to_bang_ms"] = in_hold[-1]
+                    rec["cmd_to_break_ms"] = in_hold[-1] - lock_ms
             results.append(rec)
             log(f"  trial {n}: onsets after cmd (ms, peak): {rec.get('onsets_ms', [])}  -> release the button")
     finally:
@@ -154,18 +158,21 @@ def main(argv: list[str] | None = None) -> int:
         gpio.close()
 
     (out / "trials.json").write_text(__import__("json").dumps(results, indent=2))
-    vals = [r["cmd_to_break_ms"] for r in results if "cmd_to_break_ms" in r]
+    bangs = [r["cmd_to_bang_ms"] for r in results if "cmd_to_bang_ms" in r]
     log(f"\nsaved {out}/trials.json and trial_NN.wav")
-    if not vals:
+    if not bangs:
         log("no transients timed")
         return 1
-    st = summarize(vals)
-    log(f"cmd->last onset in hold: mean {st['mean']:.2f}  std {st['std']:.2f}  p50 {st['p50']:.2f}  "
-        f"min {st['min']:.2f}  max {st['max']:.2f}  n {st['n']}")
+    st_bang = summarize(bangs)
+    st = summarize([b - lock_ms for b in bangs])
+    log(f"cmd->bang (last onset in hold): mean {st_bang['mean']:.2f}  std {st_bang['std']:.2f}  "
+        f"p50 {st_bang['p50']:.2f}  min {st_bang['min']:.2f}  max {st_bang['max']:.2f}  n {st_bang['n']}")
+    log(f"cmd->break = bang - lock time {lock_ms:.1f} ms: mean {st['mean']:.2f}  p50 {st['p50']:.2f}")
     if not args.no_write:
         kind = str(cfg.actuator.type)
         update_json(calib.path("latency.json"), {"actuator": {kind: {
-            "cmd_to_break_ms": st, "method": "mic", "device": args.device, "run": str(out),
+            "cmd_to_break_ms": st, "cmd_to_bang_ms": st_bang, "lock_time_ms": lock_ms,
+            "method": "mic", "device": args.device, "run": str(out),
             "mic_latency_ms": args.mic_latency_ms, "mic_distance_m": args.mic_distance_m,
             "fire_us": float(cfg.actuator.servo.fire_us), "rest_us": float(cfg.actuator.servo.rest_us),
             "notes": args.notes, "created": now_iso()}}, "created": now_iso()})
