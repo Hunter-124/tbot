@@ -8,6 +8,7 @@ the arming interlock is enforced again in the actuator layer.
 from __future__ import annotations
 
 import math
+from bisect import bisect_right
 
 import numpy as np
 
@@ -113,6 +114,18 @@ def _rotvec(v: np.ndarray) -> np.ndarray:
     )
 
 
+def _rotvec_f(x: float, y: float, z: float) -> tuple:
+    """_rotvec as three rows of floats."""
+    theta = math.sqrt(x * x + y * y + z * z)
+    if theta < 1e-12:
+        return (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)
+    x, y, z = x / theta, y / theta, z / theta
+    s, c = math.sin(theta), 1.0 - math.cos(theta)
+    return ((1.0 - c * (y * y + z * z), c * x * y - s * z, c * x * z + s * y),
+            (c * y * x + s * z, 1.0 - c * (x * x + z * z), c * y * z - s * x),
+            (c * z * x - s * y, c * z * y + s * x, 1.0 - c * (x * x + y * y)))
+
+
 def _angle_between(a: np.ndarray, b: np.ndarray) -> float:
     ax, ay, az = map(float, a)
     bx, by, bz = map(float, b)
@@ -162,6 +175,10 @@ class FireSolver:
             mount.cam_pos_g, dtype=np.float64
         ).reshape(3)
         self._bore_g = _unit(np.asarray(mount.bore_dir_g, dtype=np.float64).reshape(3))
+        self._bore_gf = tuple(self._bore_g.tolist())
+        self._muzzle_gf = tuple(self._muzzle_g.tolist())
+        self._tof_x: list | None = None   # the shot table as lists (see _tof_f)
+        self._tof_t: list | None = None
         self.policy = FirePolicy.from_config(cfg)
         self._aim_prior = math.radians(float(getattr(cfg.fire, "aim_prior_deg", 0.0) or 0.0))
         self._evidence = float(getattr(cfg.fire, "aim_prior_evidence", 0.0) or 0.0)
@@ -451,6 +468,22 @@ class FireSolver:
             p *= p_raw / self._evidence
         return p
 
+    def _tof_f(self, distance: float) -> float:
+        """np.interp(distance, shot._x, shot._t) for one float: the same line between the same two table points
+        (clamped at the ends), without the array call (20 us, five times a solution)."""
+        xs = self._tof_x
+        if xs is None:
+            xs = self._tof_x = np.asarray(self.shot._x, dtype=np.float64).tolist()
+            self._tof_t = np.asarray(self.shot._t, dtype=np.float64).tolist()
+        ts = self._tof_t
+        if not distance > xs[0]:
+            return ts[0] if distance == distance else float("nan")
+        if distance >= xs[-1]:
+            return ts[-1]
+        j = bisect_right(xs, distance) - 1
+        x0 = xs[j]
+        return (ts[j + 1] - ts[j]) / (xs[j + 1] - x0) * (distance - x0) + ts[j]
+
     def _geometry(
         self,
         now_ns: int,
@@ -495,16 +528,19 @@ class FireSolver:
         k_acc = half_dt2
         if t_acc > 0.0 and dt_exit > 0.0:
             k_acc = t_acc * t_acc * (dt_exit / t_acc - 1.0 + math.exp(-dt_exit / t_acc))
-        rot_exit = rot_now @ _rotvec(omega * dt_exit + alpha * k_acc)
-        # How far off that is, 1 sigma per axis. What the hand does next is an acceleration nobody measured, so
-        # the error grows with the SQUARE of the time ahead (p50 0.31 deg at 104 ms, 0.70 at 164, 0.85 at 190):
-        #   fire.gun_accel_floor_dps2 x dt^2/2            the steadiest hand still does this much
-        #   fire.gun_rate_drift_per_s x |omega| x dt^2/2  a faster swing changes faster
-        #   fire.gun_accel_sigma_frac x the acceleration term above
-        #   fire.gun_rate_change_sigma_frac x the mean acceleration of the last gun_rate_change_window_ms x dt^2/2
-        #   fire.gun_rate_sigma_dps x dt                  a constant rate error (0: the gyro re-zeroes at rest)
-        # Fitted to the same frames; error / sigma (a perfect model reads p50 1.18, p90 2.15, p99 3.03):
-        # 104 ms 1.10 / 2.20 / 3.18, 164 ms 1.11 / 2.29 / 3.27, 190 ms 1.04 / 2.26 / 3.19.
+        # Plain floats from here on: each NumPy call on a 3-vector costs 15-50 us on a Pi 3B whatever it
+        # computes, and this function made about 45 of them (1.5 ms a solution, 1.3 solutions a frame).
+        wx, wy, wz = omega.tolist()
+        ax_, ay_, az_ = alpha.tolist()
+        (q00, q01, q02), (q10, q11, q12), (q20, q21, q22) = _rotvec_f(
+            wx * dt_exit + ax_ * k_acc, wy * dt_exit + ay_ * k_acc, wz * dt_exit + az_ * k_acc)
+        (n00, n01, n02), (n10, n11, n12), (n20, n21, n22) = np.asarray(rot_now, dtype=np.float64).reshape(3, 3).tolist()
+        # rot_exit = rot_now @ R(turn)
+        e00, e01, e02 = n00 * q00 + n01 * q10 + n02 * q20, n00 * q01 + n01 * q11 + n02 * q21, n00 * q02 + n01 * q12 + n02 * q22
+        e10, e11, e12 = n10 * q00 + n11 * q10 + n12 * q20, n10 * q01 + n11 * q11 + n12 * q21, n10 * q02 + n11 * q12 + n12 * q22
+        e20, e21, e22 = n20 * q00 + n21 * q10 + n22 * q20, n20 * q01 + n21 * q11 + n22 * q21, n20 * q02 + n21 * q12 + n22 * q22
+        norm_omega = math.sqrt(wx * wx + wy * wy + wz * wz)
+        norm_alpha = math.sqrt(ax_ * ax_ + ay_ * ay_ + az_ * az_)
         window_s = float(getattr(fc, "gun_rate_change_window_ms", 100.0)) * 1e-3
         half_s2, k_acc_s = half_dt2, k_acc
         if remeasured:
@@ -518,36 +554,54 @@ class FireSolver:
         gun_sigma = math.sqrt(
             (math.radians(float(getattr(fc, "gun_rate_sigma_dps", 0.0))) * dt_sigma) ** 2
             + (math.radians(float(getattr(fc, "gun_accel_floor_dps2", 0.0))) * half_s2) ** 2
-            + (float(getattr(fc, "gun_rate_drift_per_s", 0.0)) * _norm3(omega) * half_s2) ** 2
-            + (float(fc.gun_accel_sigma_frac) * _norm3(alpha) * k_acc_s) ** 2
+            + (float(getattr(fc, "gun_rate_drift_per_s", 0.0)) * norm_omega * half_s2) ** 2
+            + (float(fc.gun_accel_sigma_frac) * norm_alpha * k_acc_s) ** 2
             + (float(getattr(fc, "gun_rate_change_sigma_frac", 0.0)) * float(rate_change)
                / max(window_s, 1e-3) * half_s2) ** 2
         )
-        bore_w = _unit(rot_exit @ self._bore_g)
-        muzzle_w = rot_exit @ self._muzzle_g
+        gx, gy, gz = self._bore_gf
+        bx, by, bz = e00 * gx + e01 * gy + e02 * gz, e10 * gx + e11 * gy + e12 * gz, e20 * gx + e21 * gy + e22 * gz
+        nb = math.sqrt(bx * bx + by * by + bz * bz)
+        if nb > 0.0:
+            bx, by, bz = bx / nb, by / nb, bz / nb
+        gx, gy, gz = self._muzzle_gf
+        mx, my, mz = e00 * gx + e01 * gy + e02 * gz, e10 * gx + e11 * gy + e12 * gz, e20 * gx + e21 * gy + e22 * gz
 
         shot = self.shot
         tabulated = type(shot) is ShotModel
+        tof_of = self._tof_f if tabulated else (lambda d: float(shot.time_of_flight(d)))
+        xyz = getattr(tracker, "predict_xyz", None)
+        if xyz is None:
+            def xyz(tr, t):
+                d = tracker.predict_dir(tr, t)
+                return float(d[0]), float(d[1]), float(d[2])
         rng, rng_sigma = self._solve_range(track)
         t_arr_ns = t_exit_ns
-        p_clay = rng * tracker.predict_dir(track, t_arr_ns)
-        dist = _norm3(p_clay - muzzle_w)
-        tof = _tof(shot, dist)
+        ux, uy, uz = xyz(track, t_arr_ns)
+        cx, cy, cz = rng * ux - mx, rng * uy - my, rng * uz - mz   # muzzle -> clay
+        dist = math.sqrt(cx * cx + cy * cy + cz * cz)
+        tof = tof_of(dist)
         for _ in range(_TOF_ITERS):
             t_arr_ns = t_exit_ns + int(round(tof * 1e9))
-            p_clay = rng * tracker.predict_dir(track, t_arr_ns)
-            dist = _norm3(p_clay - muzzle_w)
-            tof = _tof(shot, dist)
+            ux, uy, uz = xyz(track, t_arr_ns)
+            cx, cy, cz = rng * ux - mx, rng * uy - my, rng * uz - mz
+            dist = math.sqrt(cx * cx + cy * cy + cz * cz)
+            tof = tof_of(dist)
 
-        to_clay = p_clay - muzzle_w
-        lead_dir = _unit(to_clay)
-        elevation = math.asin(max(-1.0, min(1.0, float(bore_w[2]))))
-        drop = (float(0.5 * G_MPS2 * tof * tof * np.cos(elevation)) if tabulated
+        lead_dir = (np.array([cx / dist, cy / dist, cz / dist], dtype=np.float64) if dist > 0.0
+                    else np.array([cx, cy, cz], dtype=np.float64))
+        elevation = math.asin(max(-1.0, min(1.0, bz)))
+        drop = (0.5 * G_MPS2 * tof * tof * math.cos(elevation) if tabulated
                 else float(shot.drop(dist, elevation)))
-        to_shot = bore_w * dist - drop * _UP_W
+        sx, sy, sz = bx * dist, by * dist, bz * dist - drop          # muzzle -> shot (bore_w * dist - drop * up)
+        ns = math.sqrt(sx * sx + sy * sy + sz * sz)
+        shot_dir = (np.array([sx / ns, sy / ns, sz / ns], dtype=np.float64) if ns > 0.0
+                    else np.array([sx, sy, sz], dtype=np.float64))
         if aim_only:
-            return {"lead_dir_w": lead_dir, "shot_dir_w": _unit(to_shot)}
-        miss = _angle_between(to_clay, to_shot)
+            return {"lead_dir_w": lead_dir, "shot_dir_w": shot_dir}
+        kx, ky, kz = cy * sz - cz * sy, cz * sx - cx * sz, cx * sy - cy * sx
+        miss = math.atan2(math.sqrt(kx * kx + ky * ky + kz * kz), cx * sx + cy * sy + cz * sz)
+        bore_w = np.array([bx, by, bz], dtype=np.float64)
 
         _, _, track_sigma = tracker.predict(track, t_arr_ns)
         # Clay angular speed on the sphere, from the filtered rates.
@@ -559,7 +613,7 @@ class FireSolver:
             omega_clay = math.hypot(float(track.x[1]) * math.cos(el), float(track.x[4]))
         h = _DTOF_STEP_M
         lo = max(dist - h, 1e-3)
-        dtof_dr = (_tof(shot, dist + h) - _tof(shot, lo)) / (
+        dtof_dr = (tof_of(dist + h) - tof_of(lo)) / (
             dist + h - lo
         )
         sigma = math.sqrt(
@@ -581,7 +635,7 @@ class FireSolver:
             "tof": tof,
             "dist": dist,
             "lead_dir_w": lead_dir,
-            "shot_dir_w": _unit(to_shot),
+            "shot_dir_w": shot_dir,
             "bore_dir_w": bore_w,
             "clay_el": math.asin(max(-1.0, min(1.0, float(lead_dir[2])))),
             "track_sigma": track_sigma,

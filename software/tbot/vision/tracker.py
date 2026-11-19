@@ -234,6 +234,11 @@ class ClayTracker:
         ce = math.cos(el)
         return np.array([ce * math.cos(az), ce * math.sin(az), math.sin(el)], dtype=np.float64)
 
+    def predict_xyz(self, track: Track, t_ns: int) -> tuple[float, float, float]:
+        """predict_dir as three floats."""
+        d = self.predict_dir(track, t_ns)
+        return float(d[0]), float(d[1]), float(d[2])
+
     def best(self, accept=None, bore_dir_w=None, t_ns: int | None = None) -> Track | None:
         """The target: a confirmed track `accept(track)` lets through (the engagement's debris/engaged lockout).
 
@@ -251,8 +256,8 @@ class ClayTracker:
             for tr in self.tracks:
                 if not tr.confirmed or (accept is not None and not accept(tr)):
                     continue
-                d = self.predict_dir(tr, int(t_ns) if t_ns is not None else tr.t_ns)
-                cos = max(-1.0, min(1.0, float(d[0]) * bx + float(d[1]) * by + float(d[2]) * bz))
+                dx, dy, dz = self.predict_xyz(tr, int(t_ns) if t_ns is not None else tr.t_ns)
+                cos = max(-1.0, min(1.0, dx * bx + dy * by + dz * bz))
                 cand.append((self.surely_slow(tr), math.acos(cos), tr))
             if not cand:
                 return None
@@ -280,17 +285,30 @@ class ClayTracker:
         fc = getattr(self.cfg, "fire", None)
         if s is None or S is None or fc is None:
             return False
+        cache = getattr(self, "_slow", None)   # per update (tracker3d clears it): asked a dozen times a frame
+        if cache is not None:
+            hit = cache.get(tr.track_id)
+            if hit is not None and hit[0] is s:
+                return hit[1]
+            out = self._surely_slow(tr, s, S, fc)
+            cache[tr.track_id] = (s, out)
+            return out
+        return self._surely_slow(tr, s, S, fc)
+
+    def _surely_slow(self, tr: Track, s, S, fc) -> bool:
         v_min = float(getattr(fc, "min_clay_speed_mps", 0.0) or 0.0)
         if v_min <= 0.0:
             return False
-        vx, vy, vz = (float(c) for c in s[3:6])
+        vx, vy, vz = s[3:6].tolist()
         speed = math.sqrt(vx * vx + vy * vy + vz * vz)
         if speed > 1e-6:
             ux, uy, uz = vx / speed, vy / speed, vz / speed
-            Sv = S[3:6, 3:6]
-            var = float(ux * (Sv[0, 0] * ux + Sv[0, 1] * uy + Sv[0, 2] * uz)
-                        + uy * (Sv[1, 0] * ux + Sv[1, 1] * uy + Sv[1, 2] * uz)
-                        + uz * (Sv[2, 0] * ux + Sv[2, 1] * uy + Sv[2, 2] * uz))
+            # (one tolist(): indexing a NumPy array element by element costs ~1 us each on the laptop and
+            # ten times that on the Pi, and this runs a dozen times a frame)
+            (s00, s01, s02), (s10, s11, s12), (s20, s21, s22) = S[3:6, 3:6].tolist()
+            var = (ux * (s00 * ux + s01 * uy + s02 * uz)
+                   + uy * (s10 * ux + s11 * uy + s12 * uz)
+                   + uz * (s20 * ux + s21 * uy + s22 * uz))
         else:
             var = float(S[3, 3])
         k = float(getattr(fc, "min_clay_speed_sigmas", 0.0) or 0.0)
@@ -400,11 +418,14 @@ class ClayTracker:
         if len(self.tracks) < self.cfg.tracker.max_tracks:
             return True
 
+        if bore_w is not None:
+            bwx, bwy, bwz = (float(c) for c in bore_w)
+
         def off_bore(tr):
             if bore_w is None:
                 return 0.0
-            d = self.predict_dir(tr, tr.t_ns)
-            return math.acos(max(-1.0, min(1.0, float(d @ bore_w))))
+            dx, dy, dz = self.predict_xyz(tr, tr.t_ns)
+            return math.acos(max(-1.0, min(1.0, dx * bwx + dy * bwy + dz * bwz)))
 
         established = int(getattr(getattr(self.cfg, "fire", None), "min_track_hits", 5) or 5)
         spent, seen = [], []

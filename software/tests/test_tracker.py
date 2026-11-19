@@ -337,6 +337,38 @@ def test_cartesian_angular_rate_and_range_follow_the_3d_state():
     assert tr.x.shape == (6,) and tr.P.shape == (6, 6)  # angular view for overlays/telemetry
 
 
+def test_native_filter_step_matches_the_numpy_reference():
+    """vision/_measure.c tbot_track_predict / tbot_track_update against the NumPy code they replace: the same
+    tracks, to rounding, over a crossing clay with a second object in view (2- and 3-row updates, new tracks)."""
+    from tbot.vision import _native
+
+    if _native.track_kernel() is None:
+        pytest.skip(f"native tracker step: {_native.track_status}")
+    cfg = load_config(sets=["tracker.model=cartesian"])
+    scene = Scene(cfg)
+    att = FixedAttitude(0.0, math.radians(8.0))
+    fast, ref = make_tracker(cfg, scene.cam, scene.mount), make_tracker(cfg, scene.cam, scene.mount)
+    assert fast._nat is not None
+    ref._nat = None
+    rng = np.random.default_rng(5)
+    n_updates = 0
+    for n in range(60):
+        t = T0 + n * DT_NS
+        dets = [d for d in (scene.detect(_crossing(n / FPS), att.R_wg(t), t, rng, 0.3),
+                            scene.detect(_outgoing(n / FPS), att.R_wg(t), t, rng, 0.3)) if d is not None]
+        a, b = fast.update(t, dets, att.R_wg(t)), ref.update(t, dets, att.R_wg(t))
+        assert [(x.track_id, x.hits, x.misses, x.confirmed) for x in a] == \
+               [(x.track_id, x.hits, x.misses, x.confirmed) for x in b]
+        for x, y in zip(a, b):
+            n_updates += x.hits > 1
+            assert x.s.dtype == np.float64 and x.s.flags.c_contiguous and x.S.flags.c_contiguous
+            np.testing.assert_allclose(x.s, y.s, rtol=1e-9, atol=1e-9)
+            np.testing.assert_allclose(x.S, y.S, rtol=1e-8, atol=1e-10)
+            np.testing.assert_allclose(x.x, y.x, rtol=1e-9, atol=1e-12)
+            assert x.range_m == pytest.approx(y.range_m, rel=1e-9)
+    assert n_updates > 50
+
+
 def test_make_tracker_rejects_an_unknown_model():
     cfg = load_config(sets=["tracker.model=bogus"])
     scene = Scene(cfg)

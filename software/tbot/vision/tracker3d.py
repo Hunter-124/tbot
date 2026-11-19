@@ -20,6 +20,7 @@ view (for overlays, telemetry and older code); the filter state lives in `Track.
 
 from __future__ import annotations
 
+import ctypes
 import math
 from functools import lru_cache
 
@@ -152,6 +153,14 @@ def _angular_view(s: np.ndarray, S: np.ndarray) -> tuple[np.ndarray, np.ndarray]
     return x, P
 
 
+def _alloc9() -> tuple[np.ndarray, int, np.ndarray, int]:
+    """(s, address, S, address): a 9-vector and a 9x9 on ctypes buffers, so the C filter step gets their addresses
+    without ndarray.ctypes (12 us a pointer on a Pi 3B, four pointers a call, ten calls a frame)."""
+    b9, b81 = (ctypes.c_double * 9)(), (ctypes.c_double * 81)()
+    return (np.frombuffer(b9, dtype=np.float64), ctypes.addressof(b9),
+            np.frombuffer(b81, dtype=np.float64).reshape(9, 9), ctypes.addressof(b81))
+
+
 _I9 = np.eye(9, dtype=np.float64)
 _I9.setflags(write=False)
 _X0 = np.zeros(6, dtype=np.float64)   # placeholders of a new track's angular view (_sync_views replaces them)
@@ -189,14 +198,38 @@ class CartesianClayTracker(ClayTracker):
                 S[6 + i, 6 + i] = sa * sa
             S.setflags(write=False)
             self._s_new = S
+        # the filter step in C when the kernel is built (vision/_measure.c: tbot_track_predict / _update); the
+        # NumPy code below is the reference and what runs without it
+        self._nat = None
+        if bool(getattr(cfg.detector, "native", True)):
+            from . import _native  # noqa: PLC0415
+            self._nat = _native.track_kernel()
+        self._upd_id: int | None = None
+        self._addr: dict[int, tuple] = {}   # track id -> (s, its address, S, its address) of arrays made by _alloc9
+        self._h3 = (ctypes.c_double * 9)()
+        self._z3 = (ctypes.c_double * 3)()
+        self._r3 = (ctypes.c_double * 3)()
 
     # ----------------------------------------------------------------- public API
     def update(self, t_ns: int, detections: list[Detection], R_wg: np.ndarray) -> list[Track]:
         t_ns = int(t_ns)
         rot = np.asarray(R_wg, dtype=np.float64).reshape(3, 3)
         preds = []
+        nat = self._nat
         for tr in self.tracks:
-            f, qn = _matrices(max(0, int(round((t_ns - tr.t_ns) * 1e-3))), self._q3)
+            dt_us = max(0, int(round((t_ns - tr.t_ns) * 1e-3)))
+            if nat is not None:
+                sp, spa, Sp, Spa = _alloc9()
+                c = self._addr.get(tr.track_id)
+                if c is not None and c[0] is tr.s and c[2] is tr.S:
+                    sa, Sa = c[1], c[3]
+                else:
+                    sa, Sa = tr.s.ctypes.data, tr.S.ctypes.data
+                nat[0](sa, Sa, dt_us * 1e-6, self._q3, spa, Spa)
+                self._addr[tr.track_id] = (sp, spa, Sp, Spa)
+                preds.append((sp, Sp))
+                continue
+            f, qn = _matrices(dt_us, self._q3)
             preds.append((f @ tr.s, f @ tr.S @ f.T + qn))
 
         n_det = len(detections)
@@ -269,6 +302,7 @@ class CartesianClayTracker(ClayTracker):
                 tr.misses += 1
             else:
                 det = detections[i]
+                self._upd_id = tr.track_id
                 tr.s, tr.S = self._ekf_update(sp, Sp, float(az_m[i]), float(el_m[i]), float(sig_az[i]),
                                               float(sig_el[i]), det, float(ifov[i]))
                 tr.hits += 1
@@ -284,6 +318,10 @@ class CartesianClayTracker(ClayTracker):
             if tr.misses <= limit:
                 survivors.append(tr)
         self.tracks = survivors
+        if self._addr:
+            alive = {tr.track_id for tr in survivors}
+            self._addr = {k: v for k, v in self._addr.items() if k in alive}
+        self._slow = {}
 
         # new tracks nearest the bore first: the clay is where the gun points
         bore_w = rot @ self._bore_g
@@ -340,14 +378,18 @@ class CartesianClayTracker(ClayTracker):
         var = math.cos(el) ** 2 * c00 + c11
         return az, el, math.sqrt(max(float(var), 0.0))
 
-    def predict_dir(self, track: Track, t_ns: int) -> np.ndarray:
-        """Unit world direction at t_ns: the mean position only (no covariance work)."""
+    def predict_xyz(self, track: Track, t_ns: int) -> tuple[float, float, float]:
+        """predict_dir as three floats (no array: 10 us less a call on a Pi 3B, a dozen calls a frame)."""
         dt = max(0.0, (int(t_ns) - track.t_ns) * 1e-9)
         h = 0.5 * dt * dt
         s = track.s.tolist()
         px, py, pz = s[0] + dt * s[3] + h * s[6], s[1] + dt * s[4] + h * s[7], s[2] + dt * s[5] + h * s[8]
         n = max(math.sqrt(px * px + py * py + pz * pz), 1e-12)
-        return np.array([px / n, py / n, pz / n], dtype=np.float64)
+        return px / n, py / n, pz / n
+
+    def predict_dir(self, track: Track, t_ns: int) -> np.ndarray:
+        """Unit world direction at t_ns: the mean position only (no covariance work)."""
+        return np.array(self.predict_xyz(track, t_ns), dtype=np.float64)
 
     def angular_rate(self, track: Track) -> float:
         """Clay angular speed (rad/s) on the sphere: transverse velocity over range."""
@@ -374,6 +416,24 @@ class CartesianClayTracker(ClayTracker):
             rows.append([px / rn, py / rn, pz / rn])
             z.append(r_size - r_p)
             rdiag.append((float(self.cfg.tracker.size_range_sigma_frac) * r_size) ** 2)
+        if self._nat is not None:
+            h3, z3, r3 = self._h3, self._z3, self._r3
+            m = len(rows)
+            for k in range(m):
+                h3[3 * k], h3[3 * k + 1], h3[3 * k + 2] = rows[k]
+                z3[k] = z[k]
+                r3[k] = rdiag[k]
+            s_out, soa, S_out, Soa = _alloc9()
+            c = self._addr.get(self._upd_id)
+            if c is not None and c[0] is sp and c[2] is Sp:
+                spa, Spa = c[1], c[3]
+            else:
+                spa, Spa = sp.ctypes.data, Sp.ctypes.data
+            if self._nat[1](spa, Spa, ctypes.addressof(h3), ctypes.addressof(z3), ctypes.addressof(r3), m,
+                            _RANGE_MIN_M, _RANGE_MAX_M, soa, Soa) == 0:
+                if self._upd_id is not None:
+                    self._addr[self._upd_id] = (s_out, soa, S_out, Soa)
+                return s_out, S_out
         H3 = np.array(rows, dtype=np.float64)                 # (m, 3)
         PHt = Sp[:, 0:3] @ H3.T                               # (9, m)
         Sm = (H3 @ PHt[0:3]).tolist()
@@ -422,9 +482,15 @@ class CartesianClayTracker(ClayTracker):
         return tr
 
     def _sync_views(self, tr: Track) -> None:
-        """Refresh the angular view (x, P) and the range estimate from the 3-D state."""
-        tr.x, tr.P = _angular_view(tr.s, tr.S)
-        px, py, pz = tr.s[0:3].tolist()
+        """Refresh the angular view and the range estimate from the 3-D state.
+
+        Track.x is [az, az_rate, 0, el, el_rate, 0] (telemetry, overlays, the solver's clay rate). Track.P is NOT
+        kept up to date for a cartesian track - nothing reads it, and building it cost more than the filter step
+        it described (0.15 ms a track a frame on a Pi 3B): ask angular_cov(track) for it."""
+        px, py, pz, vx, vy, vz = tr.s[0:6].tolist()
+        j00, j01, j10, j11, j12 = _jac5(px, py, pz)
+        tr.x = np.array([math.atan2(py, px), j00 * vx + j01 * vy, 0.0,
+                         math.atan2(pz, math.hypot(px, py)), j10 * vx + j11 * vy + j12 * vz, 0.0], dtype=np.float64)
         r = math.sqrt(px * px + py * py + pz * pz)
         n = max(r, 1e-12)
         ux, uy, uz = px / n, py / n, pz / n
@@ -435,6 +501,10 @@ class CartesianClayTracker(ClayTracker):
         tr.range_m = min(max(r, _RANGE_MIN_M), _RANGE_MAX_M)
         # size samples share a systematic error: never claim better than the correlated floor
         tr.range_sigma_m = max(sig, float(self.cfg.tracker.size_range_bias_frac) * tr.range_m)
+
+    def angular_cov(self, tr: Track) -> np.ndarray:
+        """The 6x6 covariance matching Track.x (position and rate blocks; the accelerations are not filled in)."""
+        return _angular_view(tr.s, tr.S)[1]
 
 
 def make_tracker(cfg: Config, cam: CameraModel, mount: MountModel) -> ClayTracker:

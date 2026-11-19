@@ -129,6 +129,7 @@ def _load() -> ctypes.CDLL | None:
     lib.tbot_measure.argtypes = [ctypes.POINTER(MeasureParams), _ptr, ctypes.c_int32, _ptr]
     status = f"loaded ({path.name})"
     _load_scenery(lib)
+    _load_track(lib)
     return lib
 
 
@@ -157,6 +158,41 @@ def _load_scenery(lib: ctypes.CDLL) -> None:
     scenery_status = "loaded"
 
 
+TRACK_ABI = 1   # TBOT_TRACK_ABI in _measure.c
+track_status = "not loaded"
+_track = None
+
+
+def _load_track(lib: ctypes.CDLL) -> None:
+    """The tracker's filter step (tbot_track_predict / tbot_track_update); a library built before it has none."""
+    global _track, track_status
+    try:
+        lib.tbot_track_abi.restype = ctypes.c_int
+        abi = int(lib.tbot_track_abi())
+        predict, update = lib.tbot_track_predict, lib.tbot_track_update
+    except AttributeError:
+        track_status = "not in this build (rebuild with scripts/build_native.sh)"
+        return
+    if abi != TRACK_ABI:
+        track_status = f"stale (ABI {abi}): rebuild with scripts/build_native.sh"
+        log.warning("native tracker step: %s; using the Python path", track_status)
+        return
+    d = ctypes.c_double
+    predict.restype = None
+    predict.argtypes = [_ptr, _ptr, d, d, _ptr, _ptr]
+    update.restype = ctypes.c_int
+    update.argtypes = [_ptr, _ptr, _ptr, _ptr, _ptr, ctypes.c_int32, d, d, _ptr, _ptr]
+    _track = (predict, update)
+    track_status = "loaded"
+
+
+def track_kernel():
+    """(tbot_track_predict, tbot_track_update) from the loaded library, or None."""
+    if kernel() is None:
+        return None
+    return _track
+
+
 def scenery_kernel():
     """tbot_scenery from the loaded library, or None (not built, stale, switched off)."""
     if kernel() is None:
@@ -183,10 +219,12 @@ def describe(enabled: bool = True) -> str:
 
 def reload() -> ctypes.CDLL | None:
     """Forget the cached result and look again (tests; after a rebuild or an environment change)."""
-    global _tried, _scenery, scenery_status
+    global _tried, _scenery, scenery_status, _track, track_status
     _tried = False
     _scenery = None
     scenery_status = "not loaded"
+    _track = None
+    track_status = "not loaded"
     return kernel()
 
 

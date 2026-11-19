@@ -969,3 +969,120 @@ TBOT_API int tbot_scenery(tbot_scenery_params *p) {
     p->n_keep = nk;
     return 0;
 }
+
+/* ============================================================================================ tracker
+ * The 9-state filter of vision/tracker3d.py (world [p, v, a], metres): one track's time step and one
+ * measurement update. In Python each costs a dozen to two dozen small NumPy calls (15-50 us apiece on a Pi 3B:
+ * 0.2 ms a predict, 0.66 ms an update; range day 2026-11-19, six tracks on tree specks: 8.7 ms a frame of
+ * tracking, 30 frames a second). The Python functions remain the reference (tests compare the two). */
+#define TBOT_TRACK_ABI 1
+
+TBOT_API int tbot_track_abi(void) { return TBOT_TRACK_ABI; }
+
+/* s_out = F s, S_out = F S F^T + Q for a step dt (white-jerk PSD q): F and Q as tracker3d._transition9 /
+ * _noise9. Row-major 9x9. The outputs may not alias the inputs. */
+TBOT_API void tbot_track_predict(const double *s, const double *S, double dt, double q, double *s_out,
+                                 double *S_out) {
+    const double h = 0.5 * dt * dt;
+    double FS[81];
+    for (int i = 0; i < 3; i++) {
+        s_out[i] = s[i] + dt * s[3 + i] + h * s[6 + i];
+        s_out[3 + i] = s[3 + i] + dt * s[6 + i];
+        s_out[6 + i] = s[6 + i];
+        for (int k = 0; k < 9; k++) {
+            FS[9 * i + k] = S[9 * i + k] + dt * S[9 * (3 + i) + k] + h * S[9 * (6 + i) + k];
+            FS[9 * (3 + i) + k] = S[9 * (3 + i) + k] + dt * S[9 * (6 + i) + k];
+            FS[9 * (6 + i) + k] = S[9 * (6 + i) + k];
+        }
+    }
+    for (int r = 0; r < 9; r++) {
+        for (int i = 0; i < 3; i++) {
+            S_out[9 * r + i] = FS[9 * r + i] + dt * FS[9 * r + 3 + i] + h * FS[9 * r + 6 + i];
+            S_out[9 * r + 3 + i] = FS[9 * r + 3 + i] + dt * FS[9 * r + 6 + i];
+            S_out[9 * r + 6 + i] = FS[9 * r + 6 + i];
+        }
+    }
+    const double dt2 = dt * dt, dt3 = dt2 * dt;
+    const double b[3][3] = {{q * (dt3 * dt2 / 20.0), q * (dt2 * dt2 / 8.0), q * (dt3 / 6.0)},
+                            {q * (dt2 * dt2 / 8.0), q * (dt3 / 3.0), q * (dt2 / 2.0)},
+                            {q * (dt3 / 6.0), q * (dt2 / 2.0), q * dt}};
+    for (int i = 0; i < 3; i++)
+        for (int a = 0; a < 3; a++)
+            for (int c = 0; c < 3; c++) S_out[9 * (3 * a + i) + 3 * c + i] += b[a][c];
+}
+
+/* Measurement update with m (2 or 3) rows that look at the position only: H = [H3 | 0], H3 m x 3 row-major,
+ * innovation z, measurement variances r. Joseph form, symmetrised; the position is then held inside
+ * [range_min, range_max] as in tracker3d._ekf_update. Returns 0, or -1 when the innovation covariance is
+ * singular (nothing written: the caller takes the Python path). */
+TBOT_API int tbot_track_update(const double *sp, const double *Sp, const double *H3, const double *z,
+                               const double *r, int32_t m, double range_min, double range_max, double *s_out,
+                               double *S_out) {
+    if (m < 2 || m > 3) return -1;
+    double PHt[27], Sm[9], inv[9], K[27], A[81], AS[81];
+    for (int i = 0; i < 9; i++)
+        for (int k = 0; k < m; k++)
+            PHt[3 * i + k] = Sp[9 * i] * H3[3 * k] + Sp[9 * i + 1] * H3[3 * k + 1] + Sp[9 * i + 2] * H3[3 * k + 2];
+    for (int a = 0; a < m; a++)
+        for (int k = 0; k < m; k++)
+            Sm[3 * a + k] = H3[3 * a] * PHt[k] + H3[3 * a + 1] * PHt[3 + k] + H3[3 * a + 2] * PHt[6 + k]
+                            + (a == k ? r[a] : 0.0);
+    if (m == 2) {
+        const double a = Sm[0], b = Sm[1], c = Sm[3], d = Sm[4];
+        const double det = a * d - b * c;
+        if (det == 0.0 || !isfinite(det)) return -1;
+        inv[0] = d / det; inv[1] = -b / det; inv[3] = -c / det; inv[4] = a / det;
+    } else {
+        const double a = Sm[0], b = Sm[1], c = Sm[2], d = Sm[3], e = Sm[4], f = Sm[5], g = Sm[6], hh = Sm[7],
+                     i = Sm[8];
+        const double c11 = e * i - f * hh, c12 = f * g - d * i, c13 = d * hh - e * g;
+        const double det = a * c11 + b * c12 + c * c13;
+        if (det == 0.0 || !isfinite(det)) return -1;
+        inv[0] = c11 / det; inv[1] = (c * hh - b * i) / det; inv[2] = (b * f - c * e) / det;
+        inv[3] = c12 / det; inv[4] = (a * i - c * g) / det;  inv[5] = (c * d - a * f) / det;
+        inv[6] = c13 / det; inv[7] = (b * g - a * hh) / det; inv[8] = (a * e - b * d) / det;
+    }
+    for (int i = 0; i < 9; i++) {
+        double ds = 0.0;
+        for (int k = 0; k < m; k++) {
+            double v = 0.0;
+            for (int a = 0; a < m; a++) v += PHt[3 * i + a] * inv[3 * a + k];
+            K[3 * i + k] = v;
+            ds += v * z[k];
+        }
+        s_out[i] = sp[i] + ds;
+    }
+    for (int i = 0; i < 9; i++) {
+        for (int k = 0; k < 9; k++) A[9 * i + k] = (i == k) ? 1.0 : 0.0;
+        for (int c = 0; c < 3; c++) {
+            double v = 0.0;
+            for (int k = 0; k < m; k++) v += K[3 * i + k] * H3[3 * k + c];
+            A[9 * i + c] -= v;
+        }
+    }
+    for (int i = 0; i < 9; i++)
+        for (int k = 0; k < 9; k++) {
+            double v = 0.0;
+            for (int j = 0; j < 9; j++) v += A[9 * i + j] * Sp[9 * j + k];
+            AS[9 * i + k] = v;
+        }
+    for (int i = 0; i < 9; i++)
+        for (int k = 0; k < 9; k++) {
+            double v = 0.0;
+            for (int j = 0; j < 9; j++) v += AS[9 * i + j] * A[9 * k + j];
+            for (int a = 0; a < m; a++) v += K[3 * i + a] * r[a] * K[3 * k + a];
+            S_out[9 * i + k] = v;
+        }
+    for (int i = 0; i < 9; i++)
+        for (int k = i + 1; k < 9; k++) {
+            const double v = 0.5 * (S_out[9 * i + k] + S_out[9 * k + i]);
+            S_out[9 * i + k] = S_out[9 * k + i] = v;
+        }
+    const double rr = sqrt(s_out[0] * s_out[0] + s_out[1] * s_out[1] + s_out[2] * s_out[2]);
+    if (!(range_min <= rr && rr <= range_max) && rr > 0.0) {
+        const double want = rr < range_min ? range_min : (rr > range_max ? range_max : rr);
+        const double g = want / rr;
+        s_out[0] *= g; s_out[1] *= g; s_out[2] *= g;
+    }
+    return 0;
+}
