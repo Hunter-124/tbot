@@ -757,6 +757,9 @@ class Pipeline:
                 "miss_deg": float(np.degrees(decision.miss_rad)),
                 "pattern_deg": float(np.degrees(decision.pattern_rad)),
                 "sigma_deg": float(np.degrees(decision.sigma_rad)),
+                # its two largest parts: the target's own (track) and the gun's over the trigger delay
+                "track_sigma_deg": float(np.degrees(decision.extra.get("track_sigma_rad", float("nan")))),
+                "gun_sigma_deg": float(np.degrees(decision.extra.get("gun_sigma_rad", float("nan")))),
                 "p_hit": float(decision.p_hit),
                 "range_m": float(decision.range_m),
                 "tof_ms": float(decision.tof_s * 1e3),

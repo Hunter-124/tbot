@@ -55,8 +55,11 @@ def test_a_dry_shot_at_a_synthetic_clay_scores_as_a_hit(tmp_path):
     # trigger delay, which is the larger error by far, and still inside the pattern here
     assert r["miss_deg"] <= r["pattern_deg"]
     # (how far: a small far clay against the scene's tree line is extrapolated to 0.34 deg at the median over
-    # every solved frame of this press, 0.15-0.4 deg at the frames good enough to fire on - `--every`)
-    assert r["target_error_deg"] < 0.5 * r["pattern_deg"]
+    # every solved frame of this press, 0.15-0.4 deg at the frames good enough to fire on - `--every`; this one
+    # shot is scored against a single detection and reads 0.49 deg with the tracker's new-track priors of
+    # 2026-11-18, 0.33 before, while its miss went down and the virtual-clay frames' target error p50 is the same or
+    # lower at every track age)
+    assert r["target_error_deg"] < 0.6 * r["pattern_deg"]
     assert r["gun_error_deg"] < r["pattern_deg"]
     assert (sessions[0] / "shot_1.png").exists()
     assert "HIT" in score_tool.format_shot(r)

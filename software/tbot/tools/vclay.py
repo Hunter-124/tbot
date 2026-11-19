@@ -23,6 +23,7 @@ the path the bore took, so a chance always exists; the number says how well the 
     tbot vclay <presses> --fps 100 --age-ms 20                  # what a faster loop would be worth
     tbot vclay <presses> --delay-error-ms 60                    # what a wrong trigger delay costs
     tbot vclay <presses> --calibration                          # does P(hit) mean what it says?
+    tbot vclay <presses> --quick                                # a quick shooter: on the clay 0.35-0.7 s after it appears
 """
 
 from __future__ import annotations
@@ -61,6 +62,9 @@ SPEED_CLASSES = {          # clay speed over the ground, m/s
     "medium": (15.0, 20.0),
     "fast": (20.0, 26.0),
 }
+FLY_S = (0.7, 1.6)         # the clay is in the air (and visible) this long before the planned arrival: a deliberate
+                           # shooter; --quick flies the crossing 0.35-0.7 s after the clay appears, as a quick one does
+QUICK_FLY_S = (0.35, 0.7)
 
 
 def _unit(v: np.ndarray) -> np.ndarray:
@@ -155,6 +159,8 @@ class Row:
     true_range_m: float = float("nan")
     gun_err_deg: float = float("nan")
     target_err_deg: float = float("nan")
+    track_sigma_deg: float = float("nan")   # the solver's own 1-sigma of the target and of the gun at exit
+    gun_sigma_deg: float = float("nan")
 
 
 @dataclass
@@ -257,8 +263,9 @@ class Bench:
 
     def __init__(self, cfg: Config, true_delay_error_ms: float = 0.0, jitter_ms: float = 1.5,
                  noise_px: float = 0.5, size_noise: float = 0.12, dropout: float = 0.1,
-                 cmd_late_ms: float = 0.0) -> None:
+                 cmd_late_ms: float = 0.0, fly_s: tuple[float, float] = FLY_S) -> None:
         self.cfg = cfg
+        self.fly_s = (float(fly_s[0]), float(fly_s[1]))
         self.shot = ShotModel(cfg)
         self.budget = LatencyBudget.from_config(cfg, None)
         self.atype = str(cfg.actuator.type)
@@ -322,7 +329,7 @@ class Bench:
             radial = math.sqrt(speed * speed - vt * vt) * (1.0 if rng.uniform() < 0.8 else -1.0)
             vel = v_t + radial * los
             t_arr = t_exit + int(tof * 1e9)
-            fly_s = float(rng.uniform(0.7, 1.6))  # in the air (and visible) this long before the planned arrival
+            fly_s = float(rng.uniform(*self.fly_s))  # in the air (and visible) this long before the planned arrival
             t0 = max(t_arr - int(fly_s * 1e9), int(press.session.t_exp[0]))
             t1 = press.t_end + int(0.6e9)
             n_back = int(math.ceil((t_arr - t0) * 1e-9 / PATH_STEP_S)) + 1
@@ -428,6 +435,8 @@ class Bench:
                       sigma_deg=math.degrees(d.sigma_rad), miss_deg=math.degrees(d.miss_rad),
                       pattern_deg=math.degrees(d.pattern_rad), range_m=float(d.range_m), solved=solved,
                       ceiling=float(d.extra.get("ceiling", float("nan"))),
+                      track_sigma_deg=math.degrees(float(d.extra.get("track_sigma_rad", float("nan")))),
+                      gun_sigma_deg=math.degrees(float(d.extra.get("gun_sigma_rad", float("nan")))),
                       peak=d.reason == "FIRE" or (solved and not d.reason.startswith("better in")
                                                   and not any(f > d.p_hit for f in d.extra.get("future_p_hit", []))))
             if solved:
@@ -473,6 +482,9 @@ def tally(results: list[Result], shots: list[Row | None]) -> dict:
         miss = np.array([s.true_miss_deg for s in fired if math.isfinite(s.true_miss_deg)])
         if miss.size:
             out["true_miss_deg_p50"] = float(np.median(miss))
+        # how long the gun followed its target before it fired (a quick shooter is on the clay in 0.3-0.5 s)
+        out["track_age_ms_p50"] = float(np.median([s.track_age_s for s in fired])) * 1e3
+        out["track_age_ms_p90"] = float(np.percentile([s.track_age_s for s in fired], 90)) * 1e3
         for key in ("gun_err_deg", "target_err_deg"):
             v = np.array([getattr(s, key) for s in fired])
             v = v[np.isfinite(v)]
@@ -547,6 +559,8 @@ def _fmt(name: str, t: dict) -> str:
     if "true_miss_deg_p50" in t:
         extra = (f"   miss p50 {t['true_miss_deg_p50']:.2f} deg  gun {t.get('gun_err_deg_p50', float('nan')):.2f}"
                  f"  target {t.get('target_err_deg_p50', float('nan')):.2f}")
+    if "track_age_ms_p50" in t:
+        extra += f"   track age at shot p50 {t['track_age_ms_p50']:.0f} ms"
     return (f"  {name:<40s} clays hit {t['clays_hit_pct']:5.1f} %   shot at {t['shot_pct']:5.1f} %   "
             f"hits per shot {t['hit_per_shot_pct']:5.1f} %{extra}")
 
@@ -568,6 +582,8 @@ def main(argv: list[str] | None = None) -> int:
                    help="the true trigger delay is this much longer than the solver assumes")
     p.add_argument("--cmd-late-ms", type=float, default=0.0, help="the command goes out this long after planned")
     p.add_argument("--jitter-ms", type=float, default=1.5, help="shot-to-shot spread of the true delay (1 sigma)")
+    p.add_argument("--quick", action="store_true",
+                   help="a quick shooter: the crossing comes 0.35-0.7 s after the clay appears (default 0.7-1.6 s)")
     p.add_argument("--dropout", type=float, default=0.1, help="share of frames in which the clay is not detected")
     p.add_argument("--json", default=None, metavar="PATH", help="write the results as JSON")
     args = p.parse_args(argv)
@@ -592,7 +608,7 @@ def main(argv: list[str] | None = None) -> int:
         print("tbot vclay: no press long enough to fly a clay through", file=sys.stderr)
         return 1
     bench = Bench(cfg, true_delay_error_ms=args.delay_error_ms, jitter_ms=args.jitter_ms, dropout=args.dropout,
-                  cmd_late_ms=args.cmd_late_ms)
+                  cmd_late_ms=args.cmd_late_ms, fly_s=QUICK_FLY_S if args.quick else FLY_S)
     print(f"{len(presses)} press(es), {args.clays} clays each; trigger delay assumed {bench.assumed_delay_s * 1e3:.0f} ms, "
           f"true {bench.true_delay_s * 1e3:.0f} ms; frames: "
           + (f"{args.fps:.0f} fps, {args.age_ms:.0f} ms old" if args.fps > 0 else "as recorded"))

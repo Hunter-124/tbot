@@ -30,9 +30,11 @@ from ..optics import CameraModel, MountModel, range_from_size
 from ..types import Detection, Track
 from .tracker import ClayTracker, _MIN_COS_EL, _TENTATIVE_MISSES, _inv2, _wrap_pi
 
-# Initial uncertainty of a new track (the first detection fixes only a direction and maybe a range).
-_NEW_SPEED_SIGMA_MPS = 25.0  # skeet/trap clays fly at 18-30 m/s, any direction
-_NEW_ACC_SIGMA_MPS2 = 12.0  # gravity, drag (~5 m/s^2) and lift (~g at launch speed) roughly cancel vertically
+# Initial uncertainty of a new track (the first detection fixes only a direction and maybe a range), 1 sigma per
+# axis: tracker.new_speed_sigma_mps and tracker.new_acc_sigma_mps2. These defaults are the old ones (25 and 12);
+# the shipped config tightens them (see config/default.toml).
+_NEW_SPEED_SIGMA_MPS = 25.0
+_NEW_ACC_SIGMA_MPS2 = 12.0
 _RANGE_MIN_M = 1.0
 _RANGE_MAX_M = 200.0
 
@@ -169,6 +171,18 @@ class CartesianClayTracker(ClayTracker):
     def __init__(self, cfg: Config, cam: CameraModel, mount: MountModel):
         super().__init__(cfg, cam, mount)
         self._q3 = float(cfg.tracker.jerk_psd_mps3)
+        tc = cfg.tracker
+        sv = float(getattr(tc, "new_speed_sigma_mps", 0.0) or _NEW_SPEED_SIGMA_MPS)
+        sa = float(getattr(tc, "new_acc_sigma_mps2", 0.0) or _NEW_ACC_SIGMA_MPS2)
+        if sv == _NEW_SPEED_SIGMA_MPS and sa == _NEW_ACC_SIGMA_MPS2:
+            self._s_new = _S_NEW
+        else:
+            S = np.zeros((9, 9), dtype=np.float64)
+            for i in range(3):
+                S[3 + i, 3 + i] = sv * sv
+                S[6 + i, 6 + i] = sa * sa
+            S.setflags(write=False)
+            self._s_new = S
 
     # ----------------------------------------------------------------- public API
     def update(self, t_ns: int, detections: list[Detection], R_wg: np.ndarray) -> list[Track]:
@@ -365,7 +379,7 @@ class CartesianClayTracker(ClayTracker):
         e_az = (-sa, ca, 0.0)
         e_el = (u[1] * e_az[2] - u[2] * e_az[1], u[2] * e_az[0] - u[0] * e_az[2], u[0] * e_az[1] - u[1] * e_az[0])
         a, b, c = sig_r ** 2, (r0 * sig_az * ce) ** 2, (r0 * sig_el) ** 2
-        S = _S_NEW.copy()
+        S = self._s_new.copy()
         S[0:3, 0:3] = [[a * u[i] * u[k] + b * e_az[i] * e_az[k] + c * e_el[i] * e_el[k] for k in range(3)]
                        for i in range(3)]
         s = np.zeros(9, dtype=np.float64)

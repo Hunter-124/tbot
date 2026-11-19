@@ -203,9 +203,19 @@ class FireSolver:
         work = 1.0  # firing solutions worked out on this frame (an aim-only one counts 0.6): see WORST_CASE_WORK
         future: list[float] = []
         speed = _norm3(track.s[3:6]) if track.s is not None else float("inf")
+        # Only a track that is SURELY slow is not a clay. A young track's speed is mostly its prior (zero mean),
+        # so its estimate starts near nothing and climbs as the motion is seen: on the range day a clay was held
+        # "too slow" for 20 frames at P(hit) up to 0.51. Its own 1-sigma along the velocity says how far to trust it.
+        speed_hi = speed
+        k_sig = float(getattr(fc, "min_clay_speed_sigmas", 0.0) or 0.0)
+        if k_sig > 0.0 and track.s is not None and getattr(track, "S", None) is not None and speed < float("inf"):
+            v = track.s[3:6]
+            u = v / speed if speed > 1e-6 else np.array([1.0, 0.0, 0.0])
+            Svv = np.asarray(track.S, dtype=np.float64)[3:6, 3:6]
+            speed_hi = speed + k_sig * math.sqrt(max(float(u @ Svv @ u), 0.0))
         if track.hits < fc.min_track_hits:
             reason = "track young"
-        elif speed < float(fc.min_clay_speed_mps):
+        elif speed_hi < float(fc.min_clay_speed_mps):
             reason = f"too slow for a clay ({speed:.1f} m/s)"
         elif not (fc.min_range_m <= g["range_m"] <= fc.max_range_m):
             reason = "range out of window"

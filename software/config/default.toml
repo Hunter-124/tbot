@@ -130,6 +130,10 @@ max_tracks = 4
 model = "cartesian"           # cartesian: 3-D CA EKF in metres (tracker3d.py) | angular: CA Kalman in (az, el).
                               # Sim 50 fps / 80 ms, 6 seeds x 4 scenarios: angular 0/4 hits, cartesian 10/15 (14/15 on the clay)
 jerk_psd_mps3 = 50.0          # cartesian: white-jerk PSD, m^2/s^5 (drag/lift change slowly) [INFERENCE]
+new_speed_sigma_mps = 13.0    # cartesian: a new track's velocity, 1 sigma per axis (a clay at 18-30 m/s in any direction is
+                              # ~13 per axis; 25 overstated a young track's uncertainty about 2x: real range-day frames, error /
+                              # sigma of the target p50 0.59 under 0.25 s against 1.18 for a true sigma)
+new_acc_sigma_mps2 = 6.0      # cartesian: its acceleration, 1 sigma per axis (gravity + drag + lift: 3-9 m/s^2 in all)
 
 [imu]
 enabled = true
@@ -203,6 +207,8 @@ horizon_frames = 3
 max_shots_per_arm = 1         # one shot per press (raise for doubles; each needs its own target, see engagement.py)
 min_shot_interval_ms = 250.0  # no fire command within this long of the previous one (debris, recoil, trigger reset)
 min_clay_speed_mps = 6.0      # cartesian tracker: never fire at something slower (clays fly 15-30 m/s) [INFERENCE]
+min_clay_speed_sigmas = 2.0   # ... and only when it is SURELY that slow: speed + this many of its own sigma (0 = the
+                              # estimate alone, which starts near 0 on a young track: tbot sim 6 seeds 27 -> 30/54 clays)
 duplicate_deg = 1.0           # a track this close to the target at the shot is the same clay: engaged with it
 debris_cone_deg = 2.0         # debris lockout: tracks born after a shot inside this cone around the broken clay's
 debris_spread_deg_s = 15.0    # predicted path, widening at this rate (fragments ~5 m/s at ~20 m) [INFERENCE],

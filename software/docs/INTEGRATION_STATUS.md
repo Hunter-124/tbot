@@ -727,3 +727,39 @@ planned hit on `104603` became a 0.78 deg miss against a 0.75 deg pattern - seve
 **Open:** the drift estimate is the gyro bias seen from the camera; feeding it back into the attitude (bias
 correction while the gun is held) would straighten the speed gate and every replay too. Not done: it changes
 the attitude every other stage uses, a day-of-range change too far.
+
+## 2026-11-18 (evening): shooting sooner - young tracks were called far less certain than they are
+
+The gun followed its target 0.3-0.5 s before it fired, where a shooter is on the clay sooner. Where the time
+went: once a real chance existed the bar took it within ~50 ms (`tbot vclay`), so the wait was not the bar. It
+was what fed it. **P(hit) was underconfident on young tracks**: the target's own 1-sigma was about twice the
+real error under 0.25 s of track age (error / sigma p50: real presses 0.59, virtual clays 0.61, against 1.18 for
+a true sigma), and right by ~0.5 s. Frames of tracks 0.15-0.25 s old given P 0.15 hit 54-62 %.
+
+- **New-track prior** (`tracker.new_speed_sigma_mps` 25 -> **13**, `tracker.new_acc_sigma_mps2` 12 -> **6**, 1
+  sigma per axis): a clay at 18-30 m/s in any direction is ~13 m/s per axis, and gravity + drag + lift add up to
+  3-9 m/s^2. The old values were a ~2x looser guess, and the acceleration term dominated the extrapolation over
+  delay + flight (~0.27 s) until enough frames had pinned it. Target prediction error is the same or lower at
+  every track age (virtual clays, frames near a chance: p50 0.53 -> 0.46 deg under 0.2 s).
+- **Speed gate on what is known** (`fire.min_clay_speed_sigmas` = 2): "too slow for a clay" now means speed +
+  2 sigma < 6 m/s. The velocity prior is zero-mean, so a young track's speed starts near 0 and climbs: on the
+  range day a clay sat "too slow" for 20 frames at P up to 0.51, and a tighter prior made that worse.
+- `tbot vclay --quick` (the crossing 0.35-0.7 s after the clay appears) and the track age at the shot in every
+  result; telemetry `decision.track_sigma_deg` / `gun_sigma_deg`.
+
+**Measured:**
+
+| | `tbot sim --seeds 6` | vclay (0.7-1.6 s in view) | vclay `--quick` | `tbot rescore` |
+|---|---|---|---|---|
+| before | 19/54 broken, 68 % per shot | 66.7 %, track age at shot 296 ms | 64.3 %, 231 ms | 3 of 7 scored hit |
+| priors only | 27/54, 75 % | | | |
+| **priors + gate** | **30/54, 79 %**, break p50 0.96 -> 0.85 s | **68.6 %, 282 ms** | **68.3 %, 209 ms** | 3 of 7; `105523` 168 ms sooner, still a hit |
+
+Tried and not taken: `fire.aim_prior_evidence` 0.2 -> 0.1 (virtual clays 70 %, but `tbot sim` crossing and
+outgoing 0/6: young tracks fired on the prior, as noted when it was set); `fire.min_track_hits` 5 -> 4 / 3
+(sim 27/54, vclay within noise); faster bar relax / lower bar (within noise).
+
+**Open:** most real-press frames before a shot are still `no confirmed track` (detection) and `track young`.
+P(hit) on old tracks reads well on virtual clays, but the real presses suggest it is still low (P 0.32 -> 62 %
+hit over 8 frames): too few to act on. On `104751`, today's detector sees 1 detection in the armed frames where
+the day's saw 31 (the press the gun fired and broke): worth a look from the detector side.
