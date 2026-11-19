@@ -149,7 +149,7 @@ on the 40-pin connector.
 | Servo PWM (MG996R) | **18** | 12 | hardware PWM0 | `dtoverlay=pwm,pin=18,func=2`; sysfs `/sys/class/pwm/pwmchip0/pwm0`; 50 Hz frame, `rest_us = 1670`, `fire_us = 1330`. Signal only — **not** servo power. |
 | PQ12 extend | **23** | 16 | output | To an H-bridge input (§4). |
 | PQ12 retract | **24** | 18 | output | To the other H-bridge input. |
-| Ready light (status LED) | **27** | 13 | output | `hw/status_led.py`: LED + **220–330 Ω** to GND (pin 14), see the wiring below. Same pin as the latency LED (that tool runs with the pipeline stopped). |
+| Ready light (status LED) | **26** | 37 | output | `hw/status_led.py`: LED + **220–330 Ω** to GND (pin 39), see the wiring below. |
 | Latency LED | **27** | 13 | output | `tbot latency-camera`: LED + **330 Ω** to GND, in the camera's view. |
 | Break sense | **22** | 15 | input, pull-up | `tbot latency-actuator`: microswitch to **GND**, closes at trigger break (falling edge = break, rising = sear reset). |
 | IMU SDA | **2** | 3 | I2C1 | GY-521 (MPU-6050), address **0x68**, `dtparam=i2c_arm=on`, 400 kHz. |
@@ -180,8 +180,8 @@ soldered joints the BOM describes, so verify against the board.
             USB / Ethernet end (top)
    board edge          board side
      (even)              (odd)
-  GPIO21    (40)  (39)   GND
-  GPIO20    (38)  (37)   GPIO26
+  GPIO21    (40)  (39)   GND       <-- READY LED -
+  GPIO20    (38)  (37)   GPIO26    <-- READY LED +, through 220-330 ohm
   GPIO16    (36)  (35)   GPIO19
   GND       (34)  (33)   GPIO13
   GPIO12    (32)  (31)   GPIO6
@@ -193,7 +193,7 @@ soldered joints the BOM describes, so verify against the board.
   GND       (20)  (19)   GPIO10
   GPIO24    (18)  (17)   3V3
   GPIO23    (16)  (15)   GPIO22
-  GND       (14)  (13)   GPIO27    <-- READY LED: 13 = LED+ (via resistor), 14 = LED-  (arming/servo GND also 14)
+  GND       (14)  (13)   GPIO27    <-- 14 = arming/servo GND
   GPIO18    (12)  (11)   GPIO17    <-- 12 = servo signal, 11 = arming switch
   GPIO15    (10)  (9)    GND       <-- 9 = IMU GND
   GPIO14    (8)   (7)    GPIO4
@@ -203,9 +203,8 @@ soldered joints the BOM describes, so verify against the board.
             DISPLAY-connector end (bottom)
 ```
 
-Ready light: **pins 13/14 are the 7th row up from the bottom (DISPLAY) end**; 13 is on the board side, 14 on the
-edge side. If that row is buried in the existing housings, the free top row works just as well: **pin 40 (GPIO21) =
-LED+, pin 39 (GND) = LED-**, with `gpio.status_led_pin = 21`.
+Ready light: **pins 37 and 39, the two top pins of the board-side column** (USB/Ethernet end). Pin 39 (GND) is
+the very top pin on the board side, pin 37 (GPIO26) is the one just below it.
 
 | Pin | Name | Wired to | Wire |
 |---|---|---|---|
@@ -218,32 +217,33 @@ LED+, pin 39 (GND) = LED-**, with `gpio.status_led_pin = 21`.
 | 11 | GPIO17 | Arming switch (other side to GND) | Arming + PWM, 3 x 26 AWG |
 | 12 | GPIO18 / PWM0 | MG996R signal | Arming + PWM |
 | 14 | GND | Arming switch return **and** servo-signal ground | Arming + PWM |
-| 13 | GPIO27 | Ready LED anode through 220-330 ohm | new |
-| 14 | GND | Ready LED cathode, same pin as above | new |
+| 37 | GPIO26 | Ready LED anode through 220-330 ohm | new |
+| 39 | GND | Ready LED cathode | new |
 
 Not wired on this build: break sense (GPIO22, pin 15, only for the `latency-actuator` bench fixture), PQ12
 extend/retract (GPIO23/24, pins 16/18, fallback actuator only), the serial-console pins (GPIO14/15, pins 8/10, only
 when a USB-TTL cable is attached for bring-up) and the SPI / ID pins.
 
 Pin 5 V and GND are the only power pins used. GPIO pins are **3.3 V logic, not 5 V tolerant**, and each should source
-only a few mA (keep an LED to ~5 mA). Pins 13 and 14 sit side by side, and pin 14 already carries the arming/servo
-ground, so the ready light adds one wire at pin 13 and a second wire onto pin 14 (the BOM notes GPIO connections are
-soldered, with no room for DuPont housings: header pin tips are 8 mm from cover_L).
+only a few mA (keep an LED to ~5 mA). The ready light uses its own pins, 37 and 39, at the
+free top end of the header, away from the existing harness (the BOM notes GPIO connections are soldered, with no room
+for DuPont housings: header pin tips are 8 mm from cover_L).
 
 ### 3.2 Ready light wiring
 
-Defaults: `gpio.status_led_pin = 27`, `gpio.status_led_active_high = true`.
+Defaults: `gpio.status_led_pin = 26`, `gpio.status_led_active_high = true`.
 
 ```
- Pi pin 13 (GPIO27) ---[ 220-330 ohm ]---->|--- Pi pin 14 (GND)
+ Pi pin 37 (GPIO26) ---[ 220-330 ohm ]---->|--- Pi pin 39 (GND)
                                         LED  (long leg / anode toward the resistor,
                                               short leg / flat side / cathode to GND)
 ```
 
-- Pins 13 and 14 are adjacent, so the whole light is one LED and one resistor across two neighbouring pins.
+- Pins 37 and 39 are next to each other in the same (board-side) column, so the whole light is one LED and one
+  resistor across them.
 - The resistor can be on either side of the LED; it must be in series. With 330 ohm a red/green LED draws about
   (3.3 V - ~2 V) / 330 = ~4 mA, plenty bright, well inside the pin's limit.
-- Wired the other way (LED between 3.3 V on pin 1 or 17 and GPIO27) set `status_led_active_high = false`.
+- Wired the other way (LED between 3.3 V on pin 1 or 17 and GPIO26) set `status_led_active_high = false`.
 - Behaviour: solid = ready and live; slow blink = ready but dry run; fast blink = running but not ready;
   off = pipeline not running.
 

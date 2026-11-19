@@ -282,7 +282,7 @@ class GpioConfig:
     chip: int
     latency_led_pin: int
     break_sense_pin: int
-    status_led_pin: int = 27
+    status_led_pin: int = 26
     status_led_active_high: bool = True
 
 

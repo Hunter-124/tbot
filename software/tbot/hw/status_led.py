@@ -7,7 +7,7 @@
 
 The pipeline reports its state once a frame (`set`); a thread of its own draws the pattern, and calls the state
 "not ready" by itself when the reports stop (a frame loop that hangs must not leave the light on). The LED hangs
-on a GPIO through a resistor (gpio.status_led_pin, default GPIO27 = header pin 13, ground on pin 14 beside it).
+on a GPIO through a resistor (gpio.status_led_pin, default GPIO26 = header pin 37, ground on pin 39 beside it).
 Nothing here can stop the gun: every GPIO error is swallowed after one log line.
 """
 

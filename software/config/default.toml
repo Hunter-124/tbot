@@ -304,10 +304,10 @@ backend = "auto"              # auto (lgpio on a Pi, else sim) | lgpio | sim
 chip = 0
 latency_led_pin = 27
 break_sense_pin = 22
-status_led_pin = 27           # the ready light (hw/status_led.py): LED + 220-330 ohm from this GPIO (header pin 13) to
-                              # ground (pin 14). Solid = ready and LIVE, press and go; slow blink = ready but a dry
+status_led_pin = 26           # the ready light (hw/status_led.py): LED + 220-330 ohm from this GPIO (header pin 37) to
+                              # ground (pin 39, two pins along the same row). Solid = ready and LIVE, press and go; slow blink = ready but a dry
                               # run; fast blink = running, not ready (camera / IMU); off = booting or stopped.
-                              # Shares the pin of the latency LED (only used with the pipeline stopped). -1 = none
+                              # -1 = none
 status_led_active_high = true # false = the LED hangs between 3.3 V and the pin
 
 [latency]                     # defaults until calib/latency.json has measurements
