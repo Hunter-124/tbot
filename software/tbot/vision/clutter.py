@@ -321,10 +321,10 @@ class StaticFilter:
         p.uv = uv.ctypes.data
         p.R_now = R_now.ctypes.data
         p.n_old = len(old)
-        for i, (_t, R_f, d_f) in enumerate(old):
-            p.old_m[i] = len(d_f)
-            p.old_R[i] = R_f.ctypes.data
-            p.old_dirs[i] = d_f.ctypes.data
+        for i, h in enumerate(old):
+            # entries the native path made carry their arrays' addresses (each .ctypes costs a few us)
+            p.old_m[i] = len(h[2])
+            p.old_R[i], p.old_dirs[i] = (h[3], h[4]) if len(h) > 4 else (h[1].ctypes.data, h[2].ctypes.data)
         p.tol0 = float(det.static_tol_px) * self.ifov
         p.lever = float(det.static_lever_m)
         p.lam_max = 1.0 / max(float(det.static_min_range_m), 0.5)
@@ -340,8 +340,9 @@ class StaticFilter:
         if self._focus is not None:
             fc = self._focus_cos_arr
             if fc is None:
-                fc = self._focus_cos_arr = np.ascontiguousarray(
-                    np.broadcast_to(np.asarray(self._focus_cos, dtype=np.float64), (len(self._focus),)))
+                c = self._focus_cos
+                fc = self._focus_cos_arr = (np.ascontiguousarray(c, dtype=np.float64) if isinstance(c, np.ndarray)
+                                            else np.full(len(self._focus), float(c)))
             p.focus, p.focus_cos, p.n_focus, p.others_max = (self._focus.ctypes.data, fc.ctypes.data,
                                                              len(self._focus), self._others_max)
         else:
@@ -350,12 +351,13 @@ class StaticFilter:
         keep = np.empty(n, np.intp)
         if self._flags.size < n:
             self._flags = np.zeros(max(n, 2 * self._flags.size, 64), np.uint8)
-        p.dirs, p.keep, p.flags = dirs.ctypes.data, keep.ctypes.data, self._flags.ctypes.data
+        d_addr = dirs.ctypes.data
+        p.dirs, p.keep, p.flags = d_addr, keep.ctypes.data, self._flags.ctypes.data
         rc = fn(ctypes.addressof(p))
         del a_keep, w_keep, h_keep, rays
         if rc != 0:
             return None
-        self._hist.append((self._t_ns, R_now, dirs))
+        self._hist.append((self._t_ns, R_now, dirs, p.R_now, d_addr))
         self.n_static = int(p.n_static)
         self.n_new = int(p.n_new)
         self.n_focus = int(p.n_focus_kept)
