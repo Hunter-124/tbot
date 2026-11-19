@@ -165,21 +165,43 @@ the board — fine for I2C, unusable as general inputs.
 ### 3.1 Pi 3 B header pinout (from the design docs and config; not checked against the physical board)
 
 What is **planned/wired** on the gun, from `design/BOM.md` / `design/layout.md` (wire table) plus the ready light.
-Held with the header at the top and the USB/Ethernet ports at the bottom: pin 1 is the top-left pin (SD-card end,
-square pad); odd pins down the inner column, even pins down the outer column. The harness photo shows DuPont housings, not the soldered joints the BOM describes, so verify against the board.
+**Finding pin 1.** The header runs along one long edge of the board; the USB/Ethernet ports are on a short edge.
+Pin 1 is at the end of the header **farthest from the USB/Ethernet ports** (the SD-card end), on the row **toward
+the middle of the board**, and its solder pad on the underside is the only **square** one. Odd pins (1, 3, 5 ...)
+are that inner row; even pins (2, 4, 6 ...) are the row along the board edge. Pin 2 (5 V) is the corner pin.
+
+The diagram below is the board held **component side up, USB/Ethernet ports pointing down at you**: the header is
+then a vertical strip along the **right-hand edge**, pin 1 at the top of the left (inner) column, pin 2 at the top
+of the right (edge) column. The harness photo shows DuPont housings, not the soldered joints the BOM describes, so
+verify against the board.
 
 ```
-   IMU VCC (3V3)  <-- 3V3    (1) (2)  5V     --> Pi power + (buck #1, 5.1 V)
-   IMU SDA        <-- GPIO2  (3) (4)  5V
-   IMU SCL        <-- GPIO3  (5) (6)  GND    --> Pi power - (buck #1)
-                      GPIO4  (7) (8)  GPIO14        (unused)
-   IMU GND        <-- GND    (9) (10) GPIO15        (unused)
-   arming switch  <-- GPIO17 (11) (12) GPIO18 --> servo signal
-   ready LED +    <-- GPIO27 (13) (14) GND    --> arming GND, servo-signal GND, ready LED -
-                      GPIO22 (15) (16) GPIO23       (unused)
-                      3V3    (17) (18) GPIO24       (unused)
-                      pins 19-40: unconnected
+                                 inner  edge
+   IMU VCC (3V3)  <-- 3V3         (1)   (2)  5V          --> Pi power + (buck #1, 5.1 V)
+   IMU SDA        <-- GPIO2 SDA   (3)   (4)  5V
+   IMU SCL        <-- GPIO3 SCL   (5)   (6)  GND         --> Pi power - (buck #1)
+                      GPIO4       (7)   (8)  GPIO14 TXD
+   IMU GND        <-- GND         (9)  (10)  GPIO15 RXD
+   arming switch  <-- GPIO17     (11)  (12)  GPIO18 PWM0 --> servo signal
+   READY LED +    <-- GPIO27     (13)  (14)  GND         --> arming GND, servo-signal GND, READY LED -
+                      GPIO22     (15)  (16)  GPIO23
+                      3V3        (17)  (18)  GPIO24
+                      GPIO10     (19)  (20)  GND
+                      GPIO9      (21)  (22)  GPIO25
+                      GPIO11     (23)  (24)  GPIO8
+                      GND        (25)  (26)  GPIO7
+                      ID_SD      (27)  (28)  ID_SC
+                      GPIO5      (29)  (30)  GND
+                      GPIO6      (31)  (32)  GPIO12
+                      GPIO13     (33)  (34)  GND
+                      GPIO19     (35)  (36)  GPIO16
+                      GPIO26     (37)  (38)  GPIO20
+                      GND        (39)  (40)  GPIO21
+                                  ^ USB/Ethernet end
 ```
+
+Ready light: **pin 13 is the 7th pin down the inner row, pin 14 is right beside it on the edge row** (the pin
+across from it). Count from the pin-1 end, not the USB end.
 
 | Pin | Name | Wired to | Wire |
 |---|---|---|---|
