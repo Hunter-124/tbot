@@ -162,12 +162,11 @@ Conflicts to know about: **PWM0 on GPIO18 is shared with the analogue audio outp
 required for a stable servo pulse (`scripts/pi_setup.sh` sets it). GPIO 2/3 have fixed 1.8 kΩ pull-ups to 3.3 V on
 the board — fine for I2C, unusable as general inputs.
 
-### 3.1 Pi 3 B header pinout, as built (reference)
+### 3.1 Pi 3 B header pinout (from the design docs and config; not checked against the physical board)
 
-What is **actually wired** on the gun, from `design/BOM.md` / `design/layout.md` (wire table) plus the ready light.
+What is **planned/wired** on the gun, from `design/BOM.md` / `design/layout.md` (wire table) plus the ready light.
 Held with the header at the top and the USB/Ethernet ports at the bottom: pin 1 is the top-left pin (SD-card end,
-square pad); odd pins down the inner column, even pins down the outer column. `[wired]` = connected on the
-built harness, `[to add]` = the ready light, not yet soldered. Everything not listed is unconnected.
+square pad); odd pins down the inner column, even pins down the outer column. The harness photo shows DuPont housings, not the soldered joints the BOM describes, so verify against the board.
 
 ```
    IMU VCC (3V3)  <-- 3V3    (1) (2)  5V     --> Pi power + (buck #1, 5.1 V)
@@ -193,8 +192,8 @@ built harness, `[to add]` = the ready light, not yet soldered. Everything not li
 | 11 | GPIO17 | Arming switch (other side to GND) | Arming + PWM, 3 x 26 AWG |
 | 12 | GPIO18 / PWM0 | MG996R signal | Arming + PWM |
 | 14 | GND | Arming switch return **and** servo-signal ground | Arming + PWM |
-| 13 | GPIO27 | Ready LED anode through 220-330 ohm **[to add]** | new |
-| 14 | GND | Ready LED cathode **[to add]**, same pin as above | new |
+| 13 | GPIO27 | Ready LED anode through 220-330 ohm | new |
+| 14 | GND | Ready LED cathode, same pin as above | new |
 
 Not wired on this build: break sense (GPIO22, pin 15, only for the `latency-actuator` bench fixture), PQ12
 extend/retract (GPIO23/24, pins 16/18, fallback actuator only), the serial-console pins (GPIO14/15, pins 8/10, only
