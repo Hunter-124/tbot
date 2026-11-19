@@ -253,9 +253,16 @@ class ServoActuator(_BaseActuator):
             self.last_fire_ns = int(t_ns)
             self.last_rest_ns = None
             self._busy = True
+            was_driving = self._driving
             self._driving = True
             self._preloaded = False
-            self.pwm.set_pulse_us(self.fire_us)
+            restart = getattr(self.pwm, "restart_pulse_us", None)
+            if was_driving and restart is not None:
+                # Parked at the pre-travel the PWM is running: a plain duty change waits for the next 20 ms frame
+                # (measured 2026-11-19: 38-57 ms spread). Restart the frame so the fire pulse goes out now.
+                restart(self.fire_us)
+            else:
+                self.pwm.set_pulse_us(self.fire_us)
         self._forget_finished()
         self._schedule(self.hold_s, self._return_to_rest)
         return True

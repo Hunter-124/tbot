@@ -268,6 +268,71 @@ def test_servo_fires_from_the_pre_travel_and_does_not_re_preload_after_the_shot(
     assert [round(us) for us in _driven(pwm)] == [1465, 1530, 1420]
 
 
+def test_servo_fire_from_pre_travel_restarts_the_pwm_frame_but_not_from_limp():
+    cfg = _preload_cfg()
+    gpio, arming = build(cfg)
+    pwm = SimPwm(0, 0, cfg.actuator.servo.frame_hz)
+    act = ServoActuator(cfg, pwm, arming)
+    arm(gpio, cfg, arming)
+    assert wait_for(lambda: act.preloaded, 0.5)
+    assert act.fire(time.monotonic_ns()) is True
+    assert pwm.restarts == 1 and pwm.pulse_us == pytest.approx(1530.0)
+
+    cfg2 = make_cfg()  # no pre-travel: the fire starts from limp, which already starts a fresh frame
+    gpio2, arming2 = build(cfg2)
+    pwm2 = SimPwm(0, 0, cfg2.actuator.servo.frame_hz)
+    act2 = ServoActuator(cfg2, pwm2, arming2)
+    arm(gpio2, cfg2, arming2)
+    assert act2.fire(time.monotonic_ns()) is True
+    assert pwm2.restarts == 0
+
+
+def test_restart_wait_never_cuts_a_pulse():
+    from tbot.hw.gpio import restart_wait_ns
+
+    period, pulse, guard = 20_000_000, 1_200_000, 300_000
+    assert restart_wait_ns(5_000_000, pulse, period, guard) == 0  # line low, far from the next pulse
+    assert restart_wait_ns(500_000, pulse, period, guard) == 1_000_000  # inside the pulse: wait it out + guard
+    assert restart_wait_ns(19_900_000, pulse, period, guard) == 100_000 + 1_500_000  # next pulse imminent
+    assert restart_wait_ns(45_000_000, pulse, period, guard) == 0  # phase wraps by the period
+    for ph in range(0, period, 50_000):
+        w = restart_wait_ns(ph, pulse, period, guard)
+        assert 0 <= w <= pulse + 2 * guard
+        end = (ph + w) % period
+        assert pulse + guard <= end <= period - guard
+
+
+def test_hardware_pwm_restart_toggles_enable_around_the_new_duty(tmp_path, monkeypatch):
+    from tbot.hw import gpio as gpio_mod
+
+    ch = tmp_path / "pwmchip0" / "pwm0"
+    ch.mkdir(parents=True)
+    for name in ("period", "duty_cycle", "enable"):
+        (ch / name).write_text("0")
+    monkeypatch.setattr(gpio_mod, "PWM_SYSFS_ROOT", str(tmp_path))
+    writes: list[tuple[str, str]] = []
+    orig = gpio_mod.HardwarePwm._write_attr
+
+    def spy(self, name, value, where=None):
+        writes.append((name, str(value)))
+        return orig(self, name, value, where)
+
+    monkeypatch.setattr(gpio_mod.HardwarePwm, "_write_attr", spy)
+    monkeypatch.setattr(gpio_mod.time, "sleep", lambda s: writes.append(("sleep", f"{s:.6f}")))
+    pwm = HardwarePwm(0, 0, 50.0)
+    pwm.set_pulse_us(1193.0)
+    writes.clear()
+    pwm._t_on_ns = time.monotonic_ns() - 5_000_000  # 5 ms into the frame: line low, no wait
+    pwm.restart_pulse_us(1075.0)
+    assert writes == [("enable", "0"), ("duty_cycle", "1075000"), ("enable", "1")]
+    assert pwm.pulse_us == pytest.approx(1075.0)
+    writes.clear()
+    pwm._t_on_ns = time.monotonic_ns()  # frame just began: the 1075 us pulse is out, wait it out first
+    pwm.restart_pulse_us(1100.0)
+    assert writes[0][0] == "sleep" and 0.001 < float(writes[0][1]) <= 0.0014
+    assert writes[1:] == [("enable", "0"), ("duty_cycle", "1100000"), ("enable", "1")]
+
+
 def test_servo_pre_travel_times_out_to_limp():
     cfg = _preload_cfg(max_s=0.05)
     gpio, arming = build(cfg)

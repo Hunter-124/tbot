@@ -20,6 +20,27 @@ EDGES = ("rising", "falling", "both")
 PWM_SYSFS_ROOT = "/sys/class/pwm"
 #: How long to wait for udev to create/chown an exported PWM channel.
 PWM_EXPORT_TIMEOUT_S = 1.5
+
+#: Margin kept around each servo pulse when the frame is restarted (restart_pulse_us): the frame phase is inferred
+#: from the time `enable` was written, which is good to tens of us.
+PWM_RESTART_GUARD_NS = 300_000
+
+
+def restart_wait_ns(phase_ns: int, pulse_ns: int, period_ns: int, guard_ns: int = PWM_RESTART_GUARD_NS) -> int:
+    """How long to wait before restarting a running PWM frame so no pulse is cut short.
+
+    phase_ns: time since the current frame began (the line is high for the first pulse_ns of it). Restarting is
+    safe once the pulse plus guard is over and while the next pulse is more than guard away; otherwise wait until
+    the next pulse plus guard has passed (at most one pulse plus two guards).
+    """
+    phase = int(phase_ns) % int(period_ns)
+    safe_from = int(pulse_ns) + int(guard_ns)
+    safe_to = int(period_ns) - int(guard_ns)
+    if safe_from <= phase <= safe_to:
+        return 0
+    if phase < safe_from:
+        return safe_from - phase
+    return int(period_ns) - phase + safe_from
 #: Path the auto backend reads to recognise a Raspberry Pi.
 DEVICE_TREE_MODEL = "/proc/device-tree/model"
 
@@ -331,16 +352,40 @@ class HardwarePwm:
         self._write_attr("period", self.period_ns)
         self._write_attr("enable", 1)
         self._enabled = True
+        self._t_on_ns = time.monotonic_ns()
 
     # -- API ----------------------------------------------------------------------------------
     def set_pulse_us(self, us: float) -> None:
-        """Set the pulse width in microseconds (clamped to one frame)."""
+        """Set the pulse width in microseconds (clamped to one frame).
+
+        On a running channel the new width starts with the NEXT frame (0 - 1/frame_hz later); from limp the frame
+        starts at once. restart_pulse_us() starts a fresh frame now instead.
+        """
         duty_ns = int(round(max(0.0, min(float(us) * 1000.0, float(self.period_ns)))))
         with self._lock:
             if not self._enabled:
                 self._write_attr("enable", 1)
                 self._enabled = True
+                self._t_on_ns = time.monotonic_ns()
             self._write_attr("duty_cycle", duty_ns)
+            self.pulse_us = duty_ns / 1000.0
+
+    def restart_pulse_us(self, us: float) -> None:
+        """Set the pulse width AND start a new frame now, so the new pulse goes out at once rather than up to one
+        frame (20 ms at 50 Hz) later. Waits out the current pulse first (<= ~2 ms) so none is ever cut short."""
+        duty_ns = int(round(max(0.0, min(float(us) * 1000.0, float(self.period_ns)))))
+        with self._lock:
+            if not self._enabled or self.pulse_us is None:
+                self.set_pulse_us(us)
+                return
+            wait = restart_wait_ns(time.monotonic_ns() - self._t_on_ns, int(round(self.pulse_us * 1000.0)),
+                                   self.period_ns)
+            if wait:
+                time.sleep(wait / 1e9)
+            self._write_attr("enable", 0)  # PWEN off/on restarts the frame counter
+            self._write_attr("duty_cycle", duty_ns)
+            self._write_attr("enable", 1)
+            self._t_on_ns = time.monotonic_ns()
             self.pulse_us = duty_ns / 1000.0
 
     def disable(self) -> None:
@@ -379,6 +424,7 @@ class SimPwm:
         self.pulses: list[tuple[int, float]] = []
         self.pulse_us: float | None = None
         self.enabled = True
+        self.restarts = 0
         self._lock = threading.RLock()
 
     def set_pulse_us(self, us: float) -> None:
@@ -387,6 +433,12 @@ class SimPwm:
             self.enabled = True
             self.pulse_us = duty_ns / 1000.0
             self.pulses.append((time.monotonic_ns(), self.pulse_us))
+
+    def restart_pulse_us(self, us: float) -> None:
+        with self._lock:
+            if self.enabled and self.pulse_us is not None:
+                self.restarts += 1
+            self.set_pulse_us(us)
 
     def disable(self) -> None:
         with self._lock:
