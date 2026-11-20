@@ -403,16 +403,16 @@ text(s, L, y + 128, 1100, 70, "Phone video, real time then 4× slow with a zoom 
 movie(s, HERE / "hit_IMG_0585.mp4", HERE / "hit_IMG_0585_poster.jpg", 1329, 128, 463, 824)
 
 # 13 gun view
-s = new_slide(ALT, notes="Here the gun’s recording did survive. Phone on the left, the gun’s own view on the right with what it was tracking drawn on top. When the frame turns red, that is the command to the servo; the gun actually goes off 66 ms later, which is the delay from the timing slide showing up in real data. The two videos are synchronised by the sound of the shot and the recoil spike, and the pairing is confirmed by the spacing between two consecutive shots matching to 5 ms.")
+s = new_slide(ALT, notes="Here the gun’s recording did survive, and this one is a hit. Phone on the left, the gun’s own view on the right with what it was tracking drawn on top. Real time first, then four times slower. When the frame turns red, that is the command to the servo; the gun actually goes off 70 ms later, which is the delay from the timing slide showing up in real data. The two videos are synchronised by the sound of the shot and the recoil spike. The pairing was checked three ways: the gun is still until 0.6 s before the shot and then rises, in both the motion data and the phone video; the clay climbs at the same rate in both views; and the computer’s boot time puts the shot on this bang.")
 y = head(s, "Second range day · Nov 19", "What the gun sees when it fires")
-v = HERE / "synced_160357_IMG_0565.mp4"
-movie(s, v, frame_of(v, 0.33), L, y, 1300, 602)
+v = HERE / "synced_160243_IMG_0575.mp4"
+movie(s, v, frame_of(v, 72 / 230), L, y, 1300, 602)
 text(s, L + 1300 + 36, y, W - 1336, 330,
      [[("Left: ", {"bold": True, "color": FG}), ("phone video.", {})],
       [("Right: ", {"bold": True, "color": FG}), ("the gun’s own camera.", {})],
       [("Yellow rings: ", {"color": "F2D06B"}), ("objects it is tracking.", {})],
-      [("Red frame: ", {"color": ACCENT}), ("the fire command. Recoil follows 66 ms later.", {})]], 26, MUTED, spacing=1.6)
-text(s, L, 1080 - 64 - 66, W, 66, "Shot at 24 m. The two videos are lined up on the bang: this shot and the one before it are 24.17 s apart on the phone and 24.177 s apart in the gun’s data.", 24, DIM, spacing=1.2)
+      [("Red frame: ", {"color": ACCENT}), ("the fire command. Recoil follows 70 ms later.", {})]], 26, MUTED, spacing=1.6)
+text(s, L, 1080 - 64 - 66, W, 66, "A hit at 14 m. The two videos are lined up on the bang; the gun’s motion data, the clay’s climb rate and the computer’s boot time all agree on the pairing.", 24, DIM, spacing=1.2)
 
 # 14 lessons
 s = new_slide(notes="The honest slide. Printed PLA against 12-gauge recoil: the first mount lasted two shots. On day two the mechanism held, but the computer rebooted at almost every shot. Its supply flags were clean before each cut, so it is not a brown-out; it is a contact opening, and that is a bench job with the gun unloaded. The delay error is the lesson I would repeat to anyone: I had the right measurement and discounted it. And the double: the data shows no second command was sent, the servo had been told to return, and the cause is still open between the servo signal at shutdown, the supply bouncing, and my own finger.")
