@@ -12,7 +12,12 @@ StartLimitIntervalSec=0
 Type=simple
 User=pi
 WorkingDirectory=/home/pi/TBOT/software
+# All four cores at full clock while the pipeline runs (as root: the "+"; "-": a kernel without cpufreq is not
+# a failed start). With ondemand the clock drops between frames and the next one starts at 600 MHz.
+ExecStartPre=-+/bin/sh -c 'for g in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do echo performance > "$g"; done'
 ExecStart=/home/pi/TBOT/software/scripts/tbot-run.sh
+# Ahead of everything else on the Pi (the console, clip rendering, ssh): the frame loop and its sensor process.
+Nice=-10
 # Whatever ends it (a crash, the camera gone for good, a clean exit), it is started again; only
 # `tbotctl stop` (systemctl stop) keeps it stopped.
 Restart=always
