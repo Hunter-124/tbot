@@ -130,6 +130,7 @@ def _load() -> ctypes.CDLL | None:
     status = f"loaded ({path.name})"
     _load_scenery(lib)
     _load_track(lib)
+    _load_front(lib)
     return lib
 
 
@@ -186,6 +187,81 @@ def _load_track(lib: ctypes.CDLL) -> None:
     track_status = "loaded"
 
 
+FRONT_ABI = 1          # TBOT_FRONT_ABI in _measure.c
+FRONT_CAP_RUNS = 40000  # runs of set pixels a frame (a tree line: a few thousand); more -> OpenCV labels the frame
+FRONT_CAP_COMPS = 8192
+front_status = "not loaded"
+_front = None
+
+
+class FrontState(ctypes.Structure):
+    """tbot_front in _measure.c, field for field."""
+
+    _fields_ = [
+        ("h", ctypes.c_int32), ("w", ctypes.c_int32),
+        ("cap_runs", ctypes.c_int32), ("cap_comps", ctypes.c_int32),
+        ("runs", _ptr), ("row_start", _ptr), ("labels", _ptr), ("stats", _ptr), ("cents", _ptr),
+        ("n_runs", ctypes.c_int32), ("roi", ctypes.c_int32 * 4),
+    ]
+
+
+class Front:
+    """The buffers of tbot_front_label for one frame size: label image, component table, runs."""
+
+    def __init__(self, h: int, w: int) -> None:
+        self.shape = (int(h), int(w))
+        self.runs = np.zeros((FRONT_CAP_RUNS, 4), np.int32)
+        self.row_start = np.zeros(int(h) + 1, np.int32)
+        self.labels = np.zeros(self.shape, np.int32)
+        self.stats = np.zeros((FRONT_CAP_COMPS, 5), np.int32)
+        self.cents = np.zeros((FRONT_CAP_COMPS, 2), np.float64)
+        st = self.state = FrontState()
+        st.h, st.w = self.shape
+        st.cap_runs, st.cap_comps = FRONT_CAP_RUNS, FRONT_CAP_COMPS
+        st.runs, st.row_start = self.runs.ctypes.data, self.row_start.ctypes.data
+        st.labels, st.stats, st.cents = self.labels.ctypes.data, self.stats.ctypes.data, self.cents.ctypes.data
+        self.ref = ctypes.byref(st)
+
+
+def _load_front(lib: ctypes.CDLL) -> None:
+    """Labelling, the stands-alone test and the noise estimate; a library built before them has none."""
+    global _front, front_status
+    try:
+        lib.tbot_front_abi.restype = ctypes.c_int
+        lib.tbot_front_size.restype = ctypes.c_int
+        abi, size = int(lib.tbot_front_abi()), int(lib.tbot_front_size())
+        label, alone, noise = lib.tbot_front_label, lib.tbot_front_alone, lib.tbot_noise_sigma
+        box, cells = lib.tbot_front_box, lib.tbot_front_cells
+    except AttributeError:
+        front_status = "not in this build (rebuild with scripts/build_native.sh)"
+        return
+    if abi != FRONT_ABI or size != ctypes.sizeof(FrontState):
+        front_status = f"stale (ABI {abi}, struct {size} bytes): rebuild with scripts/build_native.sh"
+        log.warning("native detector front end: %s; using OpenCV", front_status)
+        return
+    i32, d = ctypes.c_int32, ctypes.c_double
+    label.restype = ctypes.c_int
+    label.argtypes = [ctypes.c_void_p, _ptr]
+    alone.restype = None
+    alone.argtypes = [ctypes.c_void_p, _ptr, i32, i32, i32, d, _ptr]
+    noise.restype = d
+    noise.argtypes = [_ptr, _ptr, _ptr, _ptr, i32, i32, i32, i32, i32, i32, i32, d, d, d]
+    box.restype = ctypes.c_int
+    box.argtypes = [_ptr, i32, i32, i32, i32, _ptr]
+    cells.restype = ctypes.c_int
+    cells.argtypes = [_ptr, i32, i32, i32, i32, i32, _ptr]
+    _front = (label, alone, noise, box, cells)
+    front_status = "loaded"
+
+
+def front_kernel():
+    """(tbot_front_label, tbot_front_alone, tbot_noise_sigma, tbot_front_box, tbot_front_cells) from the loaded
+    library, or None."""
+    if kernel() is None:
+        return None
+    return _front
+
+
 def track_kernel():
     """(tbot_track_predict, tbot_track_update) from the loaded library, or None."""
     if kernel() is None:
@@ -219,8 +295,10 @@ def describe(enabled: bool = True) -> str:
 
 def reload() -> ctypes.CDLL | None:
     """Forget the cached result and look again (tests; after a rebuild or an environment change)."""
-    global _tried, _scenery, scenery_status, _track, track_status
+    global _tried, _scenery, scenery_status, _track, track_status, _front, front_status
     _tried = False
+    _front = None
+    front_status = "not loaded"
     _scenery = None
     scenery_status = "not loaded"
     _track = None

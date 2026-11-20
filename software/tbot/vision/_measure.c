@@ -1086,3 +1086,367 @@ TBOT_API int tbot_track_update(const double *sp, const double *Sp, const double 
     }
     return 0;
 }
+
+/* ============================================================================================ front end
+ * Two pieces of ClayDetector that ran through OpenCV / NumPy on the whole frame (Pi 3B, range day 2026-11-19, a
+ * tree line: 22 ms a frame of which these were 4.2 ms and, every noise_every-th frame, another 10):
+ *
+ *   tbot_front_label   the thresholded image -> components (label image, bounding boxes, areas, centroids),
+ *                      as cv2.boundingRect + cv2.connectedComponentsWithStats(connectivity=8) on the bounding
+ *                      rectangle. The image is nearly all zeros, so it is read eight bytes at a time and only
+ *                      the runs of set pixels are worked on. Components are numbered the way OpenCV numbers
+ *                      them (in raster order of the first 2x2 block they touch, blocks counted from the
+ *                      labelled rectangle's corner), so every later choice by index is the same.
+ *   tbot_front_alone   the "stands alone" test of a cluttered frame (set pixels of other blobs in the ring
+ *                      around a candidate's box), from the runs instead of an integral image.
+ *   tbot_noise_sigma   detector._tiled_sigma on the subsampled residual (gray - bg, or an int16 contrast).
+ *
+ * The Python / OpenCV code remains the reference (tests compare the two) and runs when the library is not
+ * built or a capacity here is exceeded. */
+#define TBOT_FRONT_ABI 1
+
+typedef struct {
+    int32_t h, w;
+    int32_t cap_runs, cap_comps;
+    int32_t *runs;       /* cap_runs x 4: y, x0, x1 (exclusive), label; rows ascending, x ascending in a row */
+    int32_t *row_start;  /* h + 1: the first run of each row */
+    int32_t *labels;     /* h x w, zero outside the runs of the previous call (which are cleared here) */
+    int32_t *stats;      /* cap_comps x 5: left, top, width, height, area (row 0, the background, is zeros) */
+    double *cents;       /* cap_comps x 2 */
+    int32_t n_runs;      /* in/out: the runs now in `labels` */
+    int32_t roi[4];      /* out: x, y, w, h of the set pixels (cv2.boundingRect) */
+} tbot_front;
+
+TBOT_API int tbot_front_abi(void) { return TBOT_FRONT_ABI; }
+TBOT_API int tbot_front_size(void) { return (int)sizeof(tbot_front); }
+
+static inline int32_t front_find(int32_t *parent, int32_t i) {
+    while (parent[i] != i) {
+        parent[i] = parent[parent[i]];
+        i = parent[i];
+    }
+    return i;
+}
+
+typedef struct { int32_t key, root; } front_order;
+
+static int front_order_cmp(const void *a, const void *b) {
+    const int32_t ka = ((const front_order *)a)->key, kb = ((const front_order *)b)->key;
+    return (ka > kb) - (ka < kb);
+}
+
+/* Returns the number of labels including the background (cv2's n), or -1 when a capacity is exceeded or memory
+ * is short: `labels` is then all zeros, n_runs 0, and the caller labels with OpenCV. */
+TBOT_API int tbot_front_label(tbot_front *f, const uint8_t *b8) {
+    const int h = f->h, w = f->w;
+    int32_t *runs = f->runs, *labels = f->labels;
+    for (int32_t i = 0; i < f->n_runs; i++) {
+        const int32_t *r = runs + 4 * (size_t)i;
+        memset(labels + (size_t)r[0] * w + r[1], 0, (size_t)(r[2] - r[1]) * sizeof(int32_t));
+    }
+    f->n_runs = 0;
+    f->roi[0] = f->roi[1] = f->roi[2] = f->roi[3] = 0;
+
+    int32_t n = 0, over = 0;
+    int minx = w, maxx = -1, miny = h, maxy = -1;
+    for (int y = 0; y < h && !over; y++) {
+        const uint8_t *row = b8 + (size_t)y * w;
+        f->row_start[y] = n;
+        int x = 0;
+        while (x < w) {
+            while (x + 8 <= w) {            /* eight zero bytes at a time */
+                uint64_t v;
+                memcpy(&v, row + x, 8);
+                if (v) break;
+                x += 8;
+            }
+            while (x < w && !row[x]) x++;
+            if (x >= w) break;
+            const int x0 = x;
+            while (x < w && row[x]) x++;
+            if (n >= f->cap_runs) { over = 1; break; }
+            int32_t *r = runs + 4 * (size_t)n++;
+            r[0] = y; r[1] = x0; r[2] = x; r[3] = 0;
+            if (x0 < minx) minx = x0;
+            if (x - 1 > maxx) maxx = x - 1;
+            if (y < miny) miny = y;
+            maxy = y;
+        }
+    }
+    if (over) return -1;
+    for (int y = (maxy < 0 ? 0 : maxy + 1); y <= h; y++) f->row_start[y] = n;
+    if (n == 0) return 1;
+
+    int32_t *parent = (int32_t *)malloc((size_t)n * sizeof(int32_t));
+    if (!parent) return -1;
+    for (int32_t i = 0; i < n; i++) parent[i] = i;
+    for (int y = miny + 1; y <= maxy; y++) {            /* 8-connectivity: runs of the row above within 1 px */
+        const int32_t p1 = f->row_start[y], c1 = f->row_start[y + 1];
+        int32_t j = f->row_start[y - 1];
+        for (int32_t i = p1; i < c1; i++) {
+            const int32_t x0 = runs[4 * (size_t)i + 1], x1 = runs[4 * (size_t)i + 2];
+            while (j < p1 && runs[4 * (size_t)j + 2] < x0) j++;
+            for (int32_t k = j; k < p1 && runs[4 * (size_t)k + 1] <= x1; k++) {
+                const int32_t a = front_find(parent, i), b = front_find(parent, k);
+                if (a < b) parent[b] = a;
+                else if (b < a) parent[a] = b;
+            }
+        }
+    }
+
+    /* the rectangle OpenCV is given: the frame when the set pixels span more than half of it, else their box */
+    const int rw = maxx - minx + 1, rh = maxy - miny + 1;
+    const int whole = (int64_t)rw * rh * 2 > (int64_t)h * w;
+    const int ox = whole ? 0 : minx, oy = whole ? 0 : miny;
+    const int32_t bw2 = (w + 1) / 2;
+
+    /* per root: first 2x2 block (the numbering order), box, area, coordinate sums */
+    typedef struct { int32_t key, x0, x1, y0, y1, area, label; int64_t sx, sy; } comp;
+    int32_t n_roots = 0;
+    for (int32_t i = 0; i < n; i++) n_roots += parent[i] == i;
+    if (n_roots + 1 > f->cap_comps) { free(parent); return -1; }
+    comp *cs = (comp *)malloc((size_t)n_roots * sizeof(comp));
+    front_order *ord = (front_order *)malloc((size_t)n_roots * sizeof(front_order));
+    int32_t *slot = (int32_t *)malloc((size_t)n * sizeof(int32_t));
+    if (!cs || !ord || !slot) { free(parent); free(cs); free(ord); free(slot); return -1; }
+    int32_t nr = 0;
+    for (int32_t i = 0; i < n; i++) {
+        const int32_t *r = runs + 4 * (size_t)i;
+        const int32_t root = front_find(parent, i);
+        const int32_t key = ((r[0] - oy) >> 1) * bw2 + ((r[1] - ox) >> 1);
+        const int32_t len = r[2] - r[1];
+        const int64_t sx = (int64_t)(r[1] - ox + r[2] - 1 - ox) * len / 2;
+        if (root == i) {                    /* a root is the first run of its component in raster order */
+            slot[i] = nr;
+            comp *c = cs + nr++;
+            c->key = key; c->x0 = r[1]; c->x1 = r[2]; c->y0 = c->y1 = r[0]; c->area = len;
+            c->sx = sx; c->sy = (int64_t)(r[0] - oy) * len;
+        } else {
+            comp *c = cs + slot[root];
+            if (key < c->key) c->key = key;
+            if (r[1] < c->x0) c->x0 = r[1];
+            if (r[2] > c->x1) c->x1 = r[2];
+            c->y1 = r[0];
+            c->area += len; c->sx += sx; c->sy += (int64_t)(r[0] - oy) * len;
+        }
+    }
+    for (int32_t k = 0; k < nr; k++) { ord[k].key = cs[k].key; ord[k].root = k; }
+    qsort(ord, (size_t)nr, sizeof(front_order), front_order_cmp);
+    memset(f->stats, 0, 5 * sizeof(int32_t));
+    f->cents[0] = f->cents[1] = 0.0;
+    for (int32_t k = 0; k < nr; k++) {
+        comp *c = cs + ord[k].root;
+        c->label = k + 1;
+        int32_t *s = f->stats + 5 * (size_t)(k + 1);
+        s[0] = c->x0; s[1] = c->y0; s[2] = c->x1 - c->x0; s[3] = c->y1 - c->y0 + 1; s[4] = c->area;
+        /* as OpenCV on the rectangle, then moved by its corner (the same two operations, the same rounding) */
+        f->cents[2 * (size_t)(k + 1)] = (double)c->sx / (double)c->area + (double)ox;
+        f->cents[2 * (size_t)(k + 1) + 1] = (double)c->sy / (double)c->area + (double)oy;
+    }
+    for (int32_t i = 0; i < n; i++) {
+        int32_t *r = runs + 4 * (size_t)i;
+        const int32_t lab = cs[slot[front_find(parent, i)]].label;
+        r[3] = lab;
+        int32_t *dst = labels + (size_t)r[0] * w + r[1];
+        for (int32_t x = r[2] - r[1]; x > 0; x--) *dst++ = lab;
+    }
+    free(parent); free(cs); free(ord); free(slot);
+    f->n_runs = n;
+    f->roi[0] = minx; f->roi[1] = miny; f->roi[2] = rw; f->roi[3] = rh;
+    return nr + 1;
+}
+
+/* alone[i] = 1 when, in the ring of clip(max(w, h), ring_min, ring_max_px) pixels around the box of component
+ * idx[i] + 1 (clipped to the rectangle of the set pixels), at most ring_frac of the ring is set pixels that are
+ * not its own (detector._measure, clutter_ring_max). */
+TBOT_API void tbot_front_alone(const tbot_front *f, const intptr_t *idx, int32_t n, int32_t ring_min,
+                               int32_t ring_max_px, double ring_frac, uint8_t *alone) {
+    const int rx = f->roi[0], ry = f->roi[1], rw = f->roi[2], rh = f->roi[3];
+    for (int32_t i = 0; i < n; i++) {
+        const int32_t *s = f->stats + 5 * (size_t)(idx[i] + 1);
+        const int bx = s[0] - rx, by = s[1] - ry, bw = s[2], bh = s[3];
+        int m = bw > bh ? bw : bh;
+        if (m < ring_min) m = ring_min;
+        if (m > ring_max_px) m = ring_max_px;
+        const int x0 = bx - m > 0 ? bx - m : 0, y0 = by - m > 0 ? by - m : 0;
+        const int x1 = bx + bw + m < rw ? bx + bw + m : rw, y1 = by + bh + m < rh ? by + bh + m : rh;
+        const int ax0 = x0 + rx, ax1 = x1 + rx;
+        int64_t inside = 0;
+        for (int y = y0 + ry; y < y1 + ry; y++) {
+            const int32_t e = f->row_start[y + 1];
+            for (int32_t k = f->row_start[y]; k < e; k++) {
+                const int32_t *r = f->runs + 4 * (size_t)k;
+                if (r[1] >= ax1) break;
+                const int lo = r[1] > ax0 ? r[1] : ax0, hi = r[2] < ax1 ? r[2] : ax1;
+                if (hi > lo) inside += hi - lo;
+            }
+        }
+        int64_t ring = (int64_t)(x1 - x0) * (y1 - y0) - (int64_t)bw * bh;
+        if (ring < 1) ring = 1;
+        alone[i] = (double)(inside - s[4]) <= ring_frac * (double)ring;
+    }
+}
+
+static double front_erfinv(double y) {      /* detector._erfinv: bisection, the same 40 steps */
+    double lo = 0.0, hi = 4.0;
+    for (int i = 0; i < 40; i++) {
+        const double mid = 0.5 * (lo + hi);
+        if (erf(mid) < y) lo = mid;
+        else hi = mid;
+    }
+    return 0.5 * (lo + hi);
+}
+
+static int front_double_cmp(const void *a, const void *b) {
+    const double x = *(const double *)a, y = *(const double *)b;
+    return (x > y) - (x < y);
+}
+
+/* detector._tiled_sigma of the residual sampled every `step` pixels: gray - bg (uint8 each) or c16 (int16), mask
+ * (bool, may be NULL) the pixels that count. NaN when the frame is too small or too masked to tile: the caller
+ * then runs the Python estimate. */
+TBOT_API double tbot_noise_sigma(const uint8_t *gray, const uint8_t *bg, const int16_t *c16, const uint8_t *mask,
+                                 int32_t h, int32_t w, int32_t step, int32_t rows, int32_t cols, int32_t dev_max,
+                                 int32_t tile_min, double quantile, double tile_quantile, double sigma_floor) {
+    if (step < 1 || rows < 1 || cols < 1 || dev_max < 1 || rows * cols > 256) return NAN;
+    const int hs = (h + step - 1) / step, ws = (w + step - 1) / step;
+    if (hs < 4 * rows || ws < 4 * cols) return NAN;
+    const int n_tiles = rows * cols, width = 2 * dev_max + 1;
+    int32_t *hist = (int32_t *)calloc((size_t)n_tiles * width + (size_t)width + 1, sizeof(int32_t));
+    double *sig = (double *)malloc(2 * (size_t)n_tiles * sizeof(double));
+    if (!hist || !sig) { free(hist); free(sig); return NAN; }
+    int32_t *cum0 = hist + (size_t)n_tiles * width;
+    double *cnt = sig + n_tiles;
+    for (int i = 0; i < hs; i++) {
+        int ty = i * rows / hs;
+        if (ty > rows - 1) ty = rows - 1;
+        const size_t off = (size_t)i * step * w;
+        for (int j = 0; j < ws; j++) {
+            const size_t at = off + (size_t)j * step;
+            if (mask && !mask[at]) continue;
+            int tx = j * cols / ws;
+            if (tx > cols - 1) tx = cols - 1;
+            int v = c16 ? (int)c16[at] : (int)gray[at] - (int)bg[at];
+            if (v < -dev_max) v = -dev_max;
+            if (v > dev_max) v = dev_max;
+            hist[(size_t)(ty * cols + tx) * width + v + dev_max]++;
+        }
+    }
+    int n_ok = 0;
+    for (int t = 0; t < n_tiles; t++) {
+        const int32_t *ht = hist + (size_t)t * width;
+        int64_t total = 0;
+        for (int b = 0; b < width; b++) total += ht[b];
+        if (total < tile_min) continue;
+        const double nn = (double)total;
+        cum0[0] = 0;
+        int med = -1;
+        for (int b = 0; b < width; b++) {
+            cum0[b + 1] = cum0[b] + ht[b];
+            if (med < 0 && (double)cum0[b + 1] >= 0.5 * nn) med = b;
+        }
+        if (med < 0) med = 0;
+        int kbest = 0;
+        double dbest = 0.0, fbest = 0.0;
+        for (int k = 0; k <= dev_max; k++) {
+            const int hi = (med + k < width - 1 ? med + k : width - 1) + 1, lo = med - k > 0 ? med - k : 0;
+            const double frac = (double)(cum0[hi] - cum0[lo]) / nn;
+            const double d = fabs(frac - quantile);
+            if (k == 0 || d < dbest) { dbest = d; kbest = k; fbest = frac; }
+        }
+        if (fbest < 0.05) fbest = 0.05;
+        if (fbest > 0.98) fbest = 0.98;
+        sig[n_ok] = ((double)kbest + 0.5) / (sqrt(2.0) * front_erfinv(fbest));
+        cnt[n_ok++] = nn;
+    }
+    const int need = n_tiles / 4 > 2 ? n_tiles / 4 : 2;
+    if (n_ok < need) { free(hist); free(sig); return NAN; }
+    qsort(sig, (size_t)n_ok, sizeof(double), front_double_cmp);
+    qsort(cnt, (size_t)n_ok, sizeof(double), front_double_cmp);
+    int at = (int)(tile_quantile * (double)n_ok);
+    if (at > n_ok - 1) at = n_ok - 1;
+    double q = sig[at];
+    const double med_n = (n_ok & 1) ? cnt[n_ok / 2] : (cnt[n_ok / 2 - 1] + cnt[n_ok / 2]) / 2.0;
+    q *= 1.0 + (0.674 * 1.3) / sqrt(med_n);
+    free(hist); free(sig);
+    return q > sigma_floor ? q : sigma_floor;
+}
+
+/* One s x s box mean with the rounding of this machine's cv2.resize(INTER_AREA): OpenCV's own loop rounds
+ * sum / s^2 half to even (through a float), its ARM back end half up. detector._area_rounding() finds out
+ * which once and passes it here. */
+static inline uint8_t front_box_round(uint32_t sum, int area, float scale, int shift, int half_up) {
+    if (shift >= 1) {                     /* a power of two: in integers (no call per pixel) */
+        const uint32_t half = (uint32_t)1 << (shift - 1), q = sum >> shift, r = sum & (2 * half - 1);
+        return (uint8_t)(q + (half_up ? r >= half : (r > half) | ((r == half) & q & 1)));
+    }
+    if (half_up) return (uint8_t)((2 * sum + (uint32_t)area) / (2 * (uint32_t)area));
+    return (uint8_t)lrintf((float)sum * scale);
+}
+
+static int front_shift_of(int area) {
+    for (int k = 0; k < 16; k++)
+        if (area == (1 << k)) return k;
+    return -1;
+}
+
+/* dst (h/s x w/s) = src (h x w) averaged over s x s boxes: cv2.resize(src, (w/s, h/s), INTER_AREA) for h and w
+ * multiples of s (2 <= s <= 16). Returns 0, or -1 when the sizes are not that. */
+TBOT_API int tbot_front_box(const uint8_t *src, int32_t h, int32_t w, int32_t s, int32_t half_up, uint8_t *dst) {
+    if (s < 2 || s > 16 || h % s || w % s) return -1;
+    const int dh = h / s, dw = w / s, area = s * s, shift = front_shift_of(area);
+    const float scale = 1.f / (float)area;
+    uint16_t *col = (uint16_t *)malloc((size_t)w * sizeof(uint16_t));
+    if (!col) return -1;
+    for (int y = 0; y < dh; y++) {
+        const uint8_t *restrict r = src + (size_t)y * s * w;
+        uint16_t *restrict cc = col;
+        for (int x = 0; x < w; x++) cc[x] = r[x];
+        for (int k = 1; k < s; k++) {
+            r += w;
+            for (int x = 0; x < w; x++) cc[x] = (uint16_t)(cc[x] + r[x]);
+        }
+        uint8_t *d = dst + (size_t)y * dw;
+        const uint16_t *c = col;
+        for (int x = 0; x < dw; x++, c += s) {
+            uint32_t sum = 0;
+            for (int k = 0; k < s; k++) sum += c[k];
+            d[x] = front_box_round(sum, area, scale, shift, half_up);
+        }
+    }
+    free(col);
+    return 0;
+}
+
+/* The block statistics of ClayDetector._local_threshold in one pass: dst (h/cell x w/cell) = the mean over each
+ * cell of min(255, gain * absd) at every other pixel of every other row, i.e. cv2.resize(NEAREST, half size),
+ * cv2.convertScaleAbs(alpha = gain), cv2.resize(INTER_AREA). cell even, h and w multiples of it. */
+TBOT_API int tbot_front_cells(const uint8_t *absd, int32_t h, int32_t w, int32_t cell, int32_t gain,
+                              int32_t half_up, uint8_t *dst) {
+    if (cell < 4 || cell > 32 || (cell & 1) || h % cell || w % cell || gain < 1 || gain > 255) return -1;
+    const int k = cell / 2, ch = h / cell, cw = w / cell, area = k * k, shift = front_shift_of(area);
+    const float scale = 1.f / (float)area;
+    const int half_w = w / 2;
+    uint16_t *col = (uint16_t *)malloc((size_t)half_w * sizeof(uint16_t));
+    if (!col) return -1;
+    for (int y = 0; y < ch; y++) {
+        memset(col, 0, (size_t)half_w * sizeof(uint16_t));
+        for (int j = 0; j < k; j++) {
+            const uint8_t *restrict r = absd + (size_t)(y * cell + 2 * j) * w;
+            uint16_t *restrict cc = col;
+            for (int i = 0; i < half_w; i++) {          /* min(255, gain * v) of every other pixel */
+                const unsigned v = (unsigned)r[2 * i] * (unsigned)gain;
+                cc[i] = (uint16_t)(cc[i] + (v > 255u ? 255u : v));
+            }
+        }
+        uint8_t *d = dst + (size_t)y * cw;
+        const uint16_t *c = col;
+        for (int x = 0; x < cw; x++, c += k) {
+            uint32_t sum = 0;
+            for (int i = 0; i < k; i++) sum += c[i];
+            d[x] = front_box_round(sum, area, scale, shift, half_up);
+        }
+    }
+    free(col);
+    return 0;
+}

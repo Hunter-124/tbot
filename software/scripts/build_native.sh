@@ -25,7 +25,23 @@ fi
 [[ -n ${CC_BIN} ]] || { echo "build_native: no C compiler found (cc, gcc, clang; or set CC)" >&2; exit 1; }
 
 # -ffp-contract=off: no fused multiply-add, so ARM and x86 round the same way as the Python reference.
-FLAGS=(-O2 -shared -ffp-contract=off -Wall -Wextra)
+# -O3: the whole-frame loops (box means, cell statistics, labelling) are only vectorised at -O3 (Pi 3B: the
+# 4x4 box mean 1.8 ms at -O2, 0.2 at -O3). No -ffast-math: results must not depend on the optimiser.
+# One C file, so there is nothing for link-time optimisation to join (-flto measured: no change).
+FLAGS=(-O3 -shared -ffp-contract=off -Wall -Wextra)
+# Tuned for the processor it is built on (the library is never copied between machines). TBOT_NATIVE_CPU=0
+# builds for the generic one.
+if [[ ${TBOT_NATIVE_CPU:-1} != 0 ]]; then
+	case "$(uname -m)" in
+	aarch64 | arm64 | armv7l) CPU_FLAG=-mcpu=native ;;
+	x86_64 | amd64) CPU_FLAG=-march=native ;;
+	*) CPU_FLAG= ;;
+	esac
+	# (not every compiler knows "native" on every machine: use it only if a trial compile accepts it)
+	if [[ -n ${CPU_FLAG} ]] && echo 'int main(void){return 0;}' | "${CC_BIN}" "${CPU_FLAG}" -x c -fsyntax-only - >/dev/null 2>&1; then
+		FLAGS+=("${CPU_FLAG}")
+	fi
+fi
 LIBS=()
 case "$(uname -s)" in
 MINGW* | MSYS* | CYGWIN* | Windows_NT)

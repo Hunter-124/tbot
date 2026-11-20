@@ -172,6 +172,7 @@ class ClayDetector:
         self._labels: np.ndarray | None = None  # full-frame label image when only a sub-rectangle was labelled
         self._cells: np.ndarray | None = None   # local-noise buffers (_local_threshold)
         self._labels_roi = (0, 0, 0, 0)
+        self._front: _native.Front | None = None  # buffers of the native labelling (tbot_front_label)
         self._since_noise: int = 0
         self._noise_total: float = 0.0  # exposure_us x gain of the frame the noise sigma was estimated on
         self._key: tuple | None = None
@@ -337,8 +338,12 @@ class ClayDetector:
 
         # ---- background and signed contrast -------------------------------
         k = max(1, int(det.bg_kernel))
-        cv2.resize(gray, (self._small.shape[1], self._small.shape[0]), dst=self._small,
-                   interpolation=cv2.INTER_AREA)
+        front = _native.front_kernel() if bool(getattr(det, "native", True)) else None
+        sh, sw = self._small.shape
+        rounding = _area_rounding(down) if front is not None and (sh * down, sw * down) == (h, w) else None
+        # the box mean in C (1.2 ms of cv2.resize on a Pi 3B -> 0.2), with this OpenCV's rounding
+        if rounding is None or front[3](gray.ctypes.data, h, w, down, rounding, self._small.ctypes.data) != 0:
+            cv2.resize(gray, (sw, sh), dst=self._small, interpolation=cv2.INTER_AREA)
         mode = str(getattr(det, "bg_mode", "box"))
         # auto: each background with the scale it was validated at (see _BG_MODES)
         self._morph_bg = mode == "morph" or (mode == "auto" and self._img_scale >= 2)
@@ -510,9 +515,15 @@ class ClayDetector:
         # Block statistics from every other pixel (a quarter of the work; 16 samples a block is enough for a
         # scale that only matters where it is several times the frame's), as 8 x |stat| saturating at 255:
         # 1/8 DN resolution for the block means, and nothing above 32 DN (a clay, an edge) counts for more.
-        cv2.resize(self._absd, (w // 2, h // 2), dst=self._abs8, interpolation=cv2.INTER_NEAREST)
-        cv2.convertScaleAbs(self._abs8, dst=self._abs8, alpha=float(LOCAL_GAIN))
-        cv2.resize(self._abs8, (cw, ch), dst=self._cells, interpolation=cv2.INTER_AREA)
+        front = _native.front_kernel() if bool(getattr(det, "native", True)) else None
+        rounding = (_area_rounding(cell // 2) if front is not None and cell % 2 == 0 and cell >= 4
+                    and (ch * cell, cw * cell) == (h, w) and float(LOCAL_GAIN) == int(LOCAL_GAIN) else None)
+        # (the three calls below in one pass in C: 1 ms on a Pi 3B -> 0.05)
+        if rounding is None or front[4](self._absd.ctypes.data, h, w, cell, int(LOCAL_GAIN), rounding,
+                                        self._cells.ctypes.data) != 0:
+            cv2.resize(self._absd, (w // 2, h // 2), dst=self._abs8, interpolation=cv2.INTER_NEAREST)
+            cv2.convertScaleAbs(self._abs8, dst=self._abs8, alpha=float(LOCAL_GAIN))
+            cv2.resize(self._abs8, (cw, ch), dst=self._cells, interpolation=cv2.INTER_AREA)
         cv2.erode(self._cells, _rect_kernel(LOCAL_NEIGHBOURHOOD), dst=self._cells2)
         cv2.blur(self._cells2, (3, 3), dst=self._cells)
         # mean |x| -> sigma: 1.2533 (two-sided) or 2.5066 (one polarity: the other half was clipped to 0),
@@ -555,9 +566,37 @@ class ClayDetector:
         return int(np.count_nonzero(seed | (near & weak))) >= int(det.min_area_px)
 
     # ----------------------------------------------------------------- noise
+    def _front_for(self, b8: np.ndarray):
+        """The native front end's functions with buffers for this frame size, or None (not built, odd layout)."""
+        front = _native.front_kernel()
+        if front is None or b8.ndim != 2 or not b8.flags.c_contiguous:
+            return None
+        if self._front is None or self._front.shape != b8.shape:
+            self._front = _native.Front(*b8.shape)
+        return front
+
     def _estimate_sigma(self, contrast: np.ndarray, mask: np.ndarray | None) -> float:
         h, w = contrast.shape
         step = max(1, int(round((h * w / NOISE_TARGET_SAMPLES) ** 0.5)))
+        front = _native.front_kernel() if bool(getattr(self.cfg.detector, "native", True)) else None
+        if front is not None:
+            # the tiled estimate in C (4.9 ms -> tens of microseconds on a Pi 3B, twice on a noise frame: the
+            # frame that used to overrun); NaN = not tileable, the Python below decides
+            try:
+                if isinstance(contrast, _LazyContrast):
+                    args = (_native.ptr(contrast.gray, np.uint8), _native.ptr(contrast.bg, np.uint8), None)
+                else:
+                    args = (None, None, _native.ptr(contrast, np.int16))
+                m = _native.ptr(mask, np.bool_)
+                if mask is not None and mask.shape != (h, w):
+                    raise TypeError("mask shape")
+            except (TypeError, AttributeError):
+                pass
+            else:
+                q = front[2](*args, m, h, w, step, NOISE_TILES[0], NOISE_TILES[1], DEV_MAX,
+                             NOISE_TILE_MIN_SAMPLES, NOISE_QUANTILE, NOISE_TILE_QUANTILE, NOISE_SIGMA_FLOOR)
+                if q == q:
+                    return float(q)
         sub = contrast[::step, ::step]
         if mask is not None:
             vals = sub[mask[::step, ::step]]
@@ -578,11 +617,25 @@ class ClayDetector:
         # Label only the bounding box of the pixels that passed the threshold: a clear sky has none (most
         # frames), a lone clay a few dozen, and labelling the whole frame costs ~1 ms on a Pi 3B either way.
         b8 = binary.view(np.uint8)
-        rx, ry, rw, rh = cv2.boundingRect(b8)
         self.stats = {"components": 0, "candidates": 0}
-        if rw == 0 or rh == 0:
+        # In C when the kernel is built (tbot_front_label: the same components with the same numbers, from the
+        # runs of set pixels; 4 ms of OpenCV on a Pi 3B in front of trees). OpenCV is the reference.
+        front = self._front_for(b8) if bool(getattr(det, "native", True)) else None
+        n = front[0](self._front.ref, b8.ctypes.data) if front is not None else -1
+        if n >= 0:
+            fr = self._front
+            rx, ry, rw, rh = fr.state.roi
+            if n <= 1:
+                return []
+            labels, stats, cents = fr.labels, fr.stats[:n], fr.cents[:n]
+        else:
+            front = None
+            rx, ry, rw, rh = cv2.boundingRect(b8)
+        if front is not None:
+            pass
+        elif rw == 0 or rh == 0:
             return []
-        if rw * rh * 2 > b8.size:
+        elif rw * rh * 2 > b8.size:
             n, labels, stats, cents = cv2.connectedComponentsWithStats(b8, connectivity=8)
         else:
             n, sub, stats, cents = cv2.connectedComponentsWithStats(
@@ -632,6 +685,12 @@ class ClayDetector:
             # candidates a frame, 4 ms each to measure on a Pi 3B = 5-10 frames a second). So in a frame with
             # many candidates each must stand alone: of the ring around its bounding box, at most
             # clutter_ring_max may be thresholded pixels of OTHER blobs. One integral image, no loop.
+            if front is not None:
+                flags = np.empty(idx.size, np.uint8)
+                front[1](self._front.ref, idx.ctypes.data, int(idx.size), CLUTTER_RING_MIN_PX,
+                         CLUTTER_RING_MAX_PX, ring_max, flags.ctypes.data)
+                idx = idx[flags.view(np.bool_)]
+        if ring_max > 0.0 and cluttered and front is None:
             ii = cv2.integral(b8[ry:ry + rh, rx:rx + rw])
             unit = int(ii[-1, -1]) // max(1, int(stats[1:, cv2.CC_STAT_AREA].sum()))  # 1 or 255 per set pixel
             bx = stats[idx + 1, cv2.CC_STAT_LEFT].astype(np.int64) - rx
@@ -647,6 +706,7 @@ class ClayDetector:
             ring = (x1 - x0) * (y1 - y0) - bw_ * bh_
             alone = (inside - areas[idx]) <= ring_max * np.maximum(ring, 1)
             idx = idx[alone]
+        if ring_max > 0.0 and cluttered:
             self.stats["alone"] = int(idx.size)
         ordered = False
         if self.candidate_filter is not None and idx.size:
@@ -917,6 +977,28 @@ class ClayDetector:
         return [Detection(t_ns=t, u=r[1], v=r[2], area_px=r[3], diameter_px=r[4], contrast=r[5], snr=r[6],
                           score=r[7], bbox=(int(r[8]), int(r[9]), int(r[10]), int(r[11])))
                 for r in res.tolist() if r[0] == 0.0]
+
+
+@lru_cache(maxsize=16)
+def _area_rounding(s: int) -> int | None:
+    """How this OpenCV rounds an s x s box mean in cv2.resize(INTER_AREA): 0 half to even (its own loop),
+    1 half up (the ARM back end), None when neither reproduces it (the caller then keeps cv2.resize).
+    Found by trying both on an image full of ties, once per scale."""
+    front = _native.front_kernel()
+    if front is None or not 2 <= int(s) <= 16:
+        return None
+    s = int(s)
+    rng = np.random.default_rng(12345)
+    src = rng.integers(0, 256, (24 * s, 40 * s), dtype=np.uint8)
+    src[: 4 * s] = rng.integers(0, 2, (4 * s, 40 * s), dtype=np.uint8) * 255   # sums of 255s: many exact halves
+    src[4 * s: 8 * s] = rng.integers(0, 4, (4 * s, 40 * s), dtype=np.uint8)
+    want = cv2.resize(src, (40, 24), interpolation=cv2.INTER_AREA)
+    got = np.empty_like(want)
+    for mode in (0, 1):
+        if front[3](src.ctypes.data, src.shape[0], src.shape[1], s, mode, got.ctypes.data) == 0 \
+                and np.array_equal(got, want):
+            return mode
+    return None
 
 
 @lru_cache(maxsize=8)
