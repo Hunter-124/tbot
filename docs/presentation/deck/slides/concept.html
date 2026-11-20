@@ -1,0 +1,18 @@
+<section id="concept" data-transition="fade">
+<div class="head">
+<p class="eyebrow">How it works</p>
+<h2>The shooter swings, the machine picks the instant</h2>
+</div>
+<div class="row" style="gap:0; align-items:stretch; margin-top:16px">
+<div class="card rise" style="--i:0"><p class="tag">1 · See</p><h3>Camera</h3><p class="txt">A small camera under the barrel looks along the bore and finds the clay dozens of times a second.</p></div>
+<x-connector class="fadein" style="--i:1; width:56px; color:#FF8A3D; border-width:4px"></x-connector>
+<div class="card rise" style="--i:2"><p class="tag">2 · Sense</p><h3>Motion sensor</h3><p class="txt">A gyro and accelerometer in the clamp measure how the gun itself is swinging.</p></div>
+<x-connector class="fadein" style="--i:3; width:56px; color:#FF8A3D; border-width:4px"></x-connector>
+<div class="card rise" style="--i:4"><p class="tag">3 · Predict</p><h3>Lead</h3><p class="txt">Where will the clay be, and where will the barrel point, once every delay has passed?</p></div>
+<x-connector class="fadein" style="--i:5; width:56px; color:#FF8A3D; border-width:4px"></x-connector>
+<div class="card rise" style="--i:6"><p class="tag">4 · Press</p><h3>Servo</h3><p class="txt">When the two line up, a hobby servo presses the trigger. One shot per button press.</p></div>
+</div>
+<div class="grow"></div>
+<p class="body rise" style="--i:8">The trigger can only move while the shooter holds an arming button.</p>
+<aside>Keep this at the block-diagram level. Camera finds the target, the motion sensor separates the clay’s motion from my swing, the computer extrapolates both forward by the total delay, and the servo presses when the predicted shot covers the predicted clay. I still aim and swing; the machine only chooses when. The software was written with heavy AI assistance, so this talk is about the hardware and the measurements that make it work.</aside>
+</section>

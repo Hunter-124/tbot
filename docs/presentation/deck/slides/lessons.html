@@ -1,0 +1,15 @@
+<section id="lessons" data-transition="fade">
+<div class="head">
+<p class="eyebrow">What broke</p>
+<h2>Recoil found every weak point</h2>
+</div>
+<div class="row">
+<div class="card rise" style="--i:0"><p class="tag">Structure</p><h3>Servo mount cracked after two shots</h3><p class="txt">Redesigned twice: through-bolted with trapped nuts, then an anti-slide lock on the guard.</p></div>
+<div class="card rise" style="--i:1"><p class="tag">Power</p><h3>Computer loses power at the shot</h3><p class="txt">Clean cuts with no voltage sag: something in the battery path opens under recoil. Most shots on day two were never recorded.</p></div>
+</div>
+<div class="row">
+<div class="card rise" style="--i:2"><p class="tag">Measurement</p><h3>Trigger delay was wrong by 60 ms</h3><p class="txt">A bench microphone read 161 ms. I trusted a video estimate of 95 ms instead. The microphone was right.</p></div>
+<div class="card rise" style="--i:3"><p class="tag">Actuation</p><h3>One double fire</h3><p class="txt">A second shot 0.36 s after the first with no command. Servo shutdown sequence changed; root cause not proven.</p></div>
+</div>
+<aside>The honest slide. Printed PLA against 12-gauge recoil: the first mount lasted two shots. On day two the mechanism held, but the computer rebooted at almost every shot. Its supply flags were clean before each cut, so it is not a brown-out; it is a contact opening, and that is a bench job with the gun unloaded. The delay error is the lesson I would repeat to anyone: I had the right measurement and discounted it. And the double: the data shows no second command was sent, the servo had been told to return, and the cause is still open between the servo signal at shutdown, the supply bouncing, and my own finger.</aside>
+</section>

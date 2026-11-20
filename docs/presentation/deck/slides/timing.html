@@ -1,0 +1,30 @@
+<section id="timing" class="alt" data-transition="fade">
+<div class="head">
+<p class="eyebrow">Timing budget</p>
+<h2>Every millisecond between seeing and hitting</h2>
+</div>
+<div class="bars" style="margin-top:16px">
+<div class="barrow">
+<p class="barlabel">Rev AH, Nov 19</p>
+<div class="seg a slide" style="--i:1; width:430px"><p class="v">55 ms</p></div>
+<div class="seg b slide" style="--i:3; width:516px"><p class="v">66 ms</p></div>
+<div class="seg c slide" style="--i:5; width:368px"><p class="v">47 ms</p></div>
+</div>
+<div class="legend rise" style="--i:6; margin-left:330px">
+<p class="k"><span style="color:#7FB7E6">■</span> Image age at the decision</p>
+<p class="k"><span style="color:#FF8A3D">■</span> Servo, trigger and lock time</p>
+<p class="k"><span style="color:#F2D06B">■</span> Shot flight to 14 m</p>
+</div>
+<div class="barrow rise" style="--i:8">
+<p class="barlabel">First trigger, Nov 17</p>
+<div class="seg old" style="width:1259px"><p class="v">161 ms for the trigger alone</p></div>
+</div>
+</div>
+<div class="grow"></div>
+<div class="row">
+<div class="stat rise" style="--i:9"><h3>≈ 168 ms total</h3><p class="small">The lead the machine has to predict across</p></div>
+<div class="stat rise" style="--i:10"><h3>Trigger is the biggest piece</h3><p class="small">And the only one the mechanical design controls</p></div>
+<div class="stat rise" style="--i:11"><h3>± 5 ms repeatability</h3><p class="small">Jitter matters more than the absolute delay</p></div>
+</div>
+<aside>This is the chain for a real shot on the second range day. The camera frame is about 55 ms old by the time a decision is made, the servo and trigger take about 66 ms to release the hammer and ignite, and the shot takes about 47 ms to reach a clay at 14 metres. Bars are to scale. The grey bar is the first trigger mechanism: 161 ms on its own. A known delay can be predicted across; an inconsistent one cannot, so the measured 4.9 ms jitter in the trigger is the number that really limits accuracy.</aside>
+</section>

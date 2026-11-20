@@ -1,0 +1,20 @@
+<section id="safety" class="alt" data-transition="fade">
+<div class="head">
+<p class="eyebrow">Safety</p>
+<h2>A person holds the button for every shot</h2>
+</div>
+<div class="row" style="gap:56px">
+<div class="steps grow">
+<div class="step rise" style="--i:0"><p class="n">1</p><p class="t"><b>Dry run by default.</b> Without an explicit live setting the servo never moves.</p></div>
+<div class="step rise" style="--i:1"><p class="n">2</p><p class="t"><b>Button interlock at the actuator.</b> No button, no trigger press.</p></div>
+<div class="step rise" style="--i:2"><p class="n">3</p><p class="t"><b>Release means rest.</b> A cut wire or loose connector reads as not armed.</p></div>
+<div class="step rise" style="--i:3"><p class="n">4</p><p class="t"><b>One shot per press.</b></p></div>
+<div class="step rise" style="--i:4"><p class="n">5</p><p class="t"><b>Watchdog.</b> No fresh image for 250 ms and the servo returns to rest.</p></div>
+</div>
+<div class="col" style="width:520px">
+<div class="card rise" style="--i:6"><p class="tag">Known gap</p><p class="txt">These are software layers. There is no hardware cut in the servo supply yet; unplugging the battery is what makes it safe.</p></div>
+<div class="card rise" style="--i:7"><p class="tag">Where it runs</p><p class="txt">Clay targets on a range, under range rules. All bench work with the gun unloaded.</p></div>
+</div>
+</div>
+<aside>The machine never fires on its own initiative. The arming button is a dead-man switch: normally open with a pull-up, so any wiring fault fails to the safe state. I am upfront about the gap: all five layers are software, and the double fire is exactly why a hardware cut in the servo supply belongs on the next-steps list.</aside>
+</section>
