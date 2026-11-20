@@ -8,10 +8,11 @@ Designed, built and calibrated by one person in 23 days (2026-10-25 to 2026-11-1
 First live range day: **two shots fired by the machine, two clays broken.** Second range day (2026-11-19):
 rebuilt trigger, two trips, a lot of power cuts. The afternoon was somewhat successful.
 
-![The phone's view of a shot beside the gun camera's own view, lined up on the bang](docs/media/range_2026-11-19/shot_phone_and_gun_view.gif)
+![The phone's view of a hit beside the gun camera's own view, lined up on the bang](docs/media/range_2026-11-19/shot_phone_and_gun_view_hit.gif)
 
-*2026-11-19, press 160357. Left: phone video. Right: the gun camera with the tracker's overlay. The two are
-lined up on the bang. The red FIRE frame is the command; the recoil shows on the IMU 66 ms later.*
+*2026-11-19, press 160243, a hit at 14 m. Left: phone video. Right: the gun camera with the tracker's overlay.
+The two are lined up on the bang, real time then 4x slow. The red FIRE frame is the command; the recoil shows on
+the IMU 70 ms later.*
 
 ![The assembled gun: trigger servo at the guard, camera and compute module clamped under the barrel](docs/media/hero_assembled.jpg)
 
