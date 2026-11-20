@@ -120,7 +120,7 @@ boots got slower.
 |---|---|
 | Presses kept by the Pi at the range | 5 (more were lost to power cuts) |
 | Fire commands kept | 3, all of which set the gun off |
-| Clays broken | **[HUNTER: fill in]** |
+| Clays broken | **at least 5** of about 16 thrown (Hunter's count; the rest: no shot, Pi off, or a miss) |
 | Engagement range | 14 to 24 m |
 | Trigger delay, command to ignition | 62, 66 and 70 ms (44.5 ms assumed; recalibrated to 60.4 ms since) |
 | Frame rate in front of trees | 30 to 33 fps |
