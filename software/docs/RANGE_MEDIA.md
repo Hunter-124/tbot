@@ -44,7 +44,7 @@ python scripts/range_media.py sync $S --phone pi-pulls/range-2026-11-19-pm/phone
   clock offset (within `--max-skew-s`, default 1 h) that puts the most shots on bangs within `--tol-s`, so the
   shot spacing decides the match. A boot with one shot gets the first unclaimed bang after the previous boot's last
   press plus that shot's uptime. These matches are printed as LOW confidence: check the pictures, and override with
-  `--pair IMG_0569.MOV=160243-press[@0.38]`.
+  `--pair IMG_0575.MOV=160243-press[@2.63]`.
 - **Rendering.** The phone frame at phone time `t` sits next to the gun-camera frame exposed at
   `shot + (t - bang)`. The shot is the IMU recoil (the fire command + `expected_ms` when there is no recoil). The
   phone audio plays under the real-time part, followed by a silent `--slowmo` replay. `--distance-m` removes the
@@ -53,6 +53,14 @@ python scripts/range_media.py sync $S --phone pi-pulls/range-2026-11-19-pm/phone
 ## 2026-11-19 afternoon result
 
 `sync` paired 160333 and 160357 with IMG_0565.MOV at 14.89 s and 39.06 s. The bangs are 24.17 s apart and the
-recoils 24.177 s apart, a 5 ms match. It paired 160243 with IMG_0569.MOV at 0.38 s at low confidence. In the
+recoils 24.177 s apart, a 5 ms match. It paired 160243 with IMG_0569.MOV at 0.38 s at low confidence, and that
+pairing was wrong (audited 2026-11-20): the "bang" at 0.38 s is the phone being set down on the rail; no gun,
+smoke or clay is in the frame. 160243 belongs to IMG_0575.MOV at 2.63 s, and the synced clip is rendered with
+`--pair IMG_0575.MOV=160243-press@2.63`. Three things agree: the gun is still until 0.6 s before the shot and then
+rises, in the IMU and in the clip (the ready light tracks the front module); the clay climbs through the bore line
+0.5 s before the shot at 27 to 35 deg/s, in the gun camera and on the phone (IMG_0585 and IMG_0569 at 5.23 s give
+half that rate); and the boot fits (smoke from a shot at about 16:39:45 at the start of IMG_0574, kernel uptime 0
+at 16:39:53, the shot at uptime 49.8 s = 16:40:42.6 = the bang in IMG_0575). IMG_0585.MOV, the last clip of the
+day, shows a clay breaking 0.12 s after the blast; no press was kept for it (power cut). In the
 morning trip only one shot went off (092749). It has no second shot in its boot to anchor on, so it needs `--pair`
 after looking at the clips.
