@@ -50,6 +50,7 @@ from tbot.optics import CameraModel, MountModel, combined_mask
 from tbot.types import Frame, MonotonicClock
 from tbot.vision.clutter import StaticFilter
 from tbot.vision.detector import ClayDetector
+from tbot.vision.handover import pack_hints, scenery_dirs
 from tbot.vision.tracker import ClayTracker  # noqa: F401 - re-exported for callers
 from tbot.vision.tracker3d import make_tracker
 
@@ -126,6 +127,15 @@ class Pipeline:
         self.tracker = make_tracker(cfg, self.cam, self.mount)
         self.clutter = StaticFilter(cfg, self.cam, self.mount) if bool(cfg.detector.static_reject) else None
         self._movers: set[int] = set()  # tracks seen crossing the sky: the scenery filter never takes them
+        # camera.detect_in_process: the sensor process detects (vision/handover.py) and this loop starts at the
+        # tracker. Any frame that comes without detections is detected here, as in the single loop.
+        self._remote = bool(getattr(source, "detects", False))
+        self._hints_sent = False
+        self._early_imu: list = []  # IMU samples taken in while waiting for a frame that did not come
+        self._idle_period = 0.0  # set by run(): the rate asked of the sensor process while the button is up
+        self.handover: dict | None = None
+        if self._remote:
+            log.info("detection runs beside this loop, in a process of its own (camera.detect_in_process)")
         self.shot = ShotModel(cfg)
         self.budget: LatencyBudget = calib.budget or LatencyBudget.from_config(cfg, calib.latency)
         self.solver = FireSolver(cfg, self.shot, self.mount, self.budget)
@@ -151,6 +161,9 @@ class Pipeline:
         self.arming = arming if arming is not None else ArmingSwitch(self.gpio, cfg)
         # (source clock, as the solver's times are: on hardware the same monotonic clock the switch stamps with)
         self.arming.on_change(lambda armed, _t: self.trigger.on_arming(armed, int(self.source.clock.now_ns())))
+        if self._remote:
+            # the sensor process works at the idle rate while the button is up: tell it the moment that changes
+            self.arming.on_change(lambda armed, _t: self._set_pace(armed))
 
         self._own_actuator = actuator is None
         if actuator is not None:
@@ -579,13 +592,14 @@ class Pipeline:
                 self._stop.set()
         return _ms(t0, time.perf_counter_ns())
 
-    def _arm_scenery_filter(self, t_ns: int, R_wg: np.ndarray) -> None:
-        """Give the detector the scenery filter for this frame, when there is a real attitude to base it on."""
+    def _scenery_ready(self) -> bool:
+        """The scenery filter has a real attitude to work with."""
+        return not (self.clutter is None or isinstance(self.attitude, FixedAttitude) or not self.attitude.ready
+                    or not bool(self.cfg.detector.static_reject))
+
+    def _scenery_tracks(self) -> tuple[list, list]:
+        """(protect, focus): the tracks the scenery filter must know about, from the tracks as they are now."""
         clutter = self.clutter
-        if clutter is None or isinstance(self.attitude, FixedAttitude) or not self.attitude.ready \
-                or not bool(self.cfg.detector.static_reject):
-            self.detector.candidate_filter = None
-            return
         # Tracks that have crossed the sky at several times the filter's own speed floor are clays: keep
         # whatever is detected near them even if they slow to a crawl (going away, or at the top of an arc).
         rate_of = getattr(self.tracker, "angular_rate", None)
@@ -595,16 +609,10 @@ class Pipeline:
         # that is merely confirmed: in a cluttered scene short-lived tracks on scenery are confirmed all the
         # time, and a small far clay that has yet to be picked up would have to compete for those few places
         # (synthetic skeet crossing against a tree line: target error at the shot 0.16 -> 0.40 deg).
-        focus, focus_radius = [], []
-        gate = float(getattr(self.tracker, "_gate", 0.0))
-        gate_min = float(getattr(self.tracker, "_gate_min", 0.0))
         established = int(self.cfg.fire.min_track_hits)
         # the main target first: the one the solver works on (the most hits)
-        for t in sorted(self.tracks, key=lambda t: (-t.hits, -t.first_t_ns, -t.track_id)):
-            if t.confirmed and t.hits >= established:
-                focus.append(self.tracker.predict_dir(t, t_ns))
-                # as wide as the tracker's own association gate for this track in this frame
-                focus_radius.append(math.hypot(gate * float(self.tracker.predict(t, t_ns)[2]), gate_min))
+        focus = [t for t in sorted(self.tracks, key=lambda t: (-t.hits, -t.first_t_ns, -t.track_id))
+                 if t.confirmed and t.hits >= established]
         if rate_of is not None:
             det = self.cfg.detector
             floor = 4.0 * float(det.static_tol_px) * clutter.ifov / max(float(det.static_min_age_ms) * 1e-3, 1e-3)
@@ -614,11 +622,33 @@ class Pipeline:
                 if t.confirmed and t.track_id not in self._movers and t.s is not None and rate_of(t) > floor:
                     self._movers.add(t.track_id)
                 if t.track_id in self._movers:
-                    protect.append(self.tracker.predict_dir(t, t_ns))
+                    protect.append(t)
             self._movers &= alive
-        clutter.begin(t_ns, R_wg, protect_dirs_w=protect, focus_dirs_w=focus, focus_radius_rad=focus_radius,
-                      others_max=int(getattr(self.cfg.detector, "followed_others_max", 0)))
-        self.detector.candidate_filter = clutter.filter
+        return protect, focus
+
+    def _arm_scenery_filter(self, t_ns: int, R_wg: np.ndarray) -> None:
+        """Give the detector the scenery filter for this frame, when there is a real attitude to base it on."""
+        if not self._scenery_ready():
+            self.detector.candidate_filter = None
+            return
+        protect, focus, focus_radius = scenery_dirs(self.tracker, t_ns, *self._scenery_tracks())
+        self.clutter.begin(t_ns, R_wg, protect_dirs_w=protect, focus_dirs_w=focus, focus_radius_rad=focus_radius,
+                           others_max=int(getattr(self.cfg.detector, "followed_others_max", 0)))
+        self.detector.candidate_filter = self.clutter.filter
+
+    def _send_hints(self) -> None:
+        """Detection in the sensor process: the tracks its scenery filter protects and looks for first, as they
+        are after this frame. It predicts them to its own frame's time (handover.scenery_dirs)."""
+        protect, focus = self._scenery_tracks() if self._scenery_ready() else ([], [])
+        if protect or focus or self._hints_sent or getattr(self.source, "lockstep", False):
+            self._hints_sent = bool(protect or focus)  # (one empty message clears what the child holds)
+            self.source.send_hints(pack_hints(self.frames + 1, protect, focus))
+
+    def _set_pace(self, armed: bool) -> None:
+        """Detection beside this loop: the rate it works at while the button is up (this loop's own idle rate)."""
+        pace = getattr(self.source, "set_pace", None) if self._remote else None
+        if pace is not None:
+            pace(0.0 if armed else self._idle_period)
 
     def _imu_age_ms(self, now_ns: int) -> float | None:
         """Age of the newest IMU sample the attitude has, on the source clock; None without a real IMU."""
@@ -629,6 +659,13 @@ class Pipeline:
             return float("inf")
         return max(0.0, (int(now_ns) - int(last)) / 1e6)
 
+    def _take_imu(self, samples: list) -> None:
+        """New IMU samples: into the attitude, and past the recoil detector while a shot is awaited."""
+        self.attitude.update(samples)
+        if self.recoil.waiting:
+            for rec in self.recoil.feed(samples):
+                self._on_recoil(rec)
+
     # ------------------------------------------------------------------ one frame
     def step(self) -> dict | None:
         """Process the next frame. None = no frame (timeout or end of stream)."""
@@ -636,10 +673,30 @@ class Pipeline:
             self.start()
         cfg = self.cfg
         t_begin = time.perf_counter_ns()
-        frame = self.source.read(timeout_s=self.read_timeout_s)
+        early: list = []
+        if self._remote and not getattr(self.source, "lockstep", False):
+            # The sensor process is detecting the frame; its IMU samples come ahead of it. Take them in while
+            # there is nothing else to do, so the frame goes straight to the tracker when it arrives. (Not
+            # for a replay in step with this loop: there the samples are released as the single loop has them.)
+            poll = self.source.poll
+            deadline = time.monotonic() + self.read_timeout_s
+            while not poll(min(0.02, max(0.0, deadline - time.monotonic()))):
+                got = self.imu.read()
+                if got:
+                    self._take_imu(got)
+                    early.extend(got)
+                if time.monotonic() >= deadline:
+                    break
+            frame = self.source.read(timeout_s=0.0)
+        else:
+            frame = self.source.read(timeout_s=self.read_timeout_s)
         t_read = time.perf_counter_ns()
         if frame is None:
+            if early:
+                self._early_imu.extend(early)  # they belong to the recording of the next frame that comes
             return None
+        if self._early_imu:
+            early, self._early_imu = self._early_imu + early, []
         if getattr(self.source, "gap_after_restart", False):
             # the camera was reopened: tracks from before the outage would be extrapolated across it
             self.source.gap_after_restart = False
@@ -651,19 +708,43 @@ class Pipeline:
         samples = self.imu.read()
         t_imu = time.perf_counter_ns()
         if samples:
-            self.attitude.update(samples)
-            if self.recoil.waiting:
-                for rec in self.recoil.feed(samples):
-                    self._on_recoil(rec)
-        R_wg = np.asarray(self.attitude.R_wg(int(frame.t_exposure_ns)), dtype=np.float64)
-        t_att = time.perf_counter_ns()
+            self._take_imu(samples)
+        if early:
+            samples = early + list(samples) if samples else early
+        remote = getattr(self.source, "detection", None) if self._remote else None
+        if remote is None:
+            R_wg = np.asarray(self.attitude.R_wg(int(frame.t_exposure_ns)), dtype=np.float64)
+            t_att = time.perf_counter_ns()
 
-        self._arm_scenery_filter(int(frame.t_exposure_ns), R_wg)
-        self.detections = self.detector.detect(frame)
-        t_det = time.perf_counter_ns()
+            self._arm_scenery_filter(int(frame.t_exposure_ns), R_wg)
+            self.detections = self.detector.detect(frame)
+            t_det = time.perf_counter_ns()
+            detect_ms = _ms(t_att, t_det)
+            filtered = self.detector.candidate_filter is not None
+            self.handover = None
+        else:
+            # detected in the sensor process, with the attitude it had for the frame: the tracker turns the
+            # detections into world directions with the same one
+            R_wg = remote.R_wg
+            self.detections = remote.detections
+            t_att = t_det = time.perf_counter_ns()
+            detect_ms = remote.detect_ms
+            filtered = remote.filtered
+            self.handover = {
+                # frame taken by the sensor process -> its result sent -> this loop had it
+                # (the frame reached user space -> the detector process took it: the hop from the camera's
+                # process and the wait for the detector to come round)
+                "pick_ms": round((remote.t_read_ns - int(frame.t_capture_ns)) / 1e6, 2),
+                "sensor_ms": round((remote.t_sent_ns - remote.t_read_ns) / 1e6, 2),
+                "wait_ms": round((time.monotonic_ns() - (t_att - t_read) - remote.t_sent_ns) / 1e6, 2),
+                # how many frames old the tracks were that its scenery filter knew (1 = the frame before)
+                "hints_age": (self.frames + 1 - remote.hints_n) if remote.hints_n else None,
+            }
 
         self.tracks = self.tracker.update(int(frame.t_exposure_ns), self.detections, R_wg)
         t_trk = time.perf_counter_ns()
+        if self._remote:
+            self._send_hints()
 
         if self._processed is not None:
             self._processed()
@@ -675,10 +756,7 @@ class Pipeline:
             # clays hit 60.0 -> 62.3 %; with the commands also going out 9 ms late, as they did, 58.7 %).
             late = self.imu.read()
             if late:
-                self.attitude.update(late)
-                if self.recoil.waiting:
-                    for rec in self.recoil.feed(late):
-                        self._on_recoil(rec)
+                self._take_imu(late)
                 samples = list(samples) + list(late) if samples else late
         t_imu2 = time.perf_counter_ns()
 
@@ -772,6 +850,7 @@ class Pipeline:
             "seq": int(frame.seq),
             "frames": self.frames,
             "t_exposure_ns": int(frame.t_exposure_ns),
+            "t_capture_ns": int(frame.t_capture_ns),   # the frame reached user space (the camera's process)
             "t_ns": now,
             "cmd_t_ns": cmd_t_ns,
             "fire_at_ns": int(decision.extra.get("fire_at_ns", now)) if fired else None,
@@ -798,22 +877,26 @@ class Pipeline:
                 "read": _ms(t_begin, t_read),
                 "imu": _ms(t_read, t_imu),
                 "attitude": _ms(t_imu, t_att),
-                "detect": _ms(t_att, t_det),
+                "detect": detect_ms,
                 "track": _ms(t_det, t_trk),
                 "imu2": _ms(t_trk, t_imu2),
                 "solve": _ms(t_imu2, t_sol),
             },
-            "detector_ms": dict(self.detector.timings_ms),
-            "detector": {"scale": int(self.detector.scale), "noise_dn": float(self.detector.noise_sigma),
-                         **self.detector.stats},
+            "detector_ms": dict(self.detector.timings_ms if remote is None else remote.timings_ms),
+            "detector": ({"scale": int(self.detector.scale), "noise_dn": float(self.detector.noise_sigma),
+                          **self.detector.stats} if remote is None else
+                         {"scale": int(remote.scale), "noise_dn": float(remote.noise_sigma), **remote.stats}),
             # [u, v, diameter_px, snr, contrast_dn, bbox x, y, w, h, area_px] per detection, full-res pixels
             "dets": [[round(float(d.u), 2), round(float(d.v), 2), round(float(d.diameter_px), 2),
                       round(float(d.snr), 1), round(float(d.contrast), 1), *d.bbox, float(d.area_px)]
                      for d in self.detections],
-            "static": self.clutter.static_px if self.detector.candidate_filter is not None else None,
+            "static": ((self.clutter.static_px if remote is None else remote.static_px) if filtered else None),
             # how fast fixed scenery slides in the IMU's world (camera x / y, deg/s): an uncorrected gyro bias
-            "scenery_drift_dps": ([round(math.degrees(v * self.clutter.ifov), 3) for v in self.clutter.drift]
-                                  if self.clutter is not None and self.clutter.drift_updates else None),
+            "scenery_drift_dps": ([round(math.degrees(v * self.clutter.ifov), 3)
+                                   for v in (self.clutter.drift if remote is None else remote.drift)]
+                                  if self.clutter is not None
+                                  and (self.clutter.drift_updates if remote is None else remote.drift_updates)
+                                  else None),
             "R_wg": [float(x) for x in R_wg.ravel()],
             "tracks": [
                 {
@@ -852,6 +935,8 @@ class Pipeline:
                 "bore_dir_w": None if decision.bore_dir_w is None else [float(x) for x in decision.bore_dir_w],
             },
         }
+        if self.handover is not None:
+            tele["handover"] = self.handover
         if fired:
             ev = {
                 "t_ns": now,
@@ -942,6 +1027,9 @@ class Pipeline:
         if ae is not None:  # exposure the light asked for; flagged when the scene is outside the camera's range
             flag = {"too_bright": " !BRIGHT", "too_dark": " !DARK"}.get(ae["state"], "")
             hstr += f"  exp {tele['exposure_us']:.0f}us x{tele['gain']:.1f}{flag}"
+        ho = tele.get("handover")
+        if ho is not None:  # detection in the sensor process: its time for the frame, beside this loop's (cpu)
+            hstr += f"  sens {ho['sensor_ms']:4.1f} ms"
         if tele.get("lost"):
             hstr += f"  lost {tele['lost']}"
         if tele.get("cam_restarts"):
@@ -998,11 +1086,15 @@ class Pipeline:
             idle_fps = float(getattr(self.cfg.camera, "idle_fps", 0.0) or 0.0)
             # only a source on the real clock is paced: a simulated or replayed one has no heat to save
             idle_period = 1.0 / idle_fps if idle_fps > 0.0 and isinstance(self.source.clock, MonotonicClock) else 0.0
+            self._idle_period = idle_period
+            self._set_pace(bool(self.arming.armed))
             sd_wall = 0.0
             while not self._stop.is_set():
                 t_loop = time.monotonic()
                 tele = self.step()
                 now = time.monotonic()
+                if self._remote:
+                    self._set_pace(bool(self.arming.armed))
                 if now - sd_wall >= 2.0:
                     sd_wall = now
                     _sd_notify("WATCHDOG=1")
@@ -1111,7 +1203,11 @@ def main(argv: list[str] | None = None) -> int:
 
         # camera + IMU in their own process (see camera/proc.py for why); usually already started by the CLI
         source = take_early(cfg.camera.source) or SensorProcess(cfg, calib)
-        log.info("sensor process %d: %s%s", source.child_pid, source.name, " + IMU" if source.has_imu else "")
+        if getattr(source, "sensor_pid", None):
+            log.info("detector process %d <- sensor process %d: %s%s", source.child_pid, source.sensor_pid,
+                     source.name, " + IMU" if source.has_imu else "")
+        else:
+            log.info("sensor process %d: %s%s", source.child_pid, source.name, " + IMU" if source.has_imu else "")
     else:
         source = open_live_source(cfg.camera.source, cfg, calib)
     gpio = open_gpio(cfg)

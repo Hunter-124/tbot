@@ -131,3 +131,22 @@ def test_respawn_after_the_frame_ring_vanished(tmp_path):
         assert proc._shm.name != old
     finally:
         proc.stop()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="needs SIGTERM")
+@pytest.mark.parametrize("nested", [False, True])
+def test_child_told_to_end_before_it_has_its_ring_ends(tmp_path, nested):
+    """A parent interrupted while it starts (Ctrl-C, a service stop during a slow start) never hands the child
+    its frame ring and joins it as it exits. The child must end on SIGTERM then, not wait for the ring for
+    ever - with the sensor process behind it, when it is a detector process."""
+    cfg = _cfg(tmp_path)
+    proc = SensorProcess(cfg, Calibration(dir=tmp_path / "calib"), "synthetic:static_gun", wait=False,
+                         detect=nested, nested=nested)
+    try:
+        time.sleep(3.0 if nested else 1.5)   # the child is up (and, nested, its own child is streaming to it)
+        proc._proc.terminate()
+        proc._proc.join(15.0)
+        assert not proc._proc.is_alive()
+    finally:
+        proc._proc.kill()
+        proc._closed = True

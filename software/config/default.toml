@@ -40,6 +40,13 @@ idle_fps = 15.0               # tbot run, live sources: frames processed per sec
                               # (it throttles at 80). The moment the button is held every frame is processed
 process = true                # tbot run, picam only: acquire camera + IMU in a child process (camera/proc.py). In-process
                               # their threads held the interpreter lock and the vision loop ran 2-3x slower. false = threads
+detect_in_process = false     # tbot run, picam + camera.process only. true = a detector process of its own (attitude at the
+                              # frame time, scenery filter, detector: vision/handover.py) between the sensor process and
+                              # the pipeline, which tracks and solves the frame before meanwhile; the tracks the scenery
+                              # filter protects are then one frame older. Measured on the Pi 3B 2026-11-19: 47 -> 55-60
+                              # frames a second, but each frame 59-65 ms old at the decision instead of 45 (three busy
+                              # processes slow each other), and no more virtual clays hit: off until that is solved
+                              # (docs/RANGE_2026-11-19.md section 11). Replay, synthetic sources and tests: always one loop
 
 [optics]                      # nominal prior until calib/intrinsics.json exists (innomaker manual V1.4 §3.1)
 model = "fisheye"             # fisheye (cv2.fisheye, equidistant base) | pinhole

@@ -38,6 +38,7 @@ class CameraConfig:
     respawn_s: float = 8.0
     reopen_timeout_s: float = 5.0
     process: bool = True
+    detect_in_process: bool = False
     idle_fps: float = 30.0
     ae_target_dn: float = 160.0
     ae_highlight_pct: float = 98.0

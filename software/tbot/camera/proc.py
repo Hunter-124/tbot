@@ -25,6 +25,25 @@ Recovery, in two layers:
      afterwards carries `gap_after_restart` so tracks that span the outage are dropped. Respawns back off
      (1, 2, 4 ... 15 s) while they keep failing.
 Without respawn (replay/synthetic specs, tests) a dead child raises from read() as before.
+
+Detection (`camera.detect_in_process`): a child also runs the front of the frame loop - attitude at the frame
+time, scenery filter, detect (vision/handover.py) - on its own core, and each frame arrives with its
+detections; the pipeline tracks and solves the frame before meanwhile. The pipeline sends back the tracks the
+scenery filter protects and looks for first (`send_hints`), and the rate to work at while the button is up
+(`set_pace`). A child that cannot build the detector says so and sends plain frames: the pipeline then detects
+itself, as it does for any frame that comes without detections.
+
+For the live camera that child is NOT the one with the camera in it. Measured on the Pi 3B (2026-11-19, a range
+press replayed with the camera and the IMU running in the same process): detect 13 ms -> 36 ms, 22 frames a
+second - the capture and IMU threads hold the interpreter lock, the very reason the camera has a process of its
+own. So the detector gets one too (`nested`): pipeline <- detector process <- sensor process. The detector
+process is this module twice over: its source is a SensorProcess (frames and IMU from the camera's process,
+respawned by it as before), and it publishes to the pipeline exactly as a sensor process does.
+
+OFF by default. It works, and it is faster (47 -> 55-60 frames a second on the gun's bench scene), but on a
+Pi 3B three busy processes slow each other: a frame is 59-65 ms old at the decision instead of 45, and virtual
+clays say the rate gained is worth no more than the age lost. docs/RANGE_2026-11-19.md section 11 has the
+numbers and what is left to try.
 """
 
 from __future__ import annotations
@@ -36,7 +55,10 @@ import pickle
 import select
 import signal
 import struct
+import sys
+import threading
 import time
+from collections import deque
 from multiprocessing import shared_memory
 
 import numpy as np
@@ -63,6 +85,10 @@ RESPAWN_BACKOFF_S = (0.0, 1.0, 2.0, 4.0, 8.0, 15.0)
 #   A + pickle  auto-exposure status           N + pickle  source description (first message)
 #   E + utf-8   the child failed               B           the child is exiting
 #   H           heartbeat (nothing else to say)
+#   D + _FRAME + handover.pack_result   one frame is in the ring, with its detections
+#   W + utf-8   something the parent should log (detection switched off in the child)
+# and to the child:  S  stop     P + handover.pack_hints  tracks for the scenery filter
+#                    R + int64   work on a frame only this many ns after the last one (0 = every frame)
 _FRAME = struct.Struct("<qqqqqddqqBq")  # slot, stamp, seq, t_exposure_ns, t_capture_ns, exposure_us, gain,
 #                                        frames dropped by the source, restarts, first-after-restart flag,
 #                                        frames the sensor sent that never arrived (timestamp gaps)
@@ -88,29 +114,65 @@ def _unpack_imu(msg: bytes) -> list[ImuSample]:
 
 
 class _StopFlag:
-    """The child's stop request: SIGTERM, or an S message from the parent on the pipe. (A multiprocessing
-    Event is a named semaphore, and at every service stop their cleanup raced the resource tracker and
-    filled the log with tracebacks.)"""
+    """The child's side of what the parent says on the pipe: the stop request (an S message, or SIGTERM), the
+    scenery-filter hints (P) and the pace (R). (A multiprocessing Event is a named semaphore, and at every
+    service stop their cleanup raced the resource tracker and filled the log with tracebacks.)"""
 
     def __init__(self, conn) -> None:
         self._conn = conn
         self._set = False
+        self.pace_ns = 0
+        self.hints: list[bytes] = []   # P messages not yet taken, oldest first
+        self._poller = None
+        if hasattr(select, "poll"):    # asked several times a frame: Connection.poll() builds a selector per call
+            self._poller = select.poll()
+            self._poller.register(conn.fileno(), select.POLLIN)
+
+    def _ready(self, timeout_s: float) -> bool:
+        if self._poller is not None:
+            return bool(self._poller.poll(max(0.0, timeout_s) * 1000.0))
+        return self._conn.poll(timeout_s)
 
     def set(self) -> None:
         self._set = True
 
-    def is_set(self) -> bool:
+    def is_set(self, timeout_s: float = 0.0) -> bool:
+        """Take what the parent has sent (waiting up to timeout_s for the first message)."""
         if not self._set:
             try:
-                if self._conn.poll(0) and self._conn.recv_bytes() == b"S":
-                    self._set = True
-            except (EOFError, OSError):
+                while self._ready(timeout_s):
+                    timeout_s = 0.0
+                    msg = self._conn.recv_bytes()
+                    tag = msg[:1]
+                    if tag == b"S":
+                        self._set = True
+                        break
+                    if tag == b"P":
+                        self.hints.append(msg)
+                    elif tag == b"R":
+                        self.pace_ns = int(struct.unpack_from("<q", msg, 1)[0])
+            except (EOFError, OSError, ValueError):
                 self._set = True  # the parent is gone
         return self._set
 
 
-def _child(conn, cfg, calib, spec: str, want_imu: bool, parent_pid: int) -> None:
-    """Child process body: acquire, publish, until told to stop or the parent is gone."""
+def _take_hints(ctl: _StopFlag, stage, unpack_hints) -> None:
+    """The newest hints the pipeline has sent, if any are new, to the child's detector stage."""
+    ctl.is_set()
+    if ctl.hints:
+        stage.hints = unpack_hints(ctl.hints[-1], 1)
+        ctl.hints.clear()
+
+
+def _child(conn, cfg, calib, spec: str, want_imu: bool, parent_pid: int, opts: dict | None = None) -> None:
+    """Child process body: acquire, (detect,) publish, until told to stop or the parent is gone.
+
+    opts: detect (run vision/handover.SensorDetector on every frame), and for replayed sessions (tools, tests):
+    lockstep (frame k waits for the pipeline's hints after its frame k - lockstep: 0 = what the single loop
+    knows, 1 = one frame stale, as live; None = free running) and work_ms (ReplaySource's model of the loop's
+    own work time). nested: this process only detects, and gets its frames and IMU samples from a sensor
+    process of its own (see the module docstring)."""
+    opts = opts or {}
     signal.signal(signal.SIGINT, signal.SIG_IGN)  # Ctrl-C reaches the whole process group: the parent decides
     stop_evt = _StopFlag(conn)
     try:
@@ -122,19 +184,65 @@ def _child(conn, cfg, calib, spec: str, want_imu: bool, parent_pid: int) -> None
         from tbot.camera import open_live_source  # noqa: PLC0415
         from tbot.imu.mpu6050 import NullImu, open_imu  # noqa: PLC0415
 
-        source = open_live_source(spec, cfg, calib)
+        work_ms = float(opts.get("work_ms") or 0.0)
+        warn = None
+        if opts.get("detect") and opts.get("nested"):
+            try:
+                # (multiprocessing lets no daemon process have children; this one ends its child itself, and
+                # the child ends itself when its pipe to here breaks)
+                mp.current_process()._config["daemon"] = False
+                source = SensorProcess(cfg, calib, spec, want_imu=want_imu, detect=False, wait=False)
+                import tbot.vision.handover  # noqa: PLC0415,F401 - OpenCV and the rest load while the camera opens
+                source.finish_start()
+            except Exception as exc:  # noqa: BLE001 - a plain sensor process then: the pipeline detects itself
+                if source is not None:
+                    try:
+                        source.stop()
+                    except Exception:  # noqa: BLE001
+                        pass
+                source = None
+                opts = {**opts, "detect": False}
+                warn = f"detection stays in the pipeline: no sensor process for the detector " \
+                       f"({type(exc).__name__}: {exc})"
+        if source is not None:
+            pass
+        elif work_ms > 0.0 and spec.partition(":")[0] == "replay":
+            from tbot.camera.replay import ReplaySource  # noqa: PLC0415
+
+            source = ReplaySource(spec.partition(":")[2], work_ms=work_ms)
+        else:
+            source = open_live_source(spec, cfg, calib)
         if want_imu:
             imu = open_imu(cfg, calib, source)
             if isinstance(imu, NullImu):
                 imu = None
         channels = 3 if bool(source.is_color) else 1
+        stage = None
+        if opts.get("detect"):
+            try:
+                from tbot.vision.handover import SensorDetector, pack_result, unpack_hints  # noqa: PLC0415
+
+                stage = SensorDetector(cfg, calib, int(source.width), int(source.height), imu is not None)
+            except Exception as exc:  # noqa: BLE001 - the pipeline detects itself, as before
+                stage = None
+                warn = f"detection stays in the pipeline: {type(exc).__name__}: {exc}"
+        if warn:
+            conn.send_bytes(b"W" + warn.encode("utf-8", "replace"))
+        lockstep = opts.get("lockstep") if stage is not None else None
         conn.send_bytes(b"N" + pickle.dumps({
             "width": int(source.width), "height": int(source.height), "channels": channels,
             "nominal_fps": float(source.nominal_fps), "name": str(getattr(source, "name", spec)),
             "endless": bool(getattr(source, "endless", False)), "imu": imu is not None,
             "applied_timestamp_offset_ns": int(getattr(source, "applied_timestamp_offset_ns", 0) or 0),
-            "pid": os.getpid(),
+            "pid": os.getpid(), "detect": stage is not None,
+            "sensor_pid": getattr(source, "child_pid", None),   # the camera's process, when this one only detects
         }))
+        # (waited for with an eye on the stop flag and the parent: a parent that is interrupted while it starts
+        # joins this process as it exits, and SIGTERM alone does not end a read - 2026-11-19, `tbot run` stopped
+        # during a slow start hung with all its processes)
+        while not stop_evt._ready(0.2):
+            if stop_evt._set or os.getppid() != parent_pid:
+                return
         shm_name = conn.recv_bytes().decode()
         if shm_name == "S":  # told to stop before it was given the ring
             return
@@ -152,6 +260,19 @@ def _child(conn, cfg, calib, spec: str, want_imu: bool, parent_pid: int) -> None
         k = 0
         ae_state, ae_sent_ns = None, 0
         said = time.monotonic()
+        if stage is not None:
+            # as in the pipeline's own loop (app/run.py): the capture and IMU threads of this process give the
+            # interpreter lock back within 0.5 ms, and what lives as long as the process is not collected
+            import gc  # noqa: PLC0415
+
+            sys.setswitchinterval(0.0005)
+            gc.collect()
+            gc.freeze()
+        half_period_ns = int(0.5e9 / max(float(source.nominal_fps) or float(cfg.camera.fps), 1.0))
+        last_done_ns: int | None = None  # capture time of the last frame worked on (pace)
+        paced = 0                        # frames left out because of the pace: counted as dropped
+        held: dict[int, bytes] = {}      # lockstep: hints by the pipeline frame count they were made at
+        processed = getattr(source, "processed", None) if float(opts.get("work_ms") or 0.0) > 0.0 else None
         while not stop_evt.is_set():
             frame = source.read(timeout_s=0.05)
             if imu is not None:
@@ -159,6 +280,8 @@ def _child(conn, cfg, calib, spec: str, want_imu: bool, parent_pid: int) -> None
                 if samples:
                     conn.send_bytes(_pack_imu(samples))
                     said = time.monotonic()
+                    if stage is not None:
+                        stage.imu(samples)
             if frame is None:
                 if os.getppid() != parent_pid:  # orphaned: the pipeline is gone
                     break
@@ -166,6 +289,13 @@ def _child(conn, cfg, calib, spec: str, want_imu: bool, parent_pid: int) -> None
                     conn.send_bytes(b"H")
                     said = time.monotonic()
                 continue
+            t_read_ns = time.monotonic_ns()
+            pace_ns = stop_evt.pace_ns
+            if pace_ns > 0 and last_done_ns is not None and \
+                    0 <= int(frame.t_capture_ns) - last_done_ns < pace_ns - half_period_ns:
+                paced += 1  # button up: the pipeline wants this rate, and the Pi stays cool
+                continue
+            last_done_ns = int(frame.t_capture_ns)
             slot = k % SLOTS
             head = heads[slot]
             head[0] = 2 * k + 1                                      # odd: being written
@@ -176,6 +306,43 @@ def _child(conn, cfg, calib, spec: str, want_imu: bool, parent_pid: int) -> None
             gap = bool(getattr(source, "gap_after_restart", False))
             if gap:
                 source.gap_after_restart = False
+            result = None
+            detecting = stage is not None
+            if detecting:
+                try:
+                    if gap:
+                        stage.reset()
+                    if lockstep is None:
+                        _take_hints(stop_evt, stage, unpack_hints)  # sent while this frame was waited for
+                    else:
+                        want = k - int(lockstep)  # made after the pipeline's frame number `want` (1-based count)
+                        while True:
+                            for msg in stop_evt.hints:
+                                h = unpack_hints(msg, 1)
+                                held[h.n] = msg
+                            stop_evt.hints.clear()
+                            if want <= 0 or want in held or stop_evt.is_set(0.02):
+                                break
+                            if time.monotonic() - said >= HEARTBEAT_S:
+                                conn.send_bytes(b"H")
+                                said = time.monotonic()
+                        stage.hints = unpack_hints(held[want], 1) if want in held else None
+                        for n in [n for n in held if n < want]:
+                            del held[n]
+                    result = stage.process(frame, t_read_ns)
+                except Exception as exc:  # noqa: BLE001 - frames keep coming, the pipeline detects them itself
+                    stage = result = None
+                    conn.send_bytes(b"W" + f"detection back in the pipeline: {type(exc).__name__}: {exc}".encode())
+            if detecting and processed is not None and lockstep is not None:
+                # a replayed session in step with the pipeline: the IMU of the modelled work time goes first, so
+                # the pipeline's read before the solver finds it there every time (a replay must repeat)
+                processed()
+                if imu is not None:
+                    samples = imu.read()
+                    if samples:
+                        conn.send_bytes(_pack_imu(samples))
+                        if stage is not None:
+                            stage.imu(samples)
             try:
                 ae = getattr(source, "ae_status", None)
             except Exception:  # noqa: BLE001
@@ -185,10 +352,28 @@ def _child(conn, cfg, calib, spec: str, want_imu: bool, parent_pid: int) -> None
                 if state != ae_state or int(frame.t_capture_ns) - ae_sent_ns >= AE_PERIOD_NS:
                     ae_state, ae_sent_ns = state, int(frame.t_capture_ns)
                     conn.send_bytes(b"A" + pickle.dumps(ae))
-            conn.send_bytes(b"F" + _FRAME.pack(
+            meta = _FRAME.pack(
                 slot, 2 * k + 2, int(frame.seq), int(frame.t_exposure_ns), int(frame.t_capture_ns),
-                float(frame.exposure_us), float(frame.gain), int(getattr(source, "dropped", 0)),
-                int(getattr(source, "restarts", 0)), 1 if gap else 0, int(getattr(source, "lost", 0) or 0)))
+                float(frame.exposure_us), float(frame.gain), int(getattr(source, "dropped", 0)) + paced,
+                int(getattr(source, "restarts", 0)), 1 if gap else 0, int(getattr(source, "lost", 0) or 0))
+            if result is not None:
+                result.t_sent_ns = time.monotonic_ns()
+                conn.send_bytes(b"D" + meta + pack_result(result))
+            else:
+                conn.send_bytes(b"F" + meta)
+            if detecting and lockstep is None:
+                # what the gun did while this frame was looked at: the pipeline is tracking the frame now and
+                # reads the IMU again before it solves (after the frame, so the frame does not wait for it)
+                if processed is not None:
+                    processed()
+                if imu is not None:
+                    samples = imu.read()
+                    if samples:
+                        conn.send_bytes(_pack_imu(samples))
+                        if stage is not None:
+                            stage.imu(samples)
+                if stage is not None:
+                    _take_hints(stop_evt, stage, unpack_hints)  # for the next frame, off this one's time
             said = time.monotonic()
             k += 1
     except (BrokenPipeError, EOFError, KeyboardInterrupt):
@@ -221,6 +406,7 @@ class _ImuProxy:
 
     def __init__(self, owner: "SensorProcess") -> None:
         self._owner = owner
+        self._held: list[ImuSample] = []
 
     def start(self) -> None:
         self._owner.start()
@@ -235,6 +421,18 @@ class _ImuProxy:
         out: list[ImuSample] = []
         for msg in chunks:
             out.extend(_unpack_imu(msg))
+        if owner._work_ns > 0:
+            # a replayed session on its own clock: the child is a frame ahead, and what it has read of the
+            # IMU beyond this side's clock has not happened yet here (as ReplaySource releases its samples)
+            held = self._held + out
+            if owner._t_capture_ns is None:
+                self._held = held
+                return []
+            limit = max(owner._t_capture_ns, int(owner.clock.now_ns()))
+            n = 0
+            while n < len(held) and held[n].t_ns <= limit:
+                n += 1
+            out, self._held = held[:n], held[n:]
         return out
 
 
@@ -246,12 +444,39 @@ class SensorProcess(SourceBase):
     """
 
     def __init__(self, cfg, calib, spec: str | None = None, want_imu: bool = True,
-                 respawn_s: float | None = None, hang_s: float = HANG_S, wait: bool = True) -> None:
+                 respawn_s: float | None = None, hang_s: float = HANG_S, wait: bool = True,
+                 detect: bool | None = None, lockstep: int | None = None, work_ms: float = 0.0,
+                 nested: bool | None = None) -> None:
+        """detect: the child also detects (None = `camera.detect_in_process`); `detects` then says whether it
+        does. lockstep / work_ms: replayed sessions only (see _child): every frame is delivered in order, and
+        with work_ms the clock is the session's, standing at each frame and moved on by `processed()`."""
         super().__init__()
         self.clock = MonotonicClock()
         self.spec = spec or str(cfg.camera.source)
-        self._cfg, self._calib, self._want_imu = cfg, calib, bool(want_imu)
+        if detect is None:
+            detect = bool(getattr(cfg.camera, "detect_in_process", False))
         live = self.spec.partition(":")[0] == "picam"
+        if nested is None:  # the live camera's capture threads must not share a process with the detector
+            nested = live
+        self._opts = {"detect": bool(detect), "lockstep": lockstep, "work_ms": float(work_ms),
+                      "nested": bool(nested) and bool(detect)}
+        # (a detector process starts a sensor process of its own before it answers)
+        self._start_timeout_s = START_TIMEOUT_S * (2.0 if self._opts["nested"] else 1.0)
+        self.lockstep = lockstep is not None   # a replay in step with the pipeline: every frame, in order
+        self._work_ns = int(round(float(work_ms) * 1e6))
+        if self._work_ns > 0:
+            from tbot.types import SimClock  # noqa: PLC0415
+
+            self.clock = SimClock(frozen=True)
+            self.processed = self._processed  # the pipeline reports the frame's work done (as ReplaySource)
+        self.detects = False            # the child sends detections with its frames
+        self.sensor_pid: int | None = None  # the camera's own process, when the child is a detector process
+        self.detection = None           # handover.DetectResult of the frame read() returned last, or None
+        self._queue: deque = deque()    # in-order delivery (lockstep): frames not yet read
+        self._send_lock = threading.Lock()  # the arming callback sets the pace from another thread
+        self._pace_ns = 0
+        self._t_capture_ns: int | None = None  # of the frame read() returned last
+        self._cfg, self._calib, self._want_imu = cfg, calib, bool(want_imu)
         if respawn_s is None:
             respawn_s = float(getattr(cfg.camera, "respawn_s", 8.0)) if live else 0.0
         self.respawn_s = float(respawn_s)
@@ -293,7 +518,11 @@ class SensorProcess(SourceBase):
         if self._ready_done:
             return self
         self._ready_done = True
-        info = self._wait_info()
+        try:
+            info = self._wait_info()
+        except BaseException:  # interrupted (Ctrl-C, SIGTERM) while the child starts: do not leave it behind
+            self._abort()
+            raise
         self.width, self.height = int(info["width"]), int(info["height"])
         self._channels = int(info["channels"])
         self.is_color = self._channels == 3
@@ -301,6 +530,7 @@ class SensorProcess(SourceBase):
         self.name = str(info["name"])
         self.endless = bool(info["endless"]) or self.respawn_s > 0.0
         self.has_imu = bool(info["imu"])
+        self.detects = bool(info.get("detect", False))
         self.applied_timestamp_offset_ns = int(info["applied_timestamp_offset_ns"])
         self._frame_bytes = self.width * self.height * self._channels
         self._slot_bytes = HEADER + self._frame_bytes
@@ -315,7 +545,7 @@ class SensorProcess(SourceBase):
         self._conn, child_conn = self._ctx.Pipe(duplex=True)
         self._proc = self._ctx.Process(target=_child, name="tbot-sensors", daemon=True,
                                        args=(child_conn, self._child_cfg(), self._calib, self.spec, self._want_imu,
-                                             os.getpid()))
+                                             os.getpid(), self._opts))
         self._proc.start()
         child_conn.close()
         self._poller = None
@@ -326,6 +556,7 @@ class SensorProcess(SourceBase):
         self._error = None
         self._pending_info = None
         self._latest = None
+        self._queue.clear()
         now = time.monotonic()
         self._spawn_t = self._last_msg_t = self._last_frame_t = now
 
@@ -342,7 +573,7 @@ class SensorProcess(SourceBase):
         return cfg
 
     def _wait_info(self) -> dict:
-        deadline = time.monotonic() + START_TIMEOUT_S
+        deadline = time.monotonic() + self._start_timeout_s
         while time.monotonic() < deadline:
             self._pump(0.1)
             if self._pending_info is not None:
@@ -379,17 +610,54 @@ class SensorProcess(SourceBase):
     def _attach(self, info: dict) -> None:
         """The child described itself: hand it the ring (it starts streaming as soon as it has it)."""
         self.child_pid = int(info["pid"])
+        self.sensor_pid = info.get("sensor_pid")
         for head in self._heads:
             head[:] = 0
-        self._conn.send_bytes(self._shm.name.encode())
+        with self._send_lock:
+            self._conn.send_bytes(self._shm.name.encode())
+        self.detects = bool(info.get("detect", False))
         self._state = "running"
         self._last_msg_t = self._last_frame_t = time.monotonic()
+        if self._pace_ns:
+            self._send(b"R" + struct.pack("<q", self._pace_ns))
+
+    def _send(self, msg: bytes) -> bool:
+        try:
+            with self._send_lock:
+                self._conn.send_bytes(msg)
+            return True
+        except (OSError, ValueError):
+            return False
 
     def _request_stop(self) -> None:
-        try:
-            self._conn.send_bytes(b"S")
-        except (OSError, ValueError):
-            pass
+        self._send(b"S")
+
+    def set_pace(self, period_s: float) -> None:
+        """Work on a frame only every period_s (0 = every frame): the button is up and nothing can fire, so
+        the child need not detect a hundred times a second. Safe to call from any thread, every frame."""
+        ns = max(0, int(float(period_s) * 1e9))
+        if ns != self._pace_ns:
+            self._pace_ns = ns
+            if self._state == "running":
+                self._send(b"R" + struct.pack("<q", ns))
+
+    def send_hints(self, payload: bytes) -> None:
+        """The tracks the child's scenery filter protects and looks for first (handover.pack_hints)."""
+        if self._state == "running":
+            self._send(b"P" + payload)
+
+    def _processed(self) -> None:
+        self.clock.advance(self._work_ns)
+
+    def poll(self, timeout_s: float) -> bool:
+        """Wait up to timeout_s for anything from the child. True when a frame is waiting for read(). (The
+        pipeline takes the IMU samples as they come while the child is still detecting the frame.)"""
+        if self._latest is None and not self._closed:
+            if self._state == "down":
+                time.sleep(min(max(0.0, timeout_s), 0.02))
+            else:
+                self._pump(timeout_s)
+        return self._latest is not None
 
     def _abort(self) -> None:
         self._request_stop()
@@ -466,8 +734,8 @@ class SensorProcess(SourceBase):
             self._proc.join(timeout=0.5)
             self._respawn(f"it died (exit code {self._proc.exitcode})" if not self._proc.is_alive()
                           else "it closed its pipe")
-        elif self._state == "starting" and now - self._spawn_t > START_TIMEOUT_S:
-            self._respawn(f"it did not open the camera within {START_TIMEOUT_S:.0f} s")
+        elif self._state == "starting" and now - self._spawn_t > self._start_timeout_s:
+            self._respawn(f"it did not open the camera within {self._start_timeout_s:.0f} s")
         elif self._state == "running" and now - self._last_msg_t > self.hang_s:
             self._respawn(f"it has said nothing for {now - self._last_msg_t:.1f} s (hung)", hung=True)
         elif self._state == "running" and now - self._last_frame_t > self.respawn_s:
@@ -516,10 +784,19 @@ class SensorProcess(SourceBase):
             while True:
                 msg = conn.recv_bytes()
                 tag = msg[:1]
-                if tag == b"F":
-                    if self._latest is not None:
-                        self._skipped += 1
-                    self._latest = _FRAME.unpack_from(msg, 1)
+                if tag == b"F" or tag == b"D":
+                    item = (_FRAME.unpack_from(msg, 1), msg if tag == b"D" else None)
+                    if self.lockstep:
+                        self._queue.append(item)
+                        if self._latest is None:
+                            self._latest = self._queue.popleft()
+                    else:
+                        if self._latest is not None:
+                            self._skipped += 1
+                        self._latest = item
+                elif tag == b"W":
+                    self.detects = False
+                    log.warning("sensor process: %s", msg[1:].decode("utf-8", "replace"))
                 elif tag == b"I":
                     self._imu_chunks.append(msg)
                 elif tag == b"A":
@@ -600,8 +877,9 @@ class SensorProcess(SourceBase):
                 else:
                     self._pump(min(remaining, 0.05))
                 continue
-            slot, stamp, seq, t_exp, t_cap, exposure_us, gain, child_dropped, restarts, gap, lost = self._latest
-            self._latest = None
+            (slot, stamp, seq, t_exp, t_cap, exposure_us, gain, child_dropped, restarts, gap, lost), det_msg = \
+                self._latest
+            self._latest = self._queue.popleft() if self._queue else None
             head = self._heads[slot]
             o = slot * self._slot_bytes + HEADER
             image = self._buf[o:o + self._frame_bytes].copy()
@@ -622,6 +900,17 @@ class SensorProcess(SourceBase):
             if seq <= self._last_seq:
                 seq = self._last_seq + 1
             self._last_seq = seq
+            self.detection = None
+            if det_msg is not None:
+                try:
+                    from tbot.vision.handover import unpack_result  # noqa: PLC0415
+
+                    self.detection = unpack_result(det_msg, int(t_exp), 1 + _FRAME.size)
+                except Exception as exc:  # noqa: BLE001 - the frame is good: the pipeline detects it itself
+                    log.warning("sensor process: unreadable detections (%s)", exc)
+            self._t_capture_ns = int(t_cap)
+            if self._work_ns > 0:
+                self.clock.set(int(t_cap))
             return Frame(image=image.reshape(self._shape), seq=seq, t_exposure_ns=int(t_exp),
                          t_capture_ns=int(t_cap), exposure_us=float(exposure_us), gain=float(gain))
 

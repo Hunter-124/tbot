@@ -322,6 +322,37 @@ class AttitudeEstimator:
         f = (t - t0) / float(t1 - t0)
         return R0 @ exp_so3(f * log_so3(R0.T @ R1))
 
+    def R_wg9(self, t_ns: int) -> tuple:
+        """R_wg(t_ns) as a row-major 9-tuple, in plain floats (equal to R_wg to rounding). The sensor process
+        asks for the attitude of every frame before it detects: the array version costs 0.6 ms on a Pi 3B."""
+        if not self.ready or not self._ts:
+            return (1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0)
+        t = int(t_ns)
+        ts = self._ts
+        if t >= ts[-1]:
+            dt = (t - ts[-1]) * 1e-9
+            if dt <= 0.0:
+                return self._Rs[-1]
+            w = self._ws[-1]
+            return _mul9(self._Rs[-1], _exp9(w[0] * dt, w[1] * dt, w[2] * dt))
+        if t <= ts[0]:
+            return self._Rs[0]
+        i = bisect.bisect_right(ts, t)
+        t0, t1 = ts[i - 1], ts[i]
+        R0 = self._Rs[i - 1]
+        if t == t0:
+            return R0
+        R1 = self._Rs[i]
+        # D = R0^T R1, the turn between the two samples; its rotation vector scaled by f, applied to R0
+        D = _mul9((R0[0], R0[3], R0[6], R0[1], R0[4], R0[7], R0[2], R0[5], R0[8]), R1)
+        cos_t = min(1.0, max(-1.0, (D[0] + D[4] + D[8] - 1.0) * 0.5))
+        theta = math.acos(cos_t)
+        if theta > 3.0:  # (never between two samples 2 ms apart; the array version handles the turn near pi)
+            return tuple(float(v) for v in self.R_wg(t).reshape(9))
+        k = 0.5 if theta < 1e-8 else 0.5 * theta / math.sin(theta)
+        f = (t - t0) / float(t1 - t0) * k
+        return _mul9(R0, _exp9(f * (D[7] - D[5]), f * (D[2] - D[6]), f * (D[3] - D[1])))
+
     def omega_g(self, t_ns: int) -> np.ndarray:
         """Gun-frame angular rate (rad/s) of the sample nearest t_ns."""
         if not self._ts:

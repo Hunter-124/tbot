@@ -15,6 +15,12 @@ work takes (`--work-ms`, default sim.process_ms: the Pi 3B's detect + track), wh
     tbot rescore <presses> --set fire.adaptive=false --set fire.min_hit_probability=0.5    # another rule
     tbot rescore <presses> --every                                                         # is P(hit) honest?
 
+    tbot rescore <presses> --handover 1     # detection in a sensor process, tracks one frame stale (as live)
+
+`--handover N` runs the press the way the gun runs live (camera.detect_in_process): a child process replays the
+frames and detects, this process tracks and solves, and the scenery filter knows the tracks as they were N
+frames before the one the single loop would use (0 = the same: the answer must then equal the single loop's).
+
 A dry run by construction: no actuator exists in it.
 """
 
@@ -48,8 +54,14 @@ def _calibration(meta: dict, cfg: Config) -> Calibration:
     return calib
 
 
-def rerun(press: str | Path, cfg: Config, work_ms: float | None = None) -> tuple[score_tool.Session, list[dict]]:
-    """The press through today's pipeline. Returns (a Session over the new telemetry, that telemetry)."""
+def rerun(press: str | Path, cfg: Config, work_ms: float | None = None, handover: int | str | None = None,
+          raw: bool = False) -> tuple[score_tool.Session, list[dict]]:
+    """The press through today's pipeline. Returns (a Session over the new telemetry, that telemetry).
+    handover: None = the single loop; N = detection in a sensor process whose scenery filter is N frames
+    behind the single loop's (see the module docstring); "free" = the sensor process runs through the press
+    as fast as it can and this loop takes its newest frame, as live (`tbot cadence` times that; what it decides
+    depends on this computer's speed). raw: the telemetry as the
+    pipeline made it (not passed through JSON: the Session returned is then not for scoring)."""
     press = Path(press)
     cfg = score_tool.rig_config(cfg, press)
     cfg.fire.live = False                 # no actuator is built: decisions only
@@ -60,20 +72,33 @@ def rerun(press: str | Path, cfg: Config, work_ms: float | None = None) -> tuple
     work = float(cfg.sim.process_ms) if work_ms is None else float(work_ms)
     source = ReplaySource(press, work_ms=work)
     calib = _calibration(source.meta, cfg)
+    rows, n_frames, events = source._rows, source.n_frames, source.events
+    if handover is not None:
+        from tbot.camera.proc import SensorProcess  # noqa: PLC0415
+
+        if work <= 0.0:
+            raise ValueError("--handover needs a modelled work time (--work-ms > 0): the clock is the session's")
+        source.stop()
+        source = SensorProcess(cfg, calib, f"replay:{press}", detect=True, work_ms=work,
+                               lockstep=None if handover == "free" else int(handover))
+        if not source.detects:
+            source.stop()
+            raise RuntimeError("the sensor process could not run the detector")
     gpio = SimGpio()
     pin = int(cfg.arming.pin)
     pressed, released = (0, 1) if cfg.arming.active_low else (1, 0)
     gpio.inject(pin, released)
-    presses = sorted((int(e["t_ns"]), bool(e.get("armed"))) for e in source.events if e.get("type") == "arming")
+    presses = sorted((int(e["t_ns"]), bool(e.get("armed"))) for e in events if e.get("type") == "arming")
     pipe = Pipeline(cfg, calib, source, gpio=gpio)
     tel: list[dict] = []
     k = 0
     try:
         pipe.start()
-        rows = source._rows
-        for i in range(source.n_frames):
+        for i in range(n_frames):
             # the button as the shooter held it, set before the frame that first saw it that way
             t_next = int(rows[i][2])
+            if handover == "free":  # frames may be skipped: go by the last frame read (one frame late)
+                t_next = int(getattr(source, "_t_capture_ns", None) or rows[0][2])
             while k < len(presses) and presses[k][0] <= t_next:
                 gpio.inject(pin, pressed if presses[k][1] else released, presses[k][0])
                 if presses[k][1]:
@@ -82,14 +107,17 @@ def rerun(press: str | Path, cfg: Config, work_ms: float | None = None) -> tuple
             rec = pipe.step()
             if rec is None:
                 break
-            tel.append(json.loads(json.dumps(rec, default=float)))
+            if raw:
+                rec["wall_ns"] = time.perf_counter_ns()
+            tel.append(rec if raw else json.loads(json.dumps(rec, default=float)))
     finally:
         pipe.close()
     return score_tool.Session(press, cfg=cfg, telemetry=tel), tel
 
 
-def rescore(press: str | Path, cfg: Config, work_ms: float | None = None, every: bool = False) -> dict:
-    session, tel = rerun(press, cfg, work_ms)
+def rescore(press: str | Path, cfg: Config, work_ms: float | None = None, every: bool = False,
+            handover: int | None = None) -> dict:
+    session, tel = rerun(press, cfg, work_ms, handover)
     out = {"press": str(press), "frames": len(tel),
            "armed_frames": sum(1 for r in tel if r.get("armed")),
            "shots": score_tool.score(session),
@@ -131,6 +159,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--every", action="store_true", help="also score every frame that had a firing solution")
     p.add_argument("--work-ms", type=float, default=None,
                    help="the gun's own work per frame (default sim.process_ms; 0 = this computer's speed)")
+    p.add_argument("--handover", type=int, default=None, metavar="N",
+                   help="detect in a sensor process, its scenery filter N frames behind the single loop's "
+                        "(0 = same answer as the single loop, 1 = as the gun runs live)")
     p.add_argument("--json", action="store_true")
     args = p.parse_args(argv)
     logging.basicConfig(level=logging.WARNING)
@@ -140,7 +171,7 @@ def main(argv: list[str] | None = None) -> int:
     results = []
     for path in paths:
         try:
-            results.append(rescore(path, cfg, args.work_ms, every=args.every))
+            results.append(rescore(path, cfg, args.work_ms, every=args.every, handover=args.handover))
         except Exception as exc:  # noqa: BLE001 - one bad press must not stop the rest
             print(f"tbot rescore: {path}: {exc}", file=sys.stderr)
             status = 1
