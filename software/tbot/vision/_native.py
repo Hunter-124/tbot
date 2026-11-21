@@ -131,6 +131,7 @@ def _load() -> ctypes.CDLL | None:
     _load_scenery(lib)
     _load_track(lib)
     _load_front(lib)
+    _load_motion(lib)
     return lib
 
 
@@ -254,6 +255,152 @@ def _load_front(lib: ctypes.CDLL) -> None:
     front_status = "loaded"
 
 
+MOTION_ABI = 4        # TBOT_MOTION_ABI in _measure.c
+MOTION_DET_COLS = 15  # MO_DET_COLS: u, v, area, diameter, contrast, snr, score, bbox x, y, w, h, stab u, v, mass, minor
+motion_status = "not loaded"
+_motion = None
+
+
+class MotionReg(ctypes.Structure):
+    """tbot_motion_reg in _measure.c, field for field."""
+
+    _fields_ = [
+        ("hc", ctypes.c_int32), ("wc", ctypes.c_int32), ("hf", ctypes.c_int32), ("wf", ctypes.c_int32),
+        ("block", ctypes.c_int32), ("r_c", ctypes.c_int32),
+        ("gr", ctypes.c_int32), ("gc", ctypes.c_int32), ("field_r", ctypes.c_int32), ("use_field", ctypes.c_int32),
+        ("np_chunk", ctypes.c_int32), ("need_x", ctypes.c_int32), ("need_y", ctypes.c_int32), ("pad_", ctypes.c_int32),
+        ("cur_c", _ptr), ("cur_f", _ptr), ("tex_f", _ptr), ("ref_c", _ptr), ("ref_f", _ptr),
+        ("srcv_c", _ptr), ("srcv_f", _ptr), ("curv_c", _ptr), ("curv_f", _ptr),
+        ("wrc", _ptr), ("vrc", _ptr), ("wrf", _ptr), ("vrf", _ptr),
+        ("dx", _ptr), ("dy", _ptr), ("rx", _ptr), ("ry", _ptr),
+        ("ys", _ptr), ("xs", _ptr), ("field", _ptr), ("field_ok", _ptr),
+        ("lc", ctypes.c_double * 9), ("lf", ctypes.c_double * 9), ("lm", ctypes.c_double * 9),
+        ("min_overlap_frac", ctypes.c_double), ("black_dn", ctypes.c_double), ("gain_min", ctypes.c_double),
+        ("gain_max", ctypes.c_double), ("reg_min_response", ctypes.c_double), ("fit_std_min", ctypes.c_double),
+        ("cell_texture_frac", ctypes.c_double),
+        ("early", ctypes.c_int32), ("edge", ctypes.c_int32), ("curv", ctypes.c_int32),
+        ("n_ovl", ctypes.c_int32), ("n_tex", ctypes.c_int32), ("g0", ctypes.c_int32 * 2),
+        ("depth", ctypes.c_double), ("delta", ctypes.c_double * 2),
+        ("gq", ctypes.c_int32 * 2), ("a", ctypes.c_double), ("b", ctypes.c_double),
+    ]
+
+
+class MotionKParams(ctypes.Structure):
+    """tbot_motion_kparams in _measure.c, field for field."""
+
+    _fields_ = [
+        ("h", ctypes.c_int32), ("w", ctypes.c_int32), ("block", ctypes.c_int32), ("env", ctypes.c_int32),
+        ("cell", ctypes.c_int32), ("row_step", ctypes.c_int32), ("cfar_box", ctypes.c_int32), ("pad_", ctypes.c_int32),
+        ("ga", ctypes.c_int64), ("oa", ctypes.c_int64), ("gb", ctypes.c_int64), ("ob", ctypes.c_int64),
+        ("cur", _ptr), ("ref_a", _ptr), ("ref_b", _ptr), ("src_valid", _ptr), ("mask", _ptr),
+        ("dxa", _ptr), ("dya", _ptr), ("dxb", _ptr), ("dyb", _ptr),
+        ("wa", _ptr), ("wb", _ptr), ("va", _ptr), ("vb", _ptr), ("D", _ptr), ("binary", _ptr), ("thr", _ptr),
+        ("mD", _ptr), ("SD", _ptr), ("ND", _ptr), ("SA", _ptr), ("NA", _ptr), ("scratch", _ptr),
+        ("t_min_dn", ctypes.c_double), ("noise_k", ctypes.c_double), ("cfar_gain", ctypes.c_double),
+        ("texture_gain", ctypes.c_double), ("abs_to_sigma", ctypes.c_double), ("noise_quantile", ctypes.c_double),
+        ("noise_min_fill", ctypes.c_double), ("sigma_n", ctypes.c_double),
+    ]
+
+
+class MotionMeas(ctypes.Structure):
+    """tbot_motion_meas in _measure.c, field for field."""
+
+    _fields_ = [
+        ("h", ctypes.c_int32), ("w", ctypes.c_int32), ("cell", ctypes.c_int32), ("scale", ctypes.c_int32),
+        ("min_area", ctypes.c_int32), ("max_area", ctypes.c_int32), ("max_cand", ctypes.c_int32),
+        ("cap_runs", ctypes.c_int32),
+        ("binary", _ptr), ("D", _ptr), ("cur", _ptr), ("wa", _ptr), ("mD", _ptr),
+        ("joined", _ptr), ("runs", _ptr), ("out", _ptr),
+        ("S", ctypes.c_double * 9), ("pixel_box_var", ctypes.c_double), ("score_mass", ctypes.c_double),
+        ("n_labels", ctypes.c_int32), ("n_cand", ctypes.c_int32), ("n_out", ctypes.c_int32),
+        ("roi", ctypes.c_int32 * 4),
+    ]
+
+
+def _load_motion(lib: ctypes.CDLL) -> None:
+    """The motion detector's kernels (tbot_motion_*); a library built before them has none."""
+    global _motion, motion_status
+    try:
+        lib.tbot_motion_abi.restype = ctypes.c_int
+        abi = int(lib.tbot_motion_abi())
+        sizes = []
+        for nm in ("tbot_motion_reg_size", "tbot_motion_kparams_size", "tbot_motion_meas_size"):
+            f = getattr(lib, nm)
+            f.restype = ctypes.c_int
+            sizes.append(int(f()))
+    except AttributeError:
+        motion_status = "not in this build (rebuild with scripts/build_native.sh)"
+        return
+    want = [ctypes.sizeof(MotionReg), ctypes.sizeof(MotionKParams), ctypes.sizeof(MotionMeas)]
+    if abi != MOTION_ABI or sizes != want:
+        motion_status = f"stale (ABI {abi}, structs {sizes} bytes, want {want}): rebuild with scripts/build_native.sh"
+        log.warning("native motion kernel: %s; using the Python path", motion_status)
+        return
+    i32, i64, d, p = ctypes.c_int32, ctypes.c_int64, ctypes.c_double, _ptr
+    sig = {
+        "box_down2": (None, [p, i32, i32, p]),
+        "texture": (None, [p, i32, i32, i32, p, p, p]),
+        "prep": (None, [p, i32, i32, i32, i32, p, p, p, p, p, i32, p, p]),
+        "block_offsets": (None, [p, i32, i32, i32, i32, p, p, p, p, p, p, p, i32]),
+        "sum": (d, [p, i64, i32]),
+        "warp": (None, [p, p, i32, i32, p, p, i32, p, p]),
+        "gain": (None, [p, i64, i64, i64, p]),
+        "envelope": (None, [p, p, p, p, p, p, i32, i32, i32, p, p]),
+        "cell_sums": (None, [p, i32, i32, i32, i32, p]),
+        "absdiff_sums": (None, [p, p, p, i32, i32, i32, i32, p, p]),
+        "noise": (d, [p, p, i32, i32, i32, d, d, d]),
+        "threshold": (ctypes.c_int, [p, p, p, p, i32, i32, d, d, d, d, d, d, i32, p, p]),
+        "compare": (None, [p, i32, i32, p, i32, i32, p]),
+        "sad": (None, [p, p, p, p, i32, i32, i32, i32, i32, i32, i32, i32, i32, p, p]),
+        "sad_cells": (None, [p, p, p, p, i32, i32, i32, p, i32, p, i32, p, p]),
+        "photometric": (None, [p, p, p, i32, i32, d, d, d, d, p, p]),
+        "reg1": (ctypes.c_int, [p]),
+        "reg2": (ctypes.c_int, [p, d]),
+        "field_extra": (None, [p, i32, i32, i32, i32, p, p, p, p, p, p, d, p, p]),
+        "offsets": (None, [p, i32, i32, i32, p, i32, i32, p, p, p, p, p, p, d, p, p, p, p, p, p]),
+        "kernel": (ctypes.c_int, [p]),
+        "measure": (ctypes.c_int, [p]),
+    }
+    fns = {}
+    try:
+        for nm, (res, args) in sig.items():
+            f = getattr(lib, "tbot_motion_" + nm)
+            f.restype = res
+            f.argtypes = args
+            fns[nm] = f
+    except AttributeError as exc:
+        motion_status = f"incomplete build ({exc}): rebuild with scripts/build_native.sh"
+        return
+    chunk = _numpy_reduce_chunk(fns["sum"])
+    if chunk is None:
+        motion_status = "off (this NumPy's float64 summation order is not one the kernel knows)"
+        log.warning("native motion kernel: %s; using the Python path", motion_status)
+        return
+    fns["np_chunk"] = chunk
+    _motion = type("MotionKernel", (), fns)
+    motion_status = "loaded"
+
+
+def _numpy_reduce_chunk(c_sum) -> int | None:
+    """How this NumPy sums a contiguous float64 array (ndarray.sum / mean): pairwise over the whole array
+    (NumPy >= 2.3: 0) or over runs of 8192 elements (its buffer size before; 8192). None when neither model
+    reproduces it bit for bit on the probe arrays."""
+    rng = np.random.default_rng(12345)
+    probes = [rng.standard_normal(n) * 10.0 ** rng.integers(-4, 5, n) for n in (5, 300, 9000, 20011, 40000)]
+    for chunk in (0, 8192):
+        if all(float(c_sum(a.ctypes.data, a.size, chunk)) == float(a.sum()) for a in probes):
+            return chunk
+    return None
+
+
+def motion_kernel():
+    """The motion detector's C entry points (attributes prep, reg1, reg2, offsets, kernel, measure and the
+    primitives: ctypes functions) from the loaded library, or None (not built, stale, switched off)."""
+    if kernel() is None:
+        return None
+    return _motion
+
+
 def front_kernel():
     """(tbot_front_label, tbot_front_alone, tbot_noise_sigma, tbot_front_box, tbot_front_cells) from the loaded
     library, or None."""
@@ -290,13 +437,15 @@ def describe(enabled: bool = True) -> str:
     if not enabled:
         return "off (detector.native = false)"
     kernel()
-    return status
+    return f"{status}; motion kernel {motion_status}"
 
 
 def reload() -> ctypes.CDLL | None:
     """Forget the cached result and look again (tests; after a rebuild or an environment change)."""
-    global _tried, _scenery, scenery_status, _track, track_status, _front, front_status
+    global _tried, _scenery, scenery_status, _track, track_status, _front, front_status, _motion, motion_status
     _tried = False
+    _motion = None
+    motion_status = "not loaded"
     _front = None
     front_status = "not loaded"
     _scenery = None

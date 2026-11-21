@@ -70,6 +70,13 @@ class Rig:
         self.log = log
         self.tap = TapSource(source)
         self.actuator = actuator
+        # The bench procedures find a disc that STANDS on the monitor (geometry, flash latency) with a camera that
+        # stands too: the motion front end, which only sees what moves against the scenery, sees nothing there.
+        # The bench therefore runs the single-frame front end, whatever the gun is set to; what it measures (the
+        # geometry, the camera and actuator latencies, the arming chain) does not depend on the front end.
+        if str(getattr(getattr(cfg, "vision", None), "engine", "legacy")).strip().lower() != "legacy":
+            log("hitl: the bench runs the single-frame front end (vision.engine = legacy for this run)")
+            cfg.vision.engine = "legacy"
         self.pipeline = Pipeline(cfg, calib, self.tap, gpio=gpio, actuator=actuator, arming=arming, imu=imu)
         self.arming = self.pipeline.arming
         self.gpio = self.pipeline.gpio

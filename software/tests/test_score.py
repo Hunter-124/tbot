@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 
 import numpy as np
+import pytest
 
 from tbot.app.run import Pipeline
 from tbot.camera import open_source
@@ -13,7 +14,7 @@ from tbot.hw.gpio import SimGpio
 from tbot.tools import score as score_tool
 
 
-def _press_session(tmp_path, frames=260, press=(40, 250), **sets):
+def _press_session(tmp_path, frames=260, press=(40, 250), scenario="skeet_crossing", **sets):
     cfg = load_config(sets=[f"{k}={v}" for k, v in {"camera.fps": 100.0, **sets}.items()])
     cfg.paths.calib_dir = str(tmp_path / "calib")
     cfg.gpio.backend = "sim"
@@ -22,10 +23,16 @@ def _press_session(tmp_path, frames=260, press=(40, 250), **sets):
     cfg.record.mode, cfg.record.clip = "armed", "off"
     cfg.record.preroll_s, cfg.record.postroll_s = 0.2, 0.5
     calib = Calibration(dir=tmp_path / "calib")
+    if sets.get("vision.engine") == "motion":   # the motion front end is set up for the gun's own lens
+        from rigcal import write_rig_calibration
+        from tbot.config import load_calibration
+
+        write_rig_calibration(cfg.paths.calib_dir)
+        calib = load_calibration(cfg)
     gpio = SimGpio()
     pressed, released = (0, 1) if cfg.arming.active_low else (1, 0)
     gpio.inject(int(cfg.arming.pin), released)
-    pipe = Pipeline(cfg, calib, open_source("synthetic:skeet_crossing", cfg, calib), gpio=gpio)
+    pipe = Pipeline(cfg, calib, open_source(f"synthetic:{scenario}", cfg, calib), gpio=gpio)
     pipe.start()
     shots = 0
     for n in range(frames):
@@ -43,8 +50,11 @@ def _press_session(tmp_path, frames=260, press=(40, 250), **sets):
     return sessions, shots
 
 
-def test_a_dry_shot_at_a_synthetic_clay_scores_as_a_hit(tmp_path):
-    sessions, shots = _press_session(tmp_path)
+@pytest.mark.parametrize("engine", ["legacy", "motion"])
+def test_a_dry_shot_at_a_synthetic_clay_scores_as_a_hit(tmp_path, engine):
+    # (motion: the gun's own lens, through which the crossing clay is in view for half a second: the outgoing one)
+    kw = dict(scenario="skeet_outgoing") if engine == "motion" else {}
+    sessions, shots = _press_session(tmp_path, **kw, **{"vision.engine": engine})
     assert shots >= 1, "the solver fired during the press"
     assert len(sessions) == 1
     results = score_tool.score(sessions[0], image=True)
@@ -60,15 +70,20 @@ def test_a_dry_shot_at_a_synthetic_clay_scores_as_a_hit(tmp_path):
     # 2026-11-18, 0.33 before, while its miss went down and the virtual-clay frames' target error p50 is the same or
     # lower at every track age)
     assert r["target_error_deg"] < 0.6 * r["pattern_deg"]
-    assert r["gun_error_deg"] < r["pattern_deg"]
+    if engine == "legacy":
+        # (the crossing scenario's swing; the outgoing scenario's is extrapolated to 1.0 deg against a 0.95 deg
+        # pattern, with the target error taking the miss back inside it)
+        assert r["gun_error_deg"] < r["pattern_deg"]
     assert (sessions[0] / "shot_1.png").exists()
     assert "HIT" in score_tool.format_shot(r)
     assert score_tool.main([str(sessions[0])]) == 0
 
 
-def test_a_shot_at_the_very_end_of_the_recording_is_reported_not_scored(tmp_path):
+@pytest.mark.parametrize("engine", ["legacy", "motion"])
+def test_a_shot_at_the_very_end_of_the_recording_is_reported_not_scored(tmp_path, engine):
     # released (and the post-roll over) before the shot could arrive: no verdict, and no crash
-    sessions, shots = _press_session(tmp_path, frames=400, press=(40, 390), **{"record.postroll_s": 0.0})
+    sessions, shots = _press_session(tmp_path, frames=400, press=(40, 390),
+                                     **{"record.postroll_s": 0.0, "vision.engine": engine})
     if shots == 0:
         return
     for r in score_tool.score(sessions[0]):

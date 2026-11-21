@@ -56,7 +56,8 @@ def test_draw_record_busy_frame(rig):
     before = gray.copy()
     mask = np.full((400, 640), 255, np.uint8)
     mask[180:220, 0:40] = 0
-    out = overlay.draw_record(gray, _record(), cam, mount, mask=mask, bore_px=(320.0, 210.0), banner="t+0.100s")
+    out = overlay.draw_record(gray, _record(), cam, mount, mask=mask, bore_px=(320.0, 210.0), banner="t+0.100s",
+                              detail="debug")
     assert out.shape == (400, 640, 3) and out.dtype == np.uint8
     assert np.array_equal(gray, before), "the caller's frame is not modified"
     assert (out == overlay.C_DET).all(axis=2).sum() >= 20               # detection brackets in their colour
@@ -65,6 +66,36 @@ def test_draw_record_busy_frame(rig):
     assert out[200, 10, 0] > out[200, 10, 2]                            # the mask is washed blue
     assert np.array_equal(out[150, 600], [150, 150, 150])              # free sky is left alone
     assert not (out == overlay.C_FIRE).all(axis=2)[0:4, 100:540].any()  # no fire flash
+
+
+def test_clean_detail_is_the_default_and_draws_only_what_a_shooter_needs(rig):
+    """stream.overlay_detail = clean (the default): the target's rings, the solution, the bore and two text lines.
+    No detection brackets or chips, no scenery x, no mask wash, no tentative track, no timing line."""
+    cam, mount = rig
+    gray = _gray()
+    mask = np.full((400, 640), 255, np.uint8)
+    mask[180:220, 0:40] = 0
+    rec = _record()
+    clean = overlay.draw_record(gray, rec, cam, mount, mask=mask, bore_px=(320.0, 210.0))
+    assert np.array_equal(clean, overlay.draw_record(gray, rec, cam, mount, mask=mask, bore_px=(320.0, 210.0),
+                                                     detail="clean"))
+    debug = overlay.draw_record(gray, rec, cam, mount, mask=mask, bore_px=(320.0, 210.0), detail="debug")
+    assert (clean == overlay.C_DET).all(axis=2).sum() == 0            # no brackets, no chips
+    assert (debug == overlay.C_DET).all(axis=2).sum() >= 20
+    assert np.array_equal(clean[200, 10], [150, 150, 150])             # no mask wash
+    amber = (clean[..., 2] > 200) & (clean[..., 1] > 140) & (clean[..., 0] < 90)
+    assert amber.sum() >= 200                                           # the target's rings and chip
+    assert (clean == overlay.C_LEAD).all(axis=2).sum() >= 5             # the lead diamond
+    assert np.median(clean[-6:, :]) < 100                               # the one bottom line ...
+    band = overlay._band_height((True, [], []))
+    assert np.array_equal(clean[400 - band - 3, 600], [150, 150, 150])  # ... is one line high
+    assert np.median(debug[400 - band - 3, 300:600]) < 100              # (debug has two)
+    changed = (clean != gray[..., None]).any(axis=2)
+    assert changed[overlay.TOP_H:400 - band].mean() < (debug != gray[..., None]).any(axis=2)[
+        overlay.TOP_H:400 - band].mean()
+    # an unknown level is clean (the calm picture is the safe default)
+    assert np.array_equal(clean, overlay.draw_record(gray, rec, cam, mount, mask=mask, bore_px=(320.0, 210.0),
+                                                     detail="bogus"))
 
 
 def test_fire_flash_and_pattern(rig):
@@ -99,19 +130,22 @@ def test_fire_flash_and_pattern(rig):
      "decision": {"fire": False, "reason": "x", "lead_dir_w": [1.0, 0.0, 0.0], "bore_dir_w": [1.0, 0.0, 0.0],
                   "pattern_deg": 0.8}},
 ])
-def test_draw_record_tolerates_old_and_sparse_records(rig, rec):
+@pytest.mark.parametrize("detail", ["clean", "debug"])
+def test_draw_record_tolerates_old_and_sparse_records(rig, rec, detail):
     cam, mount = rig
-    out = overlay.draw_record(_gray(), json.loads(json.dumps(rec)), cam, mount, mask=None, bore_px=None)
+    out = overlay.draw_record(_gray(), json.loads(json.dumps(rec)), cam, mount, mask=None, bore_px=None,
+                              detail=detail)
     assert out.shape == (400, 640, 3) and out.dtype == np.uint8
 
 
+@pytest.mark.parametrize("detail", ["clean", "debug"])
 @pytest.mark.parametrize("shape", [(400, 640), (40, 60), (12, 16), (1, 1), (400, 640, 3), (400, 640, 1)])
-def test_draw_any_size(shape, rig):
+def test_draw_any_size(shape, detail, rig):
     cam, mount = rig
     img = np.full(shape, 90, np.uint8)
-    out = overlay.draw(img, telemetry=_record(), armed=True, fired=True, bore_px=(5.0, 5.0))
+    out = overlay.draw(img, telemetry=_record(), armed=True, fired=True, bore_px=(5.0, 5.0), detail=detail)
     assert out.shape == shape[:2] + (3,) and out.dtype == np.uint8
-    out = overlay.draw_record(img, _record(), cam, mount, banner="HELD t+0.010s  frame 1/2")
+    out = overlay.draw_record(img, _record(), cam, mount, banner="HELD t+0.010s  frame 1/2", detail=detail)
     assert out.shape == shape[:2] + (3,)
 
 
@@ -168,11 +202,12 @@ def test_overlay_cost(rig):
     mask = np.full((400, 640), 255, np.uint8)
     mask[300:, 250:390] = 0
     for _ in range(3):
-        overlay.draw_record(gray, rec, cam, mount, mask=mask, bore_px=(320.0, 200.0), banner="t+0.1s")
+        overlay.draw_record(gray, rec, cam, mount, mask=mask, bore_px=(320.0, 200.0), banner="t+0.1s", detail="debug")
     times = []
     for _ in range(25):
         t0 = time.perf_counter()
-        overlay.draw_record(gray, rec, cam, mount, mask=mask, bore_px=(320.0, 200.0), banner="t+0.1s")
+        overlay.draw_record(gray, rec, cam, mount, mask=mask, bore_px=(320.0, 200.0), banner="t+0.1s",
+                            detail="debug")
         times.append(time.perf_counter() - t0)
     # a PC draws this in ~1-2 ms, the Pi 3B in ~16 ms (four times the detections of a busy real frame)
     bound = 0.040 if platform.machine().lower() in ("aarch64", "arm64", "armv7l") else 0.015

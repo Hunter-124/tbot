@@ -133,6 +133,63 @@ class TrackerConfig:
 
 
 @dataclass
+class VisionTrackConfig:
+    """Track birth and upkeep of the motion front end (vision/tracker_motion.py)."""
+
+    init_hits: int
+    init_window_ms: float
+    init_gate_px: float
+    init_gate_frac: float
+    init_min_speed_dps: float
+    init_min_speed_gyro_dps: float
+    init_edge_px: float
+    init_max_speed_dps: float
+    init_min_travel_px: float
+    init_size_ratio: float
+    init_max_branches: int
+    max_misses: int
+    gate_sigma: float
+    gate_min_px: float
+    track_mass_ratio: float
+    init_max_rms_px: float
+    init_max_accel_dps2: float
+    init_mass_ratio: float
+    init_weak_mass: float
+    init_weak_extra_hits: int
+    same_sign: bool
+    init_gyro_frac: float
+    max_chains: int
+    max_coast_ms: float
+    stop_window_ms: float
+    duplicate_deg: float
+
+
+@dataclass
+class VisionConfig:
+    """Motion-first front end: vision/motion.py (detection) and vision/tracker_motion.py (tracks)."""
+
+    engine: str
+    scale: int
+    lag_a_ms: float
+    lag_b_ms: float
+    envelope_px: int
+    reg_downscale: int
+    reg_search_px: float
+    reg_min_response: float
+    local_field: bool
+    t_min_dn: float
+    noise_k: float
+    cfar_gain: float
+    texture_gain: float
+    cfar_cell_px: int
+    min_area_px: int
+    max_area_px: int
+    max_candidates: int
+    native: bool
+    track: VisionTrackConfig
+
+
+@dataclass
 class ImuConfig:
     enabled: bool
     i2c_bus: int
@@ -309,6 +366,7 @@ class StreamConfig:
     port: int
     fps: float
     jpeg_quality: int
+    overlay_detail: str = "clean"  # clean | debug (tbot/app/overlay.py): also the press clips' default
 
 
 @dataclass
@@ -375,6 +433,7 @@ class Config:
     mount: MountConfig
     detector: DetectorConfig
     tracker: TrackerConfig
+    vision: VisionConfig
     imu: ImuConfig
     attitude: AttitudeConfig
     gun: GunConfig

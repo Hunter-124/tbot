@@ -78,8 +78,9 @@ def test_ring_recorder_long_press_is_capped_by_ram_not_by_the_preroll(tmp_path):
 
 
 # ------------------------------------------------------------------------------------- pipeline + clip
-def test_pipeline_press_becomes_a_session_with_an_annotated_clip(tmp_path):
-    cfg = _cfg(tmp_path, **{"camera.fps": 60.0})
+@pytest.mark.parametrize("engine", ["legacy", "motion"])
+def test_pipeline_press_becomes_a_session_with_an_annotated_clip(tmp_path, engine):
+    cfg = _cfg(tmp_path, **{"camera.fps": 60.0, "vision.engine": engine})
     cfg.record.mode, cfg.record.clip = "armed", "inline"
     cfg.record.preroll_s, cfg.record.postroll_s = 0.2, 0.1
     calib = Calibration(dir=tmp_path / "calib")
@@ -114,7 +115,7 @@ def test_pipeline_press_becomes_a_session_with_an_annotated_clip(tmp_path):
              if dt[5] >= 8 and dt[6] >= 8 and dt[5] + dt[7] <= W - 8 and dt[6] + dt[8] <= H - 8]
     assert inner, "the clay was detected clear of the frame edge"
     seen = [inner[0][0]]
-    u, v, d, snr, _c, x, y, w, h, _a = inner[0][1]
+    u, v, d, snr, _c, x, y, w, h, _a = inner[0][1][:10]   # (the motion engine appends the mass)
     assert x - 1 <= u <= x + w + 1 and y - 1 <= v <= y + h + 1 and d > 0 and snr > 0
     assert len(seen[0]["R_wg"]) == 9 and "detector" in seen[0]
     clips = [p for p in s.iterdir() if p.stem == "clip"]
@@ -143,7 +144,7 @@ def test_draw_record_matches_the_live_overlay_inputs():
                         "sigma_deg": 0.5, "p_hit": 0.1, "lead_dir_w": [1.0, 0.01, 0.0], "bore_dir_w": [1.0, 0.0, 0.0]},
            "static": [[500.0, 300.0]], "exposure_us": 500.0, "gain": 1.0, "stage_ms": {"detect": 4.0}}
     gray = np.full((400, 640), 128, np.uint8)
-    out = overlay.draw_record(gray, json.loads(json.dumps(rec)), cam, mount, banner="t+0.100s")
+    out = overlay.draw_record(gray, json.loads(json.dumps(rec)), cam, mount, banner="t+0.100s", detail="debug")
     assert out.shape == (400, 640, 3) and out.dtype == np.uint8
     assert (out == overlay.C_DET).all(axis=2).sum() >= 20          # the detection's bounding box is drawn
     assert (out != 128).any(axis=2).sum() > 500                  # track ring, lead cross, text...
@@ -267,7 +268,7 @@ def test_scenery_filter_allows_for_parallax_of_near_scenery():
 
 
 def test_pipeline_arms_the_scenery_filter_only_with_a_real_attitude(tmp_path):
-    cfg = _cfg(tmp_path)
+    cfg = _cfg(tmp_path, **{"vision.engine": "legacy"})   # the scenery filter is the legacy front end's
     cfg.record.mode = "off"
     calib = Calibration(dir=tmp_path / "calib")
     pipe = Pipeline(cfg, calib, open_source("synthetic:skeet_crossing", cfg, calib), gpio=SimGpio())

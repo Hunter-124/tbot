@@ -25,6 +25,7 @@ from tbot.types import Detection, Track
 from tbot.vision import handover
 from tbot.vision.tracker3d import make_tracker
 
+# Detection in a sensor process is the LEGACY front end's (vision/handover.py refuses the motion engine).
 PRESSES = Path(__file__).resolve().parents[1] / "field_data" / "2026-11-17-range" / "presses"
 PRESS = PRESSES / "20261117-104603-press"   # 128 frames, trees, a swing, one shot
 needs_press = pytest.mark.skipif(not (PRESS / "frames.bin").exists(), reason="recorded range presses not here")
@@ -58,7 +59,7 @@ def test_result_round_trip():
 @pytest.mark.parametrize("model", ["cartesian", "angular"])
 def test_hints_predict_as_the_tracker_does(model):
     """The child predicts the hinted tracks with the tracker's own code from the states sent: to the bit."""
-    cfg = load_config(sets=[f"tracker.model={model}"])
+    cfg = load_config(sets=["vision.engine=legacy", f"tracker.model={model}"])
     cam = CameraModel.nominal(cfg, 640, 400)
     tracker = make_tracker(cfg, cam, MountModel.from_config(cfg, None))
     rng = np.random.default_rng(3)
@@ -90,8 +91,8 @@ def test_recorded_press_decides_the_same_through_the_sensor_process():
     made in the child."""
     from tbot.tools.rescore import rerun
 
-    _, single = rerun(PRESS, load_config())
-    _, split = rerun(PRESS, load_config(), handover=0)
+    _, single = rerun(PRESS, load_config(sets=["vision.engine=legacy"]))
+    _, split = rerun(PRESS, load_config(sets=["vision.engine=legacy"]), handover=0)
     assert len(split) == len(single) > 100
     assert any(r["decision"]["fire"] for r in single), "the press no longer has a shot: pick another"
     for a, b in zip(single, split):
@@ -110,7 +111,7 @@ def test_recorded_press_decides_the_same_through_the_sensor_process():
             assert db["p_hit"] == pytest.approx(da["p_hit"], abs=1e-6), where
         assert a["imu_age_ms"] == b["imu_age_ms"] and a["t_ns"] == b["t_ns"], where
 
-    _, stale = rerun(PRESS, load_config(), handover=1)
+    _, stale = rerun(PRESS, load_config(sets=["vision.engine=legacy"]), handover=1)
     assert len(stale) == len(single)
     ages = {r["handover"]["hints_age"] for r in stale}
     assert ages <= {None, 2}, ages
@@ -120,7 +121,7 @@ def test_recorded_press_decides_the_same_through_the_sensor_process():
 
 # ------------------------------------------------------------------------------------------ live shape
 def _cfg(tmp_path, *sets):
-    cfg = load_config(sets=["sim.process_ms=0.0", "camera.fps=50.0", *sets])
+    cfg = load_config(sets=["vision.engine=legacy", "sim.process_ms=0.0", "camera.fps=50.0", *sets])
     cfg.paths.calib_dir = str(tmp_path / "calib")
     cfg.gpio.backend = "sim"
     cfg.record.mode = "off"

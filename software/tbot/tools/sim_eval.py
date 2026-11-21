@@ -486,6 +486,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.seeds < 1:
         parser.error("--seeds must be >= 1")
 
+    print(f"front end: vision.engine = {getattr(getattr(cfg, 'vision', None), 'engine', 'legacy')}", flush=True)
     runs = []
     rendered = []
     for name in names:
@@ -535,6 +536,7 @@ def main(argv: list[str] | None = None) -> int:
         payload = {
             "created": now_iso(),
             "actuator_delay_ms": args.actuator_delay_ms,
+            "vision_engine": str(getattr(getattr(cfg, "vision", None), "engine", "legacy")),
             "camera": {"width": cfg.camera.width, "height": cfg.camera.height, "fps": cfg.camera.fps},
             "runs": runs,
             "summary": summary,

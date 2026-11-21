@@ -19,3 +19,5 @@ config/backups/
 /calib_runs/
 /logs/
 config/console.json
+# benchmark runs of tbot vbench (large, and only reproducible with the recorded presses)
+/bench_data/results/

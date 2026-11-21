@@ -12,7 +12,7 @@ import pytest
 from tbot.app.run import Pipeline
 from tbot.camera import open_source
 from tbot.camera.synthetic import SyntheticSource
-from tbot.config import Calibration, LatencyBudget, load_config
+from tbot.config import Calibration, LatencyBudget, load_calibration, load_config
 from tbot.hw.gpio import SimGpio
 from tbot.tools.sim_eval import evaluate_run
 from tbot.types import MonotonicClock, SimClock
@@ -23,6 +23,10 @@ RANGE = Path(__file__).resolve().parents[1] / "field_data" / "2026-11-17-range"
 def _cfg(tmp_path, *sets):
     cfg = load_config(sets=["camera.fps=100.0", *sets])
     cfg.paths.calib_dir = str(tmp_path / "calib")
+    if "vision.engine=motion" in sets:   # the motion front end is set up for the gun's own lens
+        from rigcal import write_rig_calibration
+
+        write_rig_calibration(cfg.paths.calib_dir)
     cfg.gpio.backend = "sim"
     cfg.stream.enabled = False
     cfg.record.mode = "off"
@@ -98,22 +102,27 @@ def test_every_frame_without_modelled_work_time(tmp_path):
     assert seqs == list(range(30))
 
 
-def test_the_simulator_repeats_exactly(tmp_path):
-    cfg = _cfg(tmp_path)
+@pytest.mark.parametrize("engine", ["legacy", "motion"])
+def test_the_simulator_repeats_exactly(tmp_path, engine):
+    cfg = _cfg(tmp_path, f"vision.engine={engine}")
     assert cfg.sim.process_ms > 0.0
-    calib = Calibration(dir=tmp_path / "calib")
+    calib = load_calibration(cfg)
     a = evaluate_run(cfg, calib, "trap_straightaway", 1)
     b = evaluate_run(cfg, calib, "trap_straightaway", 1)
     key = lambda r: json.dumps(r, sort_keys=True, default=str)  # noqa: E731
     assert key(a) == key(b)
 
 
-def test_command_goes_out_at_the_planned_instant_and_one_delay_before_the_exit(tmp_path):
-    cfg = _cfg(tmp_path, "actuator.type=sim")
+@pytest.mark.parametrize("engine", ["legacy", "motion"])
+def test_command_goes_out_at_the_planned_instant_and_one_delay_before_the_exit(tmp_path, engine):
+    cfg = _cfg(tmp_path, "actuator.type=sim", f"vision.engine={engine}")
     cfg.fire.live = True
-    calib = Calibration(dir=tmp_path / "calib")
+    calib = load_calibration(cfg)
     gpio = SimGpio()
-    pipe = Pipeline(cfg, calib, open_source("synthetic:static_gun", cfg, calib), gpio=gpio)
+    # (through the gun's 18 degree lens, the motion variant's calibration, the static-gun clay never comes near
+    # the bore: the incoming one does)
+    scenario = "skeet_incoming" if engine == "motion" else "static_gun"
+    pipe = Pipeline(cfg, calib, open_source(f"synthetic:{scenario}", cfg, calib), gpio=gpio)
     fired = None
     with pipe:
         gpio.inject(int(cfg.arming.pin), 0 if cfg.arming.active_low else 1)
@@ -122,7 +131,7 @@ def test_command_goes_out_at_the_planned_instant_and_one_delay_before_the_exit(t
             if t["fired"]:
                 fired = t
                 break
-    assert fired is not None, "the static-gun scenario gets a shot"
+    assert fired is not None, "the scenario gets a shot"
     assert fired["cmd_t_ns"] == fired["fire_at_ns"] >= fired["t_ns"]
     delay_ns = int(round(pipe.budget.fire_delay_s("sim") * 1e9))
     assert fired["decision"]["t_exit_ns"] == fired["fire_at_ns"] + delay_ns

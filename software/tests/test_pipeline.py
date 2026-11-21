@@ -18,12 +18,18 @@ from tbot.config import load_calibration, load_config
 from tbot.types import Detection, FireDecision, MonotonicClock, Frame, Track
 
 WATCHDOG_MS = 60.0
+# the pipeline requirements below hold for both vision front ends (vision.engine)
+ENGINES = pytest.mark.parametrize("engine", ["legacy", "motion"])
 
 
-def base_cfg(tmp_path):
+def base_cfg(tmp_path, engine="legacy"):
     """Default config with an empty calibration dir, simulated GPIO and no recording/streaming."""
-    cfg = load_config()
+    cfg = load_config(sets=[f"vision.engine={engine}"])
     cfg.paths.calib_dir = str(tmp_path / "calib")
+    if engine == "motion":
+        from rigcal import write_rig_calibration   # the motion front end is set up for the gun's own lens
+
+        write_rig_calibration(cfg.paths.calib_dir)
     cfg.gpio.backend = "sim"
     cfg.record.mode = "off"
     cfg.stream.enabled = False
@@ -100,7 +106,8 @@ class StallingSource:
 
 
 # --------------------------------------------------------------------------------------------- sim
-def test_fire_path_commands_the_actuator_once_per_press(tmp_path):
+@ENGINES
+def test_fire_path_commands_the_actuator_once_per_press(engine, tmp_path):
     """End-to-end fire path, independent of tracking ACCURACY (vision quality is benchmarked by `tbot sim`).
 
     The probability gate is lowered to 0.05 so the solver reaches a fire decision whatever the current
@@ -111,7 +118,7 @@ def test_fire_path_commands_the_actuator_once_per_press(tmp_path):
     """
     from tbot.tools.sim_eval import evaluate_run
 
-    cfg, calib = base_cfg(tmp_path)
+    cfg, calib = base_cfg(tmp_path, engine)
     cfg.camera.fps = 50.0
     cfg.fire.min_hit_probability = 0.05  # gate reachable regardless of vision accuracy (not a quality claim)
     cfg.fire.max_shots_per_arm = 3       # the press allows several shots; one clay must still get one
@@ -133,10 +140,11 @@ def test_fire_path_commands_the_actuator_once_per_press(tmp_path):
         assert math.isfinite(shot["predicted"]["p_hit"])
 
 
-def test_no_clay_scenario_never_fires(tmp_path):
+@ENGINES
+def test_no_clay_scenario_never_fires(engine, tmp_path):
     from tbot.tools.sim_eval import evaluate_run
 
-    cfg, calib = base_cfg(tmp_path)
+    cfg, calib = base_cfg(tmp_path, engine)
     cfg.camera.fps = 30.0
     res = evaluate_run(cfg, calib, "no_clay", 1)
 
@@ -145,10 +153,11 @@ def test_no_clay_scenario_never_fires(tmp_path):
     assert res["shots"] == []
 
 
-def test_interlock_open_blocks_fire_but_still_decides(tmp_path):
+@ENGINES
+def test_interlock_open_blocks_fire_but_still_decides(engine, tmp_path):
     from tbot.tools.sim_eval import evaluate_run
 
-    cfg, calib = base_cfg(tmp_path)
+    cfg, calib = base_cfg(tmp_path, engine)
     cfg.camera.fps = 50.0
     res = evaluate_run(cfg, calib, "skeet_crossing", 1, armed=False, max_frames=40)
 
@@ -159,11 +168,12 @@ def test_interlock_open_blocks_fire_but_still_decides(tmp_path):
     assert any("arm" in r.lower() for r in res["reasons"]), res["reasons"]
 
 
-def test_dry_run_never_commands_the_actuator(tmp_path):
+@ENGINES
+def test_dry_run_never_commands_the_actuator(engine, tmp_path):
     from tbot.camera.synthetic import SyntheticSource
     from tbot.hw.gpio import open_gpio
 
-    cfg, calib = base_cfg(tmp_path)
+    cfg, calib = base_cfg(tmp_path, engine)
     cfg.camera.fps = 50.0
     cfg.fire.live = False
     cfg.fire.min_hit_probability = 0.05  # reach a fire decision regardless of vision accuracy
@@ -189,8 +199,9 @@ def test_dry_run_never_commands_the_actuator(tmp_path):
 
 
 # --------------------------------------------------------------------------------------------- watchdog
-def test_watchdog_aborts_when_frames_stop(tmp_path):
-    cfg, calib = base_cfg(tmp_path)
+@ENGINES
+def test_watchdog_aborts_when_frames_stop(engine, tmp_path):
+    cfg, calib = base_cfg(tmp_path, engine)
     cfg.fire.watchdog_ms = WATCHDOG_MS
     source = StallingSource(n_frames=3)
     act = FakeActuator()
@@ -206,8 +217,9 @@ def test_watchdog_aborts_when_frames_stop(tmp_path):
     assert pipe.watchdog_aborts >= 1
 
 
-def test_telemetry_shape_from_a_live_step(tmp_path):
-    cfg, calib = base_cfg(tmp_path)
+@ENGINES
+def test_telemetry_shape_from_a_live_step(engine, tmp_path):
+    cfg, calib = base_cfg(tmp_path, engine)
     source = StallingSource(n_frames=2)
     pipe = Pipeline(cfg, calib, source)
     try:
@@ -378,6 +390,7 @@ def test_overlay_draw_returns_bgr_of_input_size(color):
         track_lead={3: np.array([1.0, 0.2, 0.03])},
         armed=True,
         fired=True,
+        detail="debug",
     )
 
     assert out.shape == (40, 60, 3)
@@ -408,17 +421,20 @@ def test_overlay_draw_skips_unprojectable_directions():
     assert out.shape == (40, 60, 3)
 
 
-def test_no_shot_while_the_imu_stream_is_stopped(tmp_path):
+@ENGINES
+def test_no_shot_while_the_imu_stream_is_stopped(engine, tmp_path):
     """An IMU that stops delivering (I2C fault, sensor process being replaced) freezes the attitude and the
     swing the solver extrapolates: the pipeline must refuse to fire rather than shoot on stale motion."""
     from tbot.camera.synthetic import SyntheticSource
     from tbot.hw.gpio import open_gpio
 
-    cfg, calib = base_cfg(tmp_path)
+    cfg, calib = base_cfg(tmp_path, engine)
     cfg.camera.fps = 50.0
     cfg.fire.live = False
     cfg.fire.min_hit_probability = 0.05
-    source = SyntheticSource(cfg, calib, scenario="skeet_crossing", seed=1)
+    # (through the gun's 18 degree lens the crossing clay is in view for half a second; the incoming one is the
+    # scenario the motion front end's variant gets a firing solution on)
+    source = SyntheticSource(cfg, calib, scenario="skeet_incoming" if engine == "motion" else "skeet_crossing", seed=1)
     gpio = open_gpio(cfg)
     pipe = Pipeline(cfg, calib, source, gpio=gpio, actuator=FakeActuator())
     gpio.inject(int(cfg.arming.pin), 0 if cfg.arming.active_low else 1)

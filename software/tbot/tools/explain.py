@@ -72,22 +72,44 @@ def _truth_diagnostics(source, pipe, t_ns, exposure_us):
     if p0 is not None and p1 is not None:
         result['motion_px'] = math.hypot(p1[0] - p0[0], p1[1] - p0[1])
     det = pipe.cfg.detector
-    threshold = max(float(det.k_sigma) * pipe.detector.noise_sigma, float(det.min_contrast))
-    result['threshold_dn'] = _finite(threshold)
-    debug = pipe.detector.debug
     radius = max(2, min(20, int(math.ceil((result['diameter_px_upper'] or 2) / 2 + (result['motion_px'] or 0) / 2 + 1))))
     x0, x1 = max(0, ui-radius), min(source.width, ui+radius+1)
     y0, y1 = max(0, vi-radius), min(source.height, vi+radius+1)
-    contrast = debug['contrast'][y0:y1, x0:x1]
-    signed = contrast if det.polarity == 'bright' else -contrast if det.polarity == 'dark' else np.abs(contrast)
-    result['peak_contrast_dn'] = float(np.max(signed))
-    result['threshold_pixels'] = int(np.count_nonzero(debug['binary'][y0:y1, x0:x1]))
+    debug = pipe.detector.debug or {}
+    if getattr(pipe, 'engine', 'legacy') == 'motion':
+        # motion engine: the residual against the registered background (D, DN) and the pixels over its CFAR bar,
+        # at the detector's working scale; the bar itself varies with the clutter around it: t_min_dn is its floor
+        vc = pipe.cfg.vision
+        threshold = float(getattr(vc, 't_min_dn', getattr(vc, 't0_dn', 0.0)))
+        result['threshold_dn'] = _finite(threshold)
+        s = max(1, int(getattr(pipe.detector, 'scale', 1) or 1))
+        D, binary = debug.get('D'), debug.get('binary')
+        if D is None or binary is None:   # no frame pair to compare yet (the first frames)
+            result['peak_contrast_dn'] = 0.0
+            result['threshold_pixels'] = 0
+        else:
+            sl = (slice(y0 // s, max(y0 // s + 1, y1 // s)), slice(x0 // s, max(x0 // s + 1, x1 // s)))
+            win = np.asarray(D)[sl]
+            result['peak_contrast_dn'] = float(np.max(win)) if win.size else 0.0
+            result['threshold_pixels'] = int(np.count_nonzero(np.asarray(binary)[sl])) * s * s
+    else:
+        threshold = max(float(det.k_sigma) * pipe.detector.noise_sigma, float(det.min_contrast))
+        result['threshold_dn'] = _finite(threshold)
+        contrast = debug['contrast'][y0:y1, x0:x1]
+        signed = contrast if det.polarity == 'bright' else -contrast if det.polarity == 'dark' else np.abs(contrast)
+        result['peak_contrast_dn'] = float(np.max(signed))
+        result['threshold_pixels'] = int(np.count_nonzero(debug['binary'][y0:y1, x0:x1]))
     factors = []
     if not result['in_mask']:
         factors.append('masked centre')
     if result['peak_contrast_dn'] <= threshold:
         factors.append('local contrast below threshold')
-    if result['threshold_pixels'] < int(det.min_area_px):
+    if getattr(pipe, 'engine', 'legacy') == 'motion':   # vision.min_area_px is in working pixels
+        s = max(1, int(getattr(pipe.detector, 'scale', 1) or 1))
+        min_area = int(pipe.cfg.vision.min_area_px) * s * s
+    else:
+        min_area = int(det.min_area_px)
+    if result['threshold_pixels'] < min_area:
         factors.append('local threshold area below minimum')
     if result['motion_px'] is not None and result['motion_px'] >= 0.5:
         factors.append('motion blur >= 0.5 px')
@@ -121,6 +143,8 @@ def explain_run(cfg, calib, source_spec='synthetic:skeet_crossing', seed=1, fram
         raise ValueError('source must be synthetic:<scenario> or replay:<session>')
     gpio = SimGpio()
     pipe = Pipeline(cfg, calib, source, gpio=gpio)
+    if getattr(pipe, 'engine', 'legacy') == 'motion':
+        pipe.detector.keep_debug = True   # the residual and its threshold image of every frame (cfg.detector.debug is legacy)
     if kind == 'synthetic':
         gpio.inject(int(cfg.arming.pin), 0 if cfg.arming.active_low else 1)
     rows = []

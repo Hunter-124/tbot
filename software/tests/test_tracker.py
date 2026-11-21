@@ -24,6 +24,8 @@ DT_NS = int(round(1e9 / FPS))
 T0 = 1_000_000_000
 
 
+# These pin the LEGACY trackers (tracker3d births, angular): vision.engine=legacy, else make_tracker
+# returns the motion tracker for tracker.model=cartesian (tests/test_motion_tracker.py covers that one).
 def _frame_from_azel(az: float, el: float) -> np.ndarray:
     """R_wg of a gun whose bore points at (az, el) with zero roll (columns = gun axes in world)."""
     x = np.asarray(azel_to_dir(az, el), dtype=float).reshape(3)
@@ -87,7 +89,7 @@ def _angle(a: np.ndarray, b: np.ndarray) -> float:
 @pytest.fixture(params=["angular", "cartesian"])
 def cfg(request):
     """Every behaviour test runs against both tracker models."""
-    return load_config(sets=[f"tracker.model={request.param}"])
+    return load_config(sets=["vision.engine=legacy", f"tracker.model={request.param}"])
 
 
 def test_crossing_clay_is_tracked_confirmed_and_predicted(cfg):
@@ -293,7 +295,7 @@ def test_cartesian_tracker_predicts_a_receding_clay_far_better_than_the_angular_
     fps, horizon_s = 50.0, 0.14
     errs, sig = {}, {}
     for model in ("angular", "cartesian"):
-        cfg = load_config(sets=[f"tracker.model={model}"])
+        cfg = load_config(sets=["vision.engine=legacy", f"tracker.model={model}"])
         scene = Scene(cfg)
         att = FixedAttitude(math.radians(20.0), math.radians(5.0))
         tracker = make_tracker(cfg, scene.cam, scene.mount)
@@ -316,7 +318,7 @@ def test_cartesian_tracker_predicts_a_receding_clay_far_better_than_the_angular_
 
 
 def test_cartesian_angular_rate_and_range_follow_the_3d_state():
-    cfg = load_config(sets=["tracker.model=cartesian"])
+    cfg = load_config(sets=["vision.engine=legacy", "tracker.model=cartesian"])
     scene = Scene(cfg)
     att = FixedAttitude(0.0, math.radians(8.0))
     tracker = make_tracker(cfg, scene.cam, scene.mount)
@@ -344,7 +346,7 @@ def test_native_filter_step_matches_the_numpy_reference():
 
     if _native.track_kernel() is None:
         pytest.skip(f"native tracker step: {_native.track_status}")
-    cfg = load_config(sets=["tracker.model=cartesian"])
+    cfg = load_config(sets=["vision.engine=legacy", "tracker.model=cartesian"])
     scene = Scene(cfg)
     att = FixedAttitude(0.0, math.radians(8.0))
     fast, ref = make_tracker(cfg, scene.cam, scene.mount), make_tracker(cfg, scene.cam, scene.mount)
@@ -370,7 +372,7 @@ def test_native_filter_step_matches_the_numpy_reference():
 
 
 def test_make_tracker_rejects_an_unknown_model():
-    cfg = load_config(sets=["tracker.model=bogus"])
+    cfg = load_config(sets=["vision.engine=legacy", "tracker.model=bogus"])
     scene = Scene(cfg)
     with pytest.raises(ValueError):
         make_tracker(cfg, scene.cam, scene.mount)
@@ -378,7 +380,7 @@ def test_make_tracker_rejects_an_unknown_model():
 
 # ------------------------------------------------------------------ 2026-11-19 range day: clutter around the clay
 def _cart():
-    return load_config(sets=["tracker.model=cartesian"])
+    return load_config(sets=["vision.engine=legacy", "tracker.model=cartesian"])
 
 
 def _feed(tracker, scene, att, n0, n1, pos_of, extra=lambda n, t: []):
@@ -416,7 +418,7 @@ def _recorded(name):
     import dataclasses
 
     d = json.loads((Path(__file__).parent / "data" / "range_2026-11-19_clutter.json").read_text())[name]
-    raw = dataclasses.asdict(load_config())
+    raw = dataclasses.asdict(load_config(sets=["vision.engine=legacy"]))
     for sec, v in d["config"].items():
         raw[sec] = _fill({k: x for k, x in v.items() if k in raw[sec]}, raw[sec])
     cfg = _build(Config, raw, "")

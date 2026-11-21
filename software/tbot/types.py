@@ -63,6 +63,13 @@ class Detection:
     snr: float  # |contrast| / noise sigma
     score: float  # 0..1
     bbox: tuple[int, int, int, int]  # x, y, w, h
+    # motion front end (vision/motion.py); the legacy detector leaves these at their defaults
+    stab: tuple[float, float] | None = None  # centroid in background-stabilised pixels (scenery stands still there)
+    # the same as a unit direction in the detector's stabilised frame: the plane of `stab` is the picture of the
+    # first frame, stretched without bound as the gun turns 60-90 degrees away from it; a direction is not
+    stab_dir: tuple[float, float, float] | None = None
+    mass: float = 0.0  # summed residual against the registered background, DN * px
+    reg_ok: bool = True  # stab rests on image registration (False: on the gyro alone, e.g. open sky)
 
 
 @dataclass(slots=True)

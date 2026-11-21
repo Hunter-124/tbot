@@ -16,6 +16,7 @@ from tbot.tools import rescore as rescore_tool
 from tbot.tools import score as score_tool
 from tbot.tools import vclay
 
+# The virtual-clay bench and its numbers were made with the LEGACY front end: pinned to it.
 RANGE = Path(__file__).resolve().parents[1] / "field_data" / "2026-11-17-range"
 PRESS = RANGE / "presses" / "20261117-105308-press"      # 2.5 s held, a clay followed, a fire command
 needs_press = pytest.mark.skipif(not (PRESS / "imu.csv").exists(), reason="range-day field data not present")
@@ -26,14 +27,14 @@ needs_frames = pytest.mark.skipif(not (PRESS / "frames.bin").exists() or (PRESS 
 
 @pytest.fixture(scope="module")
 def stage():
-    cfg = score_tool.rig_config(load_config(), PRESS)
+    cfg = score_tool.rig_config(load_config(sets=["vision.engine=legacy"]), PRESS)
     return cfg, vclay.Press(PRESS, cfg), vclay.Bench(cfg)
 
 
 @needs_press
 def test_rig_config_takes_the_gun_from_the_press_and_the_decisions_from_today(stage):
     cfg, press, bench = stage
-    today = load_config()
+    today = load_config(sets=["vision.engine=legacy"])
     assert cfg.optics.model == "pinhole" and cfg.optics.focal_length_mm == 12.0     # the gun's lens
     assert cfg.shot.pattern_radius_ref_m == pytest.approx(0.30)                      # the gun's choke and load
     assert cfg.fire.min_hit_probability == today.fire.min_hit_probability            # today's rule
@@ -122,7 +123,7 @@ def test_causal_attitude_knows_nothing_after_its_limit(stage):
 # ------------------------------------------------------------------ rescore: the real frames again
 @needs_frames
 def test_rescore_runs_a_real_press_through_todays_software_and_repeats():
-    cfg = load_config()
+    cfg = load_config(sets=["vision.engine=legacy"])
     one = rescore_tool.rescore(PRESS, cfg, every=True)
     two = rescore_tool.rescore(PRESS, cfg)
     assert one["armed_frames"] > 50 and one["delay_ms"] == pytest.approx(164.0, abs=1.0)
@@ -138,7 +139,7 @@ def test_rescore_runs_a_real_press_through_todays_software_and_repeats():
 
 @needs_frames
 def test_rescore_holds_the_button_when_the_shooter_did():
-    cfg = load_config()
+    cfg = load_config(sets=["vision.engine=legacy"])
     session, tel = rescore_tool.rerun(PRESS, cfg)
     armed = [r for r in tel if r["armed"]]
     events = [e for e in session.events if e.get("type") == "arming"]

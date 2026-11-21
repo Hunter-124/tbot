@@ -196,6 +196,28 @@ Clay physics: launch speed/angle per scenario, gravity, quadratic drag; clay pos
 cfg.sim.gyro_noise) at cfg.imu.sample_rate_hz from the scenario's swing. Simulated timestamps start at
 1_000_000_000 ns. Deterministic for a given seed.
 
+### tbot/vision/motion.py, tbot/vision/tracker_motion.py [vision: the default front end since 2026-11-20]
+`vision.engine = "motion"` (docs/VISION_MOTION.md). `"legacy"` selects the detector / scenery filter / tracker
+births described in the next two sections, unchanged.
+```python
+class MotionDetector:                         # what moves against the registered scenery
+    def __init__(self, cfg, mask=None, cam=None, mount=None)
+    def detect(self, frame: Frame, R_wg: np.ndarray | None = None) -> list[Detection]
+        # R_wg: gun -> world at the frame's mid-exposure (None: registration from the picture alone).
+        # Detections carry, besides the usual fields: stab_dir (unit direction in the stabilised frame),
+        # stab (the same in the plane of the first frame), mass (summed residual, DN px), reg_ok.
+    def reset(self) -> None                   # camera restart: forget every earlier frame
+    def set_mask(self, mask) -> None
+    timings_ms: dict; stats: dict; noise_sigma: float; scale: int
+
+class MotionTracker(CartesianClayTracker):    # tracker3d's EKF and API; tracks are born from a path only
+    def update(self, t_ns, detections, R_wg) -> list[Track]   # every frame, with or without detections
+```
+The pipeline (app/run.py) resets the tracker whenever it resets the detector; a detector or tracker exception
+costs that frame (no detections / no tracks, counted in telemetry `vision.errors`), not the loop. Telemetry of
+this engine: `dets` rows have an 11th field (mass), `static` is null, and `vision` holds
+`{engine, chains, seeds, tracks, born, reg_ok, reg_shift_px, noise_dn, errors}`.
+
 ### tbot/vision/detector.py, tbot/tools/calib_detector.py [detector]
 ```
 class ClayDetector:

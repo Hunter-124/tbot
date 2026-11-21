@@ -25,6 +25,7 @@ W, H = 640, 400
 PRESSES = Path(__file__).resolve().parents[1] / "field_data" / "2026-11-17-range" / "presses"
 
 
+# The scenery filter (and its C kernel) belongs to the LEGACY front end: pinned to it.
 def _cams(cfg):
     K = [[2009.0, 0.0, 319.5], [0.0, 2011.0, 199.5], [0.0, 0.0, 1.0]]
     return [
@@ -48,8 +49,8 @@ def _rot(yaw, pitch, roll):
 
 
 def _pair(cam, mount, sets=()):
-    nat = StaticFilter(load_config(sets=[*sets, "detector.native=true"]), cam, mount)
-    ref = StaticFilter(load_config(sets=[*sets, "detector.native=false"]), cam, mount)
+    nat = StaticFilter(load_config(sets=["vision.engine=legacy", *sets, "detector.native=true"]), cam, mount)
+    ref = StaticFilter(load_config(sets=["vision.engine=legacy", *sets, "detector.native=false"]), cam, mount)
     return nat, ref
 
 
@@ -67,7 +68,7 @@ def _same(nat, ref, a, b, where):
 def test_swinging_through_scenery_gives_the_same_candidates(cam_i, bias_dps):
     """bias_dps: the attitude the filter is given drifts at this rate (a gyro bias, about the camera's y axis),
     so fixed scenery slides across its world and only the drift estimate lets it be called scenery."""
-    cfg = load_config()
+    cfg = load_config(sets=["vision.engine=legacy"])
     cam = _cams(cfg)[cam_i]
     mount = MountModel.from_config(cfg, {"rpy_deg": [0.4, -1.9, -1.7]})
     nat, ref = _pair(cam, mount)
@@ -136,7 +137,7 @@ def _axis_angle(a, th):
 
 
 def test_reset_and_a_clock_going_back():
-    cfg = load_config()
+    cfg = load_config(sets=["vision.engine=legacy"])
     cam = CameraModel.nominal(cfg, W, H)
     mount = MountModel.from_config(cfg, None)
     nat, ref = _pair(cam, mount)
@@ -172,7 +173,7 @@ def test_range_presses_give_the_same_scenery_and_detections():
         runs = []
         for native in ("true", "false"):
             # detector.native also switches the measurement kernel; positions are compared to 0.01 px
-            cfg = load_config(sets=["gpio.backend=sim", "record.mode=off", "stream.enabled=false",
+            cfg = load_config(sets=["vision.engine=legacy", "gpio.backend=sim", "record.mode=off", "stream.enabled=false",
                                     f"detector.native={native}"])
             src = ReplaySource(str(press), realtime=False)
             gpio = open_gpio(cfg)

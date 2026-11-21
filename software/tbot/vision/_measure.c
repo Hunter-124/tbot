@@ -1450,3 +1450,1395 @@ TBOT_API int tbot_front_cells(const uint8_t *absd, int32_t h, int32_t w, int32_t
     free(col);
     return 0;
 }
+
+/* ================================================================================================ motion
+ * The per-frame work of the motion-first detector (tbot/vision/motion.py, MotionDetector.detect), which stays as
+ * the reference and the fallback (vision.native = false, TBOT_NATIVE=0, or this family missing / stale).
+ *
+ *   tbot_motion_prep     box_down2 chain frame -> working -> fine -> coarse, texture_map and texture_tensor
+ *   tbot_motion_reg1     _register up to the acceptance test: coarse warp, ratio-of-means gain, coarse SAD
+ *                        surface, fine search with recentring, parabolic sub-pixel, texture counts
+ *   tbot_motion_reg2     _register after it: warp by the final transform, photometric_fit, _local_field
+ *   tbot_motion_offsets  _field_extra + block_offsets for the working-resolution warp
+ *   tbot_motion_kernel   motion_kernel: warps, gains, envelope residual, cell sums, noise sigma, CFAR, compare
+ *   tbot_motion_measure  bounding box, 3x3 closing, 8-connected labels (OpenCV's numbering), moments, ranking and
+ *                        the per-candidate numbers of MotionDetector._measure
+ * and the primitives they are made of (exported for the parity tests: tests/test_native_motion.py).
+ *
+ * Integer functions are exact. Floating-point code follows the NumPy expressions operation by operation (this
+ * file is built with -ffp-contract=off): sums of float64 arrays are NumPy's pairwise summation, percentiles its
+ * "linear" method, medians the mean of the two middle values, max / min where Python's builtins are used have
+ * their argument-order semantics. Anything computed with BLAS / LAPACK / cv2.findHomography in the reference
+ * (the prior, the level matrices) stays in Python and is passed in. */
+#define TBOT_MOTION_ABI 4
+#if defined(__ARM_NEON) || defined(__aarch64__)
+#include <arm_neon.h>
+#endif
+#define MO_DET_COLS 15
+
+static inline int mo_imin(int a, int b) { return a < b ? a : b; }
+static inline int mo_imax(int a, int b) { return a > b ? a : b; }
+static inline double mo_pymax(double a, double b) { return b > a ? b : a; }  /* Python max(a, b) */
+static inline double mo_pymin(double a, double b) { return b < a ? b : a; }  /* Python min(a, b) */
+
+/* NumPy's add.reduce of a contiguous float64 run: identity 0.0 + pairwise sum (blocks of 128, 8 accumulators) */
+static double mo_pairwise(const double *a, intptr_t n) {
+    if (n < 8) {
+        double res = -0.0;
+        for (intptr_t i = 0; i < n; i++) res += a[i];
+        return res;
+    }
+    if (n <= 128) {
+        double r[8];
+        intptr_t i;
+        for (int k = 0; k < 8; k++) r[k] = a[k];
+        for (i = 8; i < n - (n % 8); i += 8)
+            for (int k = 0; k < 8; k++) r[k] += a[i + k];
+        double res = ((r[0] + r[1]) + (r[2] + r[3])) + ((r[4] + r[5]) + (r[6] + r[7]));
+        for (; i < n; i++) res += a[i];
+        return res;
+    }
+    intptr_t n2 = n / 2;
+    n2 -= n2 % 8;
+    return mo_pairwise(a, n2) + mo_pairwise(a + n2, n - n2);
+}
+
+/* add.reduce of a contiguous float64 array: the identity 0.0, plus the pairwise sum of each run of `chunk`
+ * elements (NumPy before 2.3 hands a reduction to its inner loop in buffer-sized runs of 8192; chunk <= 0: one
+ * run). _native.py finds out which this NumPy does. */
+static double mo_sum(const double *a, intptr_t n, int32_t chunk) {
+    if (chunk <= 0 || n <= chunk) return 0.0 + mo_pairwise(a, n);
+    double s = 0.0;
+    for (intptr_t i = 0; i < n; i += chunk) s += mo_pairwise(a + i, n - i < chunk ? n - i : chunk);
+    return s;
+}
+
+static double mo_mean(const double *a, intptr_t n, int32_t chunk) { return mo_sum(a, n, chunk) / (double)n; }
+
+/* ndarray.astype(np.int32) of a float64 as this machine's conversion instruction does it */
+static inline int32_t mo_to_i32(double v) {
+#if defined(__aarch64__) || defined(__arm__)
+    if (v != v) return 0;
+    if (v >= 2147483647.0) return INT32_MAX;
+    if (v <= -2147483648.0) return INT32_MIN;
+    return (int32_t)v;
+#else
+    if (!(v > -2147483649.0 && v < 2147483648.0)) return INT32_MIN;
+    return (int32_t)v;
+#endif
+}
+
+static void mo_sort_doubles(double *a, int n) {   /* insertion sort (small arrays) */
+    for (int i = 1; i < n; i++) {
+        const double v = a[i];
+        int j = i - 1;
+        while (j >= 0 && a[j] > v) { a[j + 1] = a[j]; j--; }
+        a[j + 1] = v;
+    }
+}
+
+/* np.median of n finite values (destroys a): the middle one, or (0.0 + (lo + hi)) / 2 */
+static double mo_median(double *a, int n) {
+    mo_sort_doubles(a, n);
+    if (n & 1) return (0.0 + a[n / 2]) / 1.0;
+    return (0.0 + (a[n / 2 - 1] + a[n / 2])) / 2.0;
+}
+
+/* the k-th smallest of n doubles (np.partition(a, k)[k]); destroys a */
+static double mo_select(double *a, int n, int k) {
+    int lo = 0, hi = n - 1;
+    while (lo < hi) {
+        const double pv = a[lo + (hi - lo) / 2];
+        int i = lo, j = hi;
+        while (i <= j) {
+            while (a[i] < pv) i++;
+            while (a[j] > pv) j--;
+            if (i <= j) { const double t = a[i]; a[i] = a[j]; a[j] = t; i++; j--; }
+        }
+        if (k <= j) hi = j;
+        else if (k >= i) lo = i;
+        else return a[k];
+    }
+    return a[k];
+}
+
+/* ------------------------------------------------------------------------------------- primitives */
+TBOT_API int tbot_motion_abi(void) { return TBOT_MOTION_ABI; }
+
+TBOT_API double tbot_motion_sum(const double *a, int64_t n, int32_t chunk) { return mo_sum(a, (intptr_t)n, chunk); }
+
+/* box_down2: dst (h/2 x w/2) = (s00 + s01 + s10 + s11 + 2) >> 2 */
+TBOT_API void tbot_motion_box_down2(const uint8_t *src, int32_t h, int32_t w, uint8_t *dst) {
+    const int dh = h / 2, dw = w / 2;
+    for (int y = 0; y < dh; y++) {
+        const uint8_t *restrict r0 = src + (size_t)(2 * y) * w, *restrict r1 = r0 + w;
+        uint8_t *restrict d = dst + (size_t)y * dw;
+        int x = 0;
+#if defined(__ARM_NEON)
+        for (; x + 16 <= dw; x += 16) {          /* pairwise sums of both rows, (s + 2) >> 2 narrowed */
+            uint16x8_t s0 = vpadalq_u8(vpaddlq_u8(vld1q_u8(r0 + 2 * x)), vld1q_u8(r1 + 2 * x));
+            uint16x8_t s1 = vpadalq_u8(vpaddlq_u8(vld1q_u8(r0 + 2 * x + 16)), vld1q_u8(r1 + 2 * x + 16));
+            vst1q_u8(d + x, vcombine_u8(vrshrn_n_u16(s0, 2), vrshrn_n_u16(s1, 2)));
+        }
+#endif
+        for (; x < dw; x++)
+            d[x] = (uint8_t)(((unsigned)r0[2 * x] + r0[2 * x + 1] + r1[2 * x] + r1[2 * x + 1] + 2u) >> 2);
+    }
+}
+
+/* texture_map (dst 0 / 255; last row and column 0) and, when valid is given, texture_tensor over tex & valid */
+TBOT_API void tbot_motion_texture(const uint8_t *img, int32_t h, int32_t w, int32_t thr, uint8_t *dst,
+                                  const uint8_t *valid, int64_t *tensor) {
+    int64_t sxx = 0, syy = 0, sxy = 0;
+    for (int y = 0; y < h; y++) {
+        uint8_t *restrict d = dst + (size_t)y * w;
+        if (y == h - 1) { memset(d, 0, (size_t)w); break; }
+        const uint8_t *restrict a = img + (size_t)y * w, *restrict b = a + w;
+        for (int x = 0; x < w - 1; x++) {
+            const int gx = (int)a[x + 1] - (int)a[x], gy = (int)b[x] - (int)a[x];
+            const int ax = gx < 0 ? -gx : gx, ay = gy < 0 ? -gy : gy;
+            d[x] = (ax > ay ? ax : ay) > thr ? 255 : 0;
+        }
+        if (w > 0) d[w - 1] = 0;
+        if (valid) {
+            const uint8_t *restrict v = valid + (size_t)y * w;
+            int64_t rxx = 0, ryy = 0, rxy = 0;
+            for (int x = 0; x < w - 1; x++) {
+                if (!d[x] || !v[x]) continue;
+                const int gx = (int)a[x + 1] - (int)a[x], gy = (int)b[x] - (int)a[x];
+                rxx += gx * gx; ryy += gy * gy; rxy += gx * gy;
+            }
+            sxx += rxx; syy += ryy; sxy += rxy;
+        }
+    }
+    if (tensor) { tensor[0] = sxx; tensor[1] = syy; tensor[2] = sxy; }
+}
+
+/* the whole prep of detect(): frame (H x W) -> working (steps box_down2, or a copy) -> fine (n_fine more, or a copy)
+ * -> coarse, texture map of fine and its tensor over curv. scratch: 2 x (H/2) x (W/2) bytes. */
+TBOT_API void tbot_motion_prep(const uint8_t *img, int32_t H, int32_t W, int32_t steps, int32_t n_fine,
+                               uint8_t *scratch, uint8_t *work, uint8_t *fine, uint8_t *coarse, uint8_t *tex,
+                               int32_t tex_thr, const uint8_t *curv, int64_t *tensor) {
+    const size_t half = (size_t)(H / 2) * (size_t)(W / 2);
+    const uint8_t *src = img;
+    int h = H, w = W;
+    if (steps == 0) memcpy(work, img, (size_t)H * W);
+    for (int k = 0; k < steps; k++) {
+        uint8_t *dst = k == steps - 1 ? work : scratch + (k & 1) * half;
+        tbot_motion_box_down2(src, h, w, dst);
+        src = dst; h /= 2; w /= 2;
+    }
+    src = work;
+    if (n_fine == 0) memcpy(fine, work, (size_t)h * w);
+    for (int k = 0; k < n_fine; k++) {
+        uint8_t *dst = k == n_fine - 1 ? fine : scratch + (k & 1) * half;
+        tbot_motion_box_down2(src, h, w, dst);
+        src = dst; h /= 2; w /= 2;
+    }
+    tbot_motion_box_down2(fine, h, w, coarse);
+    tbot_motion_texture(fine, h, w, tex_thr, tex, curv, tensor);
+}
+
+/* block_offsets: m row-major (rows = 2 or 3) destination -> source; ex_add / ey_add (h x nb) or NULL; rx, ry (h x
+ * nb) receive the rounding residuals; res (2) their means (may be NULL). */
+static void mo_offsets(const double *m, int rows, int h, int w, int block, const double *ex_add,
+                       const double *ey_add, int32_t *dx, int32_t *dy, double *rx, double *ry, double *res,
+                       int32_t chunk) {
+    const int nb = (w + block - 1) / block;
+    for (int y = 0; y < h; y++) {
+        const double yd = (double)y;
+        for (int b = 0; b < nb; b++) {
+            const int x0 = b * block, x1 = mo_imin(x0 + block, w);
+            const double xc = (double)(x0 + x1 - 1) * 0.5;
+            const double den = rows == 3 ? m[6] * xc + m[7] * yd + m[8] : 1.0;
+            double ex = (m[0] * xc + m[1] * yd + m[2]) / den - xc;
+            double ey = (m[3] * xc + m[4] * yd + m[5]) / den - yd;
+            const size_t k = (size_t)y * nb + b;
+            if (ex_add) { ex = ex + ex_add[k]; ey = ey + ey_add[k]; }
+            const double fx = floor(ex + 0.5), fy = floor(ey + 0.5);
+            dx[k] = mo_to_i32(fx);
+            dy[k] = mo_to_i32(fy);
+            rx[k] = ex - fx;
+            ry[k] = ey - fy;
+        }
+    }
+    if (res) {
+        res[0] = mo_mean(rx, (intptr_t)h * nb, chunk);
+        res[1] = mo_mean(ry, (intptr_t)h * nb, chunk);
+    }
+}
+
+TBOT_API void tbot_motion_block_offsets(const double *m, int32_t rows, int32_t h, int32_t w, int32_t block,
+                                        const double *ex_add, const double *ey_add, int32_t *dx, int32_t *dy,
+                                        double *rx, double *ry, double *res, int32_t chunk) {
+    mo_offsets(m, rows, h, w, block, ex_add, ey_add, dx, dy, rx, ry, res, chunk);
+}
+
+/* warp_gather: cv2.remap INTER_NEAREST of an int16 map (x + (int16)dx, y + (int16)dy, int16 arithmetic),
+ * BORDER_CONSTANT 0, for the image and its validity */
+static inline void mo_zero2(uint8_t *d, uint8_t *e, int x0, int x1) {
+    if (x1 > x0) { memset(d + x0, 0, (size_t)(x1 - x0)); memset(e + x0, 0, (size_t)(x1 - x0)); }
+}
+
+TBOT_API void tbot_motion_warp(const uint8_t *src, const uint8_t *sv, int32_t h, int32_t w, const int32_t *dx,
+                               const int32_t *dy, int32_t block, uint8_t *dst, uint8_t *dv) {
+    const int nb = (w + block - 1) / block;
+    for (int y = 0; y < h; y++) {
+        uint8_t *restrict d = dst + (size_t)y * w, *restrict e = dv + (size_t)y * w;
+        const int32_t *rdx = dx + (size_t)y * nb, *rdy = dy + (size_t)y * nb;
+        int b = 0;
+        while (b < nb) {
+            const int ox = (int16_t)rdx[b], oy = (int16_t)rdy[b];
+            int b1 = b + 1;                    /* blocks with the same offsets: one copy */
+            while (b1 < nb && (int16_t)rdx[b1] == ox && (int16_t)rdy[b1] == oy) b1++;
+            const int x0 = b * block, x1 = mo_imin(b1 * block, w);
+            b = b1;
+            const int sy = (int16_t)(y + oy);
+            if (sy < 0 || sy >= h) { mo_zero2(d, e, x0, x1); continue; }
+            const uint8_t *s = src + (size_t)sy * w, *t = sv + (size_t)sy * w;
+            if (x0 + ox >= -32768 && x1 - 1 + ox <= 32767) {      /* no int16 wrap in this run */
+                const int a = mo_imax(x0, -ox), c = mo_imin(x1, w - ox);
+                if (c <= a) { mo_zero2(d, e, x0, x1); continue; }
+                mo_zero2(d, e, x0, a);
+                memcpy(d + a, s + a + ox, (size_t)(c - a));
+                memcpy(e + a, t + a + ox, (size_t)(c - a));
+                mo_zero2(d, e, c, x1);
+            } else {
+                for (int x = x0; x < x1; x++) {
+                    const int sx = (int16_t)(x + ox);
+                    if (sx >= 0 && sx < w) { d[x] = s[sx]; e[x] = t[sx]; }
+                    else { d[x] = 0; e[x] = 0; }
+                }
+            }
+        }
+    }
+}
+
+static void mo_gain_lut(int64_t g, int64_t o, uint8_t *lut) {
+    for (int v = 0; v < 256; v++) {
+        int64_t t = (int64_t)v * g + o;
+        t = t >= 0 ? t >> 8 : -((-t + 255) >> 8);        /* floor(t / 256) */
+        lut[v] = (uint8_t)(t < 0 ? 0 : t > 255 ? 255 : t);
+    }
+}
+
+/* apply_gain_q8: dst = clamp(floor((img * g + o) / 256), 0, 255) (in place allowed) */
+#if defined(__aarch64__)
+static void mo_gain_fast(const uint8_t *img, int64_t n, int64_t g, int64_t o, uint8_t *dst);
+#endif
+
+TBOT_API void tbot_motion_gain(const uint8_t *img, int64_t n, int64_t g, int64_t o, uint8_t *dst) {
+#if defined(__aarch64__)
+    mo_gain_fast(img, n, g, o, dst);
+    return;
+#endif
+    if (g == 256 && o == 128) {
+        if (dst != img) memcpy(dst, img, (size_t)n);
+        return;
+    }
+    const int64_t ag = g < 0 ? -g : g, ao = o < 0 ? -o : o;
+    if (ag * 255 + ao < ((int64_t)1 << 30)) {      /* int32 arithmetic, no overflow: vectorises (no table) */
+        const int32_t g32 = (int32_t)g, o32 = (int32_t)o;
+        for (int64_t i = 0; i < n; i++) {
+            int32_t t = ((int32_t)img[i] * g32 + o32) >> 8;   /* arithmetic shift: floor */
+            t = t < 0 ? 0 : t;
+            dst[i] = (uint8_t)(t > 255 ? 255 : t);
+        }
+        return;
+    }
+    uint8_t lut[256];
+    mo_gain_lut(g, o, lut);
+    for (int64_t i = 0; i < n; i++) dst[i] = lut[img[i]];
+}
+
+#if defined(__aarch64__)
+/* the gain through its 256-byte table: NEON table lookups on aarch64 (exact: the same table) */
+static void mo_gain_fast(const uint8_t *img, int64_t n, int64_t g, int64_t o, uint8_t *dst) {
+    if (g == 256 && o == 128) {
+        if (dst != img) memcpy(dst, img, (size_t)n);
+        return;
+    }
+    uint8_t lut[256];
+    mo_gain_lut(g, o, lut);
+    int64_t i = 0;
+#if defined(__aarch64__)
+    const uint8x16x4_t t0 = vld1q_u8_x4(lut), t1 = vld1q_u8_x4(lut + 64), t2 = vld1q_u8_x4(lut + 128),
+                       t3 = vld1q_u8_x4(lut + 192);
+    const uint8x16_t k64 = vdupq_n_u8(64);
+    for (; i + 16 <= n; i += 16) {
+        const uint8x16_t v = vld1q_u8(img + i);
+        uint8x16_t r = vqtbl4q_u8(t0, v);
+        const uint8x16_t v1 = vsubq_u8(v, k64), v2 = vsubq_u8(v1, k64), v3 = vsubq_u8(v2, k64);
+        r = vqtbx4q_u8(r, t1, v1);
+        r = vqtbx4q_u8(r, t2, v2);
+        r = vqtbx4q_u8(r, t3, v3);
+        vst1q_u8(dst + i, r);
+    }
+#endif
+    for (; i < n; i++) dst[i] = lut[img[i]];
+}
+#endif
+
+/* env x env max (or min) inside the frame (cv2.dilate / cv2.erode with a rectangle, anchor at its centre) */
+static void mo_morph(const uint8_t *src, int h, int w, int k, int is_max, uint8_t *tmp, uint8_t *dst) {
+    const int a = k / 2, bb = k - 1 - a;
+    for (int y = 0; y < h; y++) {                         /* rows */
+        const uint8_t *restrict s = src + (size_t)y * w;
+        uint8_t *restrict t = tmp + (size_t)y * w;
+        memcpy(t, s, (size_t)w);
+        for (int o = -a; o <= bb; o++) {
+            if (o == 0) continue;
+            const int x0 = mo_imax(0, -o), x1 = mo_imin(w, w - o);
+            if (is_max) for (int x = x0; x < x1; x++) t[x] = s[x + o] > t[x] ? s[x + o] : t[x];
+            else for (int x = x0; x < x1; x++) t[x] = s[x + o] < t[x] ? s[x + o] : t[x];
+        }
+    }
+    for (int y = 0; y < h; y++) {                         /* columns */
+        uint8_t *restrict d = dst + (size_t)y * w;
+        memcpy(d, tmp + (size_t)y * w, (size_t)w);
+        for (int o = -a; o <= bb; o++) {
+            if (o == 0 || y + o < 0 || y + o >= h) continue;
+            const uint8_t *restrict t = tmp + (size_t)(y + o) * w;
+            if (is_max) for (int x = 0; x < w; x++) d[x] = t[x] > d[x] ? t[x] : d[x];
+            else for (int x = 0; x < w; x++) d[x] = t[x] < d[x] ? t[x] : d[x];
+        }
+    }
+}
+
+/* envelope_residual. scratch: 5 x h x w bytes. mask may be NULL. */
+TBOT_API void tbot_motion_envelope(const uint8_t *cur, const uint8_t *wa, const uint8_t *wb, const uint8_t *va,
+                                   const uint8_t *vb, const uint8_t *mask, int32_t h, int32_t w, int32_t env,
+                                   uint8_t *scratch, uint8_t *D) {
+    const size_t n = (size_t)h * w;
+    uint8_t *hiA = scratch, *loA = scratch + n, *hiB = scratch + 2 * n, *loB = scratch + 3 * n, *tmp = scratch + 4 * n;
+    mo_morph(wa, h, w, env, 1, tmp, hiA);
+    mo_morph(wa, h, w, env, 0, tmp, loA);
+    mo_morph(wb, h, w, env, 1, tmp, hiB);
+    mo_morph(wb, h, w, env, 0, tmp, loB);
+    const uint8_t *restrict c = cur;
+    uint8_t *restrict out = D;
+    for (size_t i = 0; i < n; i++) {
+        const uint8_t x = c[i];
+        const uint8_t ba = x > hiA[i] ? (uint8_t)(x - hiA[i]) : 0, bbv = x > hiB[i] ? (uint8_t)(x - hiB[i]) : 0;
+        const uint8_t da = loA[i] > x ? (uint8_t)(loA[i] - x) : 0, db = loB[i] > x ? (uint8_t)(loB[i] - x) : 0;
+        const uint8_t br = ba < bbv ? ba : bbv, dk = da < db ? da : db;
+        out[i] = (uint8_t)((br > dk ? br : dk) & va[i] & vb[i] & (mask ? mask[i] : 0xFF));
+    }
+}
+
+/* cell_sums: rows y % row_step == 0, (ceil(h / cell) x ceil(w / cell)) int64 */
+TBOT_API void tbot_motion_cell_sums(const uint8_t *img, int32_t h, int32_t w, int32_t cell, int32_t row_step,
+                                    int64_t *out) {
+    const int ch = (h + cell - 1) / cell, cw = (w + cell - 1) / cell;
+    memset(out, 0, (size_t)ch * cw * sizeof(int64_t));
+    for (int y = 0; y < h; y += row_step) {
+        const uint8_t *restrict r = img + (size_t)y * w;
+        int64_t *o = out + (size_t)(y / cell) * cw;
+        for (int j = 0; j < cw; j++) {
+            const int x0 = j * cell, x1 = mo_imin(x0 + cell, w);
+            uint32_t s = 0;
+            for (int x = x0; x < x1; x++) s += r[x];
+            o[j] += s;
+        }
+    }
+}
+
+/* cell_absdiff_sums: per cell over rows y % row_step == 0, sum of |cur - wa| & valid and count of valid != 0 */
+TBOT_API void tbot_motion_absdiff_sums(const uint8_t *cur, const uint8_t *wa, const uint8_t *valid, int32_t h,
+                                       int32_t w, int32_t cell, int32_t row_step, int64_t *sums, int64_t *counts) {
+    const int ch = (h + cell - 1) / cell, cw = (w + cell - 1) / cell;
+    memset(sums, 0, (size_t)ch * cw * sizeof(int64_t));
+    memset(counts, 0, (size_t)ch * cw * sizeof(int64_t));
+    for (int y = 0; y < h; y += row_step) {
+        const uint8_t *restrict a = cur + (size_t)y * w, *restrict b = wa + (size_t)y * w, *restrict v = valid + (size_t)y * w;
+        int64_t *so = sums + (size_t)(y / cell) * cw, *co = counts + (size_t)(y / cell) * cw;
+        for (int j = 0; j < cw; j++) {
+            const int x0 = j * cell, x1 = mo_imin(x0 + cell, w);
+            uint32_t s = 0, c = 0;
+            for (int x = x0; x < x1; x++) {
+                const uint8_t d = a[x] > b[x] ? (uint8_t)(a[x] - b[x]) : (uint8_t)(b[x] - a[x]);
+                s += (uint8_t)(d & v[x]);
+                c += v[x] != 0;
+            }
+            so[j] += s;
+            co[j] += c;
+        }
+    }
+}
+
+/* noise_sigma_from_cells; NaN when no cell qualifies */
+TBOT_API double tbot_motion_noise(const int64_t *sums, const int64_t *counts, int32_t n, int32_t cell,
+                                  int32_t row_step, double quantile, double min_fill, double abs_to_sigma) {
+    const int64_t full = (int64_t)cell * ((cell + row_step - 1) / row_step);
+    double *means = (double *)malloc((size_t)(n > 0 ? n : 1) * sizeof(double));
+    if (!means) return NAN;
+    int m = 0;
+    for (int i = 0; i < n; i++)
+        if ((double)counts[i] >= min_fill * (double)full) means[m++] = (double)sums[i] / (double)counts[i];
+    if (m == 0) { free(means); return NAN; }
+    const int k = (int)(quantile * (double)(m - 1));
+    const double v = mo_select(means, m, k);
+    free(means);
+    return v * abs_to_sigma;
+}
+
+/* k x k box sums clipped to the array, through an integral image (int64: exact) */
+static void mo_box_clipped(const int64_t *a, int h, int w, int k, int64_t *ii, int64_t *out) {
+    const int r = k / 2, W1 = w + 1;
+    memset(ii, 0, (size_t)W1 * sizeof(int64_t));
+    for (int y = 0; y < h; y++) {
+        int64_t run = 0;
+        int64_t *row = ii + (size_t)(y + 1) * W1, *up = row - W1;
+        row[0] = 0;
+        for (int x = 0; x < w; x++) {
+            run += a[(size_t)y * w + x];
+            row[x + 1] = up[x + 1] + run;
+        }
+    }
+    for (int i = 0; i < h; i++) {
+        const int y0 = mo_imax(0, i - r), y1 = mo_imin(h, i + r + 1);
+        for (int j = 0; j < w; j++) {
+            const int x0 = mo_imax(0, j - r), x1 = mo_imin(w, j + r + 1);
+            out[(size_t)i * w + j] = ii[(size_t)y1 * W1 + x1] - ii[(size_t)y0 * W1 + x1] - ii[(size_t)y1 * W1 + x0]
+                                     + ii[(size_t)y0 * W1 + x0];
+        }
+    }
+}
+
+/* threshold_cells (ND as given: the caller's np.maximum(ND, 1) included); thr uint8, mD float64, ch x cw */
+TBOT_API int tbot_motion_threshold(const int64_t *SD, const int64_t *ND, const int64_t *SA, const int64_t *NA,
+                                   int32_t ch, int32_t cw, double sigma_n, double t_min_dn, double noise_k,
+                                   double cfar_gain, double texture_gain, double abs_to_sigma, int32_t box,
+                                   uint8_t *thr, double *mD) {
+    const size_t n = (size_t)ch * cw;
+    int64_t *b = (int64_t *)malloc((4 * n + (size_t)(ch + 1) * (cw + 1)) * sizeof(int64_t));
+    if (!b) return -1;
+    int64_t *S = b, *N = b + n, *sa = b + 2 * n, *na = b + 3 * n, *ii = b + 4 * n;
+    mo_box_clipped(SD, ch, cw, box, ii, S);
+    mo_box_clipped(ND, ch, cw, box, ii, N);
+    mo_box_clipped(SA, ch, cw, box, ii, sa);
+    mo_box_clipped(NA, ch, cw, box, ii, na);
+    const double sig = isfinite(sigma_n) ? sigma_n : 0.0;
+    const double fl = mo_pymax(t_min_dn, noise_k * sig);
+    const double base = sig / abs_to_sigma;
+    for (size_t i = 0; i < n; i++) {
+        const double md = (double)S[i] / (double)(N[i] > 1 ? N[i] : 1);
+        const double ma = na[i] > 0 ? (double)sa[i] / (double)(na[i] > 1 ? na[i] : 1) : 0.0;
+        const double e = ma - base;
+        const double exc = 0.0 >= e ? 0.0 : e;                    /* np.maximum(0.0, e) */
+        double t = floor(fl + cfar_gain * md + texture_gain * exc);
+        t = t < 0.0 ? 0.0 : t > 255.0 ? 255.0 : t;
+        thr[i] = (uint8_t)t;
+        mD[i] = md;
+    }
+    free(b);
+    return 0;
+}
+
+/* compare_cells: binary = 255 where D > thr[y / cell, x / cell] */
+TBOT_API void tbot_motion_compare(const uint8_t *D, int32_t h, int32_t w, const uint8_t *thr, int32_t cw,
+                                  int32_t cell, uint8_t *binary) {
+    uint8_t *big = (uint8_t *)malloc((size_t)(w > 0 ? w : 1));
+    if (!big) return;
+    for (int y = 0; y < h; y++) {
+        if (y % cell == 0) {                     /* the thresholds of this row of cells, one per column */
+            const uint8_t *t = thr + (size_t)(y / cell) * cw;
+            for (int x = 0; x < w; x++) big[x] = t[x / cell];
+        }
+        const uint8_t *restrict d = D + (size_t)y * w;
+        const uint8_t *restrict t = big;
+        uint8_t *restrict o = binary + (size_t)y * w;
+        for (int x = 0; x < w; x++) o[x] = d[x] > t[x] ? 255 : 0;
+    }
+    free(big);
+}
+
+/* sum and count of |a - b| over x < n where (va & vb) != 0 */
+static inline void mo_sad_run(const uint8_t *restrict a, const uint8_t *restrict b, const uint8_t *restrict va,
+                              const uint8_t *restrict vb, int n, int64_t *s, int64_t *c) {
+    int x = 0;
+    uint64_t ss = 0, cc = 0;
+#if defined(__aarch64__)
+    while (x + 16 <= n) {
+        uint16x8_t as = vdupq_n_u16(0), ac = vdupq_n_u16(0);
+        const int lim = n - x > 16 * 128 ? x + 16 * 128 : n;   /* <= 128 steps: a u16 lane holds 65280 */
+        for (; x + 16 <= lim; x += 16) {
+            const uint8x16_t m = vtstq_u8(vld1q_u8(va + x), vld1q_u8(vb + x));   /* (va & vb) != 0 */
+            const uint8x16_t d = vandq_u8(vabdq_u8(vld1q_u8(a + x), vld1q_u8(b + x)), m);
+            as = vpadalq_u8(as, d);
+            ac = vpadalq_u8(ac, vshrq_n_u8(m, 7));
+        }
+        ss += vaddlvq_u16(as);
+        cc += vaddlvq_u16(ac);
+    }
+#endif
+    for (; x < n; x++) {
+        const unsigned m = (va[x] & vb[x]) ? 1u : 0u;
+        const unsigned d = a[x] > b[x] ? (unsigned)(a[x] - b[x]) : (unsigned)(b[x] - a[x]);
+        ss += m ? d : 0u;
+        cc += m;
+    }
+    *s += (int64_t)ss;
+    *c += (int64_t)cc;
+}
+
+/* one shift (sx, sy) of sad_surface over the region [x0, x1) x [y0, y1) */
+static void mo_sad_one(const uint8_t *cur, const uint8_t *ref, const uint8_t *vcur, const uint8_t *vref, int h, int w,
+                       int sx, int sy, int x0, int y0, int x1, int y1, int64_t *s, int64_t *c) {
+    *s = 0; *c = 0;
+    const int ya = mo_imax(y0, -sy), yb = mo_imin(y1, h - sy);
+    const int xa = mo_imax(x0, -sx), xb = mo_imin(x1, w - sx);
+    if (yb <= ya || xb <= xa) return;
+    const int n = xb - xa;
+#if defined(__aarch64__)
+    /* u16 lanes: each step adds at most 2 x 255 (16-lane) or 255 (8-lane tail) to a lane: flush before 120 steps */
+    uint16x8_t as = vdupq_n_u16(0), ac = vdupq_n_u16(0);
+    int steps = 0;
+    uint64_t ss = 0, cc = 0;
+    const int n16 = n & ~15, n8 = (n - n16) >= 8 ? 8 : 0;
+    for (int y = ya; y < yb; y++) {
+        const size_t p = (size_t)y * w + xa, q = (size_t)(y + sy) * w + xa + sx;
+        const uint8_t *a = cur + p, *b = ref + q, *va = vcur + p, *vb = vref + q;
+        int x = 0;
+        for (; x < n16; x += 16) {
+            const uint8x16_t m = vtstq_u8(vld1q_u8(va + x), vld1q_u8(vb + x));
+            const uint8x16_t d = vandq_u8(vabdq_u8(vld1q_u8(a + x), vld1q_u8(b + x)), m);
+            as = vpadalq_u8(as, d);
+            ac = vpadalq_u8(ac, vshrq_n_u8(m, 7));
+            if (++steps == 120) {
+                ss += vaddlvq_u16(as); cc += vaddlvq_u16(ac);
+                as = vdupq_n_u16(0); ac = vdupq_n_u16(0); steps = 0;
+            }
+        }
+        if (n8) {
+            const uint8x8_t m = vtst_u8(vld1_u8(va + x), vld1_u8(vb + x));
+            const uint8x8_t d = vand_u8(vabd_u8(vld1_u8(a + x), vld1_u8(b + x)), m);
+            as = vaddw_u8(as, d);
+            ac = vaddw_u8(ac, vshr_n_u8(m, 7));
+            x += 8;
+            if (++steps >= 120) {
+                ss += vaddlvq_u16(as); cc += vaddlvq_u16(ac);
+                as = vdupq_n_u16(0); ac = vdupq_n_u16(0); steps = 0;
+            }
+        }
+        for (; x < n; x++) {
+            const unsigned m = (va[x] & vb[x]) ? 1u : 0u;
+            const unsigned d = a[x] > b[x] ? (unsigned)(a[x] - b[x]) : (unsigned)(b[x] - a[x]);
+            ss += m ? d : 0u;
+            cc += m;
+        }
+    }
+    ss += vaddlvq_u16(as);
+    cc += vaddlvq_u16(ac);
+    *s = (int64_t)ss;
+    *c = (int64_t)cc;
+#else
+    for (int y = ya; y < yb; y++) {
+        const size_t p = (size_t)y * w + xa, q = (size_t)(y + sy) * w + xa + sx;
+        mo_sad_run(cur + p, ref + q, vcur + p, vref + q, n, s, c);
+    }
+#endif
+}
+
+/* sad_surface: sums, cnts (2r + 1) x (2r + 1), shift (cx + i - r, cy + j - r) at [j][i] */
+TBOT_API void tbot_motion_sad(const uint8_t *cur, const uint8_t *ref, const uint8_t *vcur, const uint8_t *vref,
+                              int32_t h, int32_t w, int32_t cx, int32_t cy, int32_t r, int32_t x0, int32_t y0,
+                              int32_t x1, int32_t y1, int64_t *sums, int64_t *cnts) {
+    const int n = 2 * r + 1;
+    for (int j = 0; j < n; j++)
+        for (int i = 0; i < n; i++)
+            mo_sad_one(cur, ref, vcur, vref, h, w, cx + i - r, cy + j - r, x0, y0, x1, y1,
+                       sums + (size_t)j * n + i, cnts + (size_t)j * n + i);
+}
+
+/* sad_cells: sums, cnts (rows, cols, 2r + 1, 2r + 1) for the grid with row edges ys (rows + 1), column edges xs */
+TBOT_API void tbot_motion_sad_cells(const uint8_t *cur, const uint8_t *ref, const uint8_t *vcur, const uint8_t *vref,
+                                    int32_t h, int32_t w, int32_t r, const int32_t *ys, int32_t rows, const int32_t *xs,
+                                    int32_t cols, int64_t *sums, int64_t *cnts) {
+    const int n = 2 * r + 1, nn = n * n;
+    for (int a = 0; a < rows; a++)
+        for (int b = 0; b < cols; b++) {
+            const size_t o = ((size_t)a * cols + b) * nn;
+            tbot_motion_sad(cur, ref, vcur, vref, h, w, 0, 0, r, xs[b], ys[a], xs[b + 1], ys[a + 1], sums + o,
+                            cnts + o);
+        }
+}
+
+/* ------------------------------------------------------------------------------------- registration */
+typedef struct {
+    int32_t hc, wc, hf, wf, block, r_c;
+    int32_t gr, gc, field_r, use_field;          /* local field: grid, SAD radius; use_field: ok and use_field */
+    int32_t np_chunk;                             /* NumPy's reduction run length (mo_sum) */
+    int32_t need_x, need_y, pad_;                 /* axes the fine search may re-centre along */
+    const uint8_t *cur_c, *cur_f, *tex_f, *ref_c, *ref_f;
+    const uint8_t *srcv_c, *srcv_f, *curv_c, *curv_f;
+    uint8_t *wrc, *vrc, *wrf, *vrf;                   /* scratch at the coarse / fine size */
+    int32_t *dx, *dy;                             /* hf x nbf */
+    double *rx, *ry;                              /* hf x nbf (phase 2 leaves the final residuals here) */
+    const int32_t *ys, *xs;                       /* field grid edges, gr + 1 / gc + 1 */
+    double *field;                                /* out: gr x gc x 2 */
+    uint8_t *field_ok;                            /* out: gr x gc */
+    double lc[9], lf[9], lm[9];                   /* level matrices (phase 1: coarse, fine; phase 2: final) */
+    double min_overlap_frac, black_dn, gain_min, gain_max, reg_min_response, fit_std_min, cell_texture_frac;
+    /* phase 1 out */
+    int32_t early, edge, curv, n_ovl, n_tex;
+    int32_t g0[2];
+    double depth, delta[2];
+    /* phase 2 out */
+    int32_t gq[2];
+    double a, b;
+} tbot_motion_reg;
+
+static double mo_parabola(double sm, double s0, double sp, int *ok) {   /* motion._parabola */
+    const double den = sm - 2.0 * s0 + sp;
+    if (den <= 0.0) { *ok = 0; return 0.0; }
+    *ok = 1;
+    return mo_pymin(0.5, mo_pymax(-0.5, 0.5 * (sm - sp) / den));
+}
+
+static int mo_argmin(const double *a, int n) {   /* np.argmin: first minimum */
+    int k = 0;
+    for (int i = 1; i < n; i++)
+        if (a[i] < a[k]) k = i;
+    return k;
+}
+
+TBOT_API int tbot_motion_reg_size(void) { return (int)sizeof(tbot_motion_reg); }
+
+TBOT_API int tbot_motion_reg1(tbot_motion_reg *p) {
+    const int hc = p->hc, wc = p->wc, hf = p->hf, wf = p->wf, blk = p->block;
+    double res_c[2], res_f[2];
+    p->early = 0;
+    /* coarse: block warp by the prior, ratio-of-means gain, SAD search */
+    mo_offsets(p->lc, 3, hc, wc, blk, NULL, NULL, p->dx, p->dy, p->rx, p->ry, res_c, p->np_chunk);
+    tbot_motion_warp(p->ref_c, p->srcv_c, hc, wc, p->dx, p->dy, blk, p->wrc, p->vrc);
+    const size_t nc = (size_t)hc * wc;
+    int64_t nboth = 0, sc = 0, sr = 0;
+    for (size_t i = 0; i < nc; i++)
+        if (p->vrc[i] && p->curv_c[i]) { nboth++; sc += p->cur_c[i]; sr += p->wrc[i]; }
+    if ((double)nboth < p->min_overlap_frac * (double)nc) { p->early = 1; return 0; }
+    const double mc = (double)sc / (double)nboth, mr = (double)sr / (double)nboth;
+    const double a0 = mo_pymin(mo_pymax((mc - p->black_dn) / mo_pymax(mr - p->black_dn, 1.0), p->gain_min),
+                               p->gain_max);
+    p->g0[0] = (int32_t)nearbyint(a0 * 256.0);
+    p->g0[1] = (int32_t)nearbyint(p->black_dn * (1.0 - a0) * 256.0) + 128;
+    tbot_motion_gain(p->wrc, (int64_t)nc, p->g0[0], p->g0[1], p->wrc);
+    if (p->r_c < 0) return -1;
+    const int rc = p->r_c, n = 2 * rc + 1, nn = n * n;
+    int64_t *ss = (int64_t *)malloc((size_t)nn * 2 * sizeof(int64_t));
+    double *sad = (double *)malloc((size_t)nn * 2 * sizeof(double));
+    if (!ss || !sad) { free(ss); free(sad); return -1; }
+    int64_t *cn = ss + nn;
+    double *fin = sad + nn;
+    tbot_motion_sad(p->cur_c, p->wrc, p->curv_c, p->vrc, hc, wc, 0, 0, rc, 0, 0, wc, hc, ss, cn);
+    const double need = p->min_overlap_frac * (double)nc;
+    int nfin = 0;
+    for (int k = 0; k < nn; k++) {
+        sad[k] = (double)cn[k] >= need ? (double)ss[k] / (double)(cn[k] > 1 ? cn[k] : 1) : INFINITY;
+        if (isfinite(sad[k])) fin[nfin++] = sad[k];
+    }
+    const int kmin = mo_argmin(sad, nn), j = kmin / n, i = kmin % n;
+    const double smin = sad[kmin];
+    const double med = nfin ? mo_median(fin, nfin) : 0.0;
+    p->depth = isfinite(smin) ? (med - smin) / mo_pymax(med, 1e-6) : 0.0;
+    p->edge = rc > 0 && (abs(i - rc) == rc || abs(j - rc) == rc);
+    free(ss); free(sad);
+    const double dcx = (double)(i - rc) - res_c[0], dcy = (double)(j - rc) - res_c[1];
+    /* fine: +-1 around the coarse result, recentred up to twice, parabolic sub-pixel */
+    mo_offsets(p->lf, 3, hf, wf, blk, NULL, NULL, p->dx, p->dy, p->rx, p->ry, res_f, p->np_chunk);
+    tbot_motion_warp(p->ref_f, p->srcv_f, hf, wf, p->dx, p->dy, blk, p->wrf, p->vrf);
+    const size_t nf = (size_t)hf * wf;
+    tbot_motion_gain(p->wrf, (int64_t)nf, p->g0[0], p->g0[1], p->wrf);
+    int64_t cx = (int64_t)floor(2.0 * dcx + res_f[0] + 0.5), cy = (int64_t)floor(2.0 * dcy + res_f[1] + 0.5);
+    int okx = 0, oky = 0, allfin = 0;
+    double subx = 0.0, suby = 0.0;
+    int64_t memo[7 * 7 * 2];                              /* shifts within +-3 of the first centre */
+    uint8_t have[49];
+    memset(have, 0, sizeof have);
+    const int64_t cx0 = cx, cy0 = cy;
+    for (int it = 0; it < 3; it++) {                     /* FINE_RECENTRE + 1 */
+        int64_t fs[9], fn[9];
+        double fsad[9];
+        for (int k = 0; k < 9; k++) {
+            const int64_t sx = cx + k % 3 - 1, sy = cy + k / 3 - 1;
+            const int64_t ix = sx - cx0 + 3, iy = sy - cy0 + 3;
+            const int cache = ix >= 0 && ix < 7 && iy >= 0 && iy < 7;
+            const int slot = cache ? (int)(iy * 7 + ix) : 0;
+            if (cache && have[slot]) { fs[k] = memo[2 * slot]; fn[k] = memo[2 * slot + 1]; continue; }
+            mo_sad_one(p->cur_f, p->wrf, p->curv_f, p->vrf, hf, wf, (int)sx, (int)sy, 0, 0, wf, hf, fs + k, fn + k);
+            if (cache) { have[slot] = 1; memo[2 * slot] = fs[k]; memo[2 * slot + 1] = fn[k]; }
+        }
+        for (int k = 0; k < 9; k++) fsad[k] = fn[k] > 0 ? (double)fs[k] / (double)(fn[k] > 1 ? fn[k] : 1) : INFINITY;
+        const int km = mo_argmin(fsad, 9), jj = km / 3, ii = km % 3;
+        if (isfinite(fsad[km]) && ((p->need_x && (ii == 0 || ii == 2)) || (p->need_y && (jj == 0 || jj == 2)))) {
+            if (p->need_x) cx += ii - 1;
+            if (p->need_y) cy += jj - 1;
+            continue;
+        }
+        subx = mo_parabola(fsad[3], fsad[4], fsad[5], &okx);
+        suby = mo_parabola(fsad[1], fsad[4], fsad[7], &oky);
+        allfin = 1;
+        for (int k = 0; k < 9; k++) allfin &= isfinite(fsad[k]) != 0;
+        break;
+    }
+    p->curv = okx | (oky << 1) | (allfin << 2);   /* the parabola in x, in y, the last surface all finite */
+    /* delta_f (fine px, ref space): the caller multiplies by rd */
+    p->delta[0] = ((double)cx + subx) - res_f[0];
+    p->delta[1] = ((double)cy + suby) - res_f[1];
+    /* texture guard counts */
+    int32_t novl = 0, ntex = 0;
+    for (size_t k = 0; k < nf; k++) {
+        const int o = p->vrf[k] != 0 && p->curv_f[k] != 0;
+        novl += o;
+        ntex += o && p->tex_f[k] != 0;
+    }
+    p->n_ovl = novl;
+    p->n_tex = ntex;
+    return 0;
+}
+
+/* photometric_fit's percentile ("linear") of a 256-bin histogram with n values */
+static double mo_hist_kth(const int64_t *hist, int64_t k) {
+    int64_t c = 0;
+    for (int v = 0; v < 256; v++) {
+        c += hist[v];
+        if (c > k) return (double)v;
+    }
+    return 255.0;
+}
+
+static double mo_percentile(const int64_t *hist, int64_t n, double q) {
+    const double vi = (double)(n - 1) * q;
+    double prev = floor(vi);
+    int64_t ip = (int64_t)prev, in = ip + 1;
+    if (vi >= (double)(n - 1)) { ip = n - 1; in = n - 1; prev = -1.0; }
+    if (vi < 0.0) { ip = 0; in = 0; prev = 0.0; }
+    const double gamma = vi - prev;
+    const double a = mo_hist_kth(hist, ip), b = mo_hist_kth(hist, in);
+    const double diff = (double)(uint8_t)((int)b - (int)a);
+    if (gamma >= 0.5) return b - diff * (1.0 - gamma);
+    return a + diff * gamma;
+}
+
+TBOT_API void tbot_motion_photometric(const uint8_t *cur, const uint8_t *ref, const uint8_t *valid, int32_t h,
+                                      int32_t w, double black_dn, double gain_min, double gain_max, double fit_std_min,
+                                      double *ab, int32_t *gq) {
+    int64_t hx[256], hy[256], n = 0, sx = 0, sy = 0;
+    memset(hx, 0, sizeof hx);
+    memset(hy, 0, sizeof hy);
+    for (int y = 0; y < h; y += 2) {
+        const size_t o = (size_t)y * w;
+        for (int x = 0; x < w; x += 2)
+            if (valid[o + x]) { hx[ref[o + x]]++; hy[cur[o + x]]++; n++; sx += ref[o + x]; sy += cur[o + x]; }
+    }
+    double a = 1.0, b = 0.0;
+    if (n >= 16) {
+        const double q10 = 10.0 / 100.0, q50 = 50.0 / 100.0, q90 = 90.0 / 100.0;
+        const double x10 = mo_percentile(hx, n, q10), x50 = mo_percentile(hx, n, q50), x90 = mo_percentile(hx, n, q90);
+        const double y10 = mo_percentile(hy, n, q10), y50 = mo_percentile(hy, n, q50), y90 = mo_percentile(hy, n, q90);
+        if (x90 - x10 < 2.56 * fit_std_min) {
+            const double my = (double)sy / (double)n, mx = (double)sx / (double)n;
+            a = (my - black_dn) / mo_pymax(mx - black_dn, 1.0);
+            a = mo_pymin(mo_pymax(a, gain_min), gain_max);
+            b = black_dn * (1.0 - a);
+        } else {
+            a = mo_pymin(mo_pymax((y90 - y10) / (x90 - x10), gain_min), gain_max);
+            b = y50 - a * x50;
+        }
+    }
+    ab[0] = a;
+    ab[1] = b;
+    gq[0] = (int32_t)nearbyint(a * 256.0);
+    gq[1] = (int32_t)nearbyint(b * 256.0) + 128;
+}
+
+/* MotionDetector._local_field on the gained fine warp (wf, vf) with the final residuals (rx, ry) */
+static int mo_local_field(tbot_motion_reg *p, double rd) {
+    const int h = p->hf, w = p->wf, gr = p->gr, gc = p->gc, R = p->field_r, n = 2 * R + 1, nn = n * n;
+    const int nb = (w + p->block - 1) / p->block;
+    const int ncell = gr * gc;
+    double *f = (double *)calloc((size_t)ncell * 2, sizeof(double));
+    int64_t *nvs = (int64_t *)calloc((size_t)ncell * 2, sizeof(int64_t));
+    double *tmp = (double *)malloc(((size_t)h * nb + (size_t)nn) * sizeof(double));
+    if (!f || !nvs || !tmp) { free(f); free(nvs); free(tmp); return -1; }
+    int64_t *nts = nvs + ncell;
+    memset(p->field_ok, 0, (size_t)ncell);
+    for (int a = 0; a < gr; a++)
+        for (int y = p->ys[a]; y < p->ys[a + 1]; y++) {
+            const uint8_t *v = p->vrf + (size_t)y * w, *c = p->curv_f + (size_t)y * w, *t = p->tex_f + (size_t)y * w;
+            for (int b = 0; b < gc; b++) {
+                int64_t s = 0, st = 0;
+                for (int x = p->xs[b]; x < p->xs[b + 1]; x++) {
+                    const int o = (v[x] & c[x]) != 0;
+                    s += o;
+                    st += o && t[x] != 0;
+                }
+                nvs[a * gc + b] += s;
+                nts[a * gc + b] += st;
+            }
+        }
+    int any = 0;
+    uint8_t cand[64];
+    for (int a = 0; a < gr; a++)
+        for (int b = 0; b < gc; b++) {
+            const int k = a * gc + b;
+            const double area = 0.5 * (double)(p->ys[a + 1] - p->ys[a]) * (double)(p->xs[b + 1] - p->xs[b]);
+            cand[k] = (double)nvs[k] >= area && (double)nts[k] >= p->cell_texture_frac * (double)nvs[k];
+            any |= cand[k];
+        }
+    if (!any) {
+        memset(p->field, 0, (size_t)ncell * 2 * sizeof(double));
+        free(f); free(nvs); free(tmp);
+        return 0;
+    }
+    for (int a = 0; a < gr; a++)
+        for (int b = 0; b < gc; b++) {
+            const int k = a * gc + b;
+            if (!cand[k]) continue;
+            const int x0 = p->xs[b], x1 = p->xs[b + 1], y0 = p->ys[a], y1 = p->ys[a + 1];
+            int64_t ss[81], cc[81];
+            double sad[81];
+            tbot_motion_sad(p->cur_f, p->wrf, p->curv_f, p->vrf, h, w, 0, 0, R, x0, y0, x1, y1, ss, cc);
+            const double half = 0.5 * (double)nvs[k];
+            int allfin = 1;
+            for (int q = 0; q < nn; q++) {
+                sad[q] = (double)cc[q] >= half ? (double)ss[q] / (double)(cc[q] > 1 ? cc[q] : 1) : INFINITY;
+                allfin &= isfinite(sad[q]) != 0;
+            }
+            const int km = mo_argmin(sad, nn), j = km / n, i = km % n;
+            if (!allfin || i == 0 || i == 2 * R || j == 0 || j == 2 * R) continue;
+            double srt[81];
+            memcpy(srt, sad, (size_t)nn * sizeof(double));
+            const double med = mo_median(srt, nn);
+            if ((med - sad[km]) / mo_pymax(med, 1e-6) < p->reg_min_response) continue;
+            int okx, oky;
+            const double sx = mo_parabola(sad[j * n + i - 1], sad[km], sad[j * n + i + 1], &okx);
+            const double sy = mo_parabola(sad[(j - 1) * n + i], sad[km], sad[(j + 1) * n + i], &oky);
+            if (!(okx && oky)) continue;
+            /* mean residual of the blocks whose centre lies in the cell: rows y0..y1, those columns, F order */
+            double mrx = 0.0, mry = 0.0;
+            int m = 0;
+            for (int bb = 0; bb < nb; bb++) {
+                const int bx0 = bb * p->block, bx1 = mo_imin(bx0 + p->block, w);
+                const double xc = (double)(bx0 + bx1 - 1) * 0.5;
+                if (!(xc >= (double)x0 && xc < (double)x1)) continue;
+                for (int y = y0; y < y1; y++) tmp[m++] = p->rx[(size_t)y * nb + bb];
+            }
+            if (m > 0) {
+                mrx = mo_mean(tmp, m, p->np_chunk);
+                m = 0;
+                for (int bb = 0; bb < nb; bb++) {
+                    const int bx0 = bb * p->block, bx1 = mo_imin(bx0 + p->block, w);
+                    const double xc = (double)(bx0 + bx1 - 1) * 0.5;
+                    if (!(xc >= (double)x0 && xc < (double)x1)) continue;
+                    for (int y = y0; y < y1; y++) tmp[m++] = p->ry[(size_t)y * nb + bb];
+                }
+                mry = mo_mean(tmp, m, p->np_chunk);
+            }
+            f[2 * k] = (((double)(i - R) + sx) - mrx) * rd;
+            f[2 * k + 1] = (((double)(j - R) + sy) - mry) * rd;
+            p->field_ok[k] = 1;
+        }
+    /* 3 x 3 median over the grid, clipped at its edges */
+    for (int a = 0; a < gr; a++)
+        for (int b = 0; b < gc; b++)
+            for (int c = 0; c < 2; c++) {
+                double v[9];
+                int m = 0;
+                for (int aa = mo_imax(0, a - 1); aa < mo_imin(gr, a + 2); aa++)
+                    for (int bb = mo_imax(0, b - 1); bb < mo_imin(gc, b + 2); bb++) v[m++] = f[2 * (aa * gc + bb) + c];
+                mo_sort_doubles(v, m);
+                p->field[2 * (a * gc + b) + c] = (m & 1) ? (0.0 + v[m / 2]) / 1.0 : ((0.0 + v[m / 2 - 1]) + v[m / 2]) / 2.0;
+            }
+    free(f); free(nvs); free(tmp);
+    return 0;
+}
+
+/* phase 2: warp by lm (final transform at the fine level), photometric fit, and with use_field the local field.
+ * rd = reg_downscale (fine px -> full-res px). Returns 0, -1 (memory) */
+TBOT_API int tbot_motion_reg2(tbot_motion_reg *p, double rd) {
+    const int hf = p->hf, wf = p->wf;
+    const size_t nf = (size_t)hf * wf;
+    mo_offsets(p->lm, 3, hf, wf, p->block, NULL, NULL, p->dx, p->dy, p->rx, p->ry, NULL, 0);
+    tbot_motion_warp(p->ref_f, p->srcv_f, hf, wf, p->dx, p->dy, p->block, p->wrf, p->vrf);
+    uint8_t *fv = (uint8_t *)malloc(nf);
+    if (!fv) return -1;
+    for (size_t k = 0; k < nf; k++) fv[k] = p->vrf[k] != 0 && p->curv_f[k] != 0;
+    double ab[2];
+    tbot_motion_photometric(p->cur_f, p->wrf, fv, hf, wf, p->black_dn, p->gain_min, p->gain_max, p->fit_std_min, ab,
+                            p->gq);
+    free(fv);
+    p->a = ab[0];
+    p->b = ab[1];
+    if (!p->use_field) return 0;
+    if (p->gr * p->gc > 64 || p->field_r > 4) return -1;
+    tbot_motion_gain(p->wrf, (int64_t)nf, p->gq[0], p->gq[1], p->wrf);
+    return mo_local_field(p, rd);
+}
+
+/* ---------------------------------------------------------------------------------------- the kernel */
+/* _field_extra (bilinear field at the working warp blocks, / s) into ex, ey (h x nb): tables from Python */
+TBOT_API void tbot_motion_field_extra(const double *field, int32_t gr, int32_t gc, int32_t h, int32_t nb,
+                                      const int32_t *x0, const int32_t *x1, const double *tx, const int32_t *y0,
+                                      const int32_t *y1, const double *ty, double s, double *ex, double *ey) {
+    (void)gr;
+    for (int c = 0; c < 2; c++) {
+        double *out = c ? ey : ex;
+        for (int r = 0; r < h; r++) {
+            const double *F0 = field + (size_t)y0[r] * gc * 2, *F1 = field + (size_t)y1[r] * gc * 2;
+            const double wy0 = 1.0 - ty[r], wy1 = ty[r];
+            for (int b = 0; b < nb; b++) {
+                const double wx0 = 1.0 - tx[b], wx1 = tx[b];
+                const double top = F0[2 * x0[b] + c] * wx0 + F0[2 * x1[b] + c] * wx1;
+                const double bot = F1[2 * x0[b] + c] * wx0 + F1[2 * x1[b] + c] * wx1;
+                out[(size_t)r * nb + b] = (top * wy0 + bot * wy1) / s;
+            }
+        }
+    }
+}
+
+/* block_offsets(m, h, w, extra=_field_extra(field)) with field NULL or all zero meaning no extra */
+TBOT_API void tbot_motion_offsets(const double *m, int32_t h, int32_t w, int32_t block, const double *field,
+                                  int32_t gr, int32_t gc, const int32_t *x0, const int32_t *x1, const double *tx,
+                                  const int32_t *y0, const int32_t *y1, const double *ty, double s, double *ex,
+                                  double *ey, int32_t *dx, int32_t *dy, double *rx, double *ry) {
+    const int nb = (w + block - 1) / block;
+    int any = 0;
+    if (field)
+        for (int k = 0; k < gr * gc * 2; k++) any |= field[k] != 0.0;
+    if (any) tbot_motion_field_extra(field, gr, gc, h, nb, x0, x1, tx, y0, y1, ty, s, ex, ey);
+    mo_offsets(m, 3, h, w, block, any ? ex : NULL, any ? ey : NULL, dx, dy, rx, ry, NULL, 0);
+}
+
+typedef struct {
+    int32_t h, w, block, env, cell, row_step, cfar_box, pad_;
+    int64_t ga, oa, gb, ob;
+    const uint8_t *cur, *ref_a, *ref_b, *src_valid, *mask;    /* mask may be NULL */
+    const int32_t *dxa, *dya, *dxb, *dyb;
+    uint8_t *wa, *wb, *va, *vb, *D, *binary, *thr;
+    double *mD;
+    int64_t *SD, *ND, *SA, *NA;                               /* ch x cw each */
+    uint8_t *scratch;                                         /* 6 x h x w */
+    double t_min_dn, noise_k, cfar_gain, texture_gain, abs_to_sigma, noise_quantile, noise_min_fill;
+    double sigma_n;                                           /* out */
+} tbot_motion_kparams;
+
+TBOT_API int tbot_motion_kparams_size(void) { return (int)sizeof(tbot_motion_kparams); }
+
+/* rows y - a .. y + bb of src (clamped: the same max / min as the window clipped to the frame) -> vmax, vmin */
+static void mo_vert(const uint8_t *src, int h, int w, int y, int a, int bb, uint8_t *restrict vmax,
+                    uint8_t *restrict vmin) {
+    const uint8_t *r0 = src + (size_t)y * w;
+    memcpy(vmax, r0, (size_t)w);
+    memcpy(vmin, r0, (size_t)w);
+    for (int o = -a; o <= bb; o++) {
+        if (o == 0) continue;
+        const int yy = y + o < 0 ? 0 : y + o >= h ? h - 1 : y + o;
+        const uint8_t *restrict r = src + (size_t)yy * w;
+        for (int x = 0; x < w; x++) {
+            vmax[x] = r[x] > vmax[x] ? r[x] : vmax[x];
+            vmin[x] = r[x] < vmin[x] ? r[x] : vmin[x];
+        }
+    }
+}
+
+/* columns x - a .. x + bb (clamped) */
+static void mo_horiz(const uint8_t *restrict v, int w, int a, int bb, int is_max, uint8_t *restrict out) {
+    memcpy(out, v, (size_t)w);
+    for (int o = -a; o <= bb; o++) {
+        if (o == 0) continue;
+        const int x0 = mo_imax(0, -o), x1 = mo_imin(w, w - o);   /* interior: x + o inside */
+        if (is_max) {
+            for (int x = x0; x < x1; x++) out[x] = v[x + o] > out[x] ? v[x + o] : out[x];
+            for (int x = 0; x < x0 && x < w; x++) { const uint8_t q = v[0]; out[x] = q > out[x] ? q : out[x]; }
+            for (int x = x1 > 0 ? x1 : 0; x < w; x++) { const uint8_t q = v[w - 1]; out[x] = q > out[x] ? q : out[x]; }
+        } else {
+            for (int x = x0; x < x1; x++) out[x] = v[x + o] < out[x] ? v[x + o] : out[x];
+            for (int x = 0; x < x0 && x < w; x++) { const uint8_t q = v[0]; out[x] = q < out[x] ? q : out[x]; }
+            for (int x = x1 > 0 ? x1 : 0; x < w; x++) { const uint8_t q = v[w - 1]; out[x] = q < out[x] ? q : out[x]; }
+        }
+    }
+}
+
+/* envelope residual, validity and the four cell statistics in one pass over the rows (row buffers in L1).
+ * cell <= 256 (uint16 column sums). scratch: 9 rows of w bytes + 4 rows of w uint16. */
+static void mo_kernel_rows(const tbot_motion_kparams *p, uint8_t *scratch) {
+    const int h = p->h, w = p->w, cell = p->cell, rs = p->row_step, k = p->env, a = k / 2, bb = k - 1 - a;
+    const int ch = (h + cell - 1) / cell, cw = (w + cell - 1) / cell;
+    uint8_t *vmx = scratch, *vmn = vmx + w, *hiA = vmn + w, *loA = hiA + w, *hiB = loA + w, *loB = hiB + w;
+    uint16_t *cD = (uint16_t *)(((uintptr_t)(loB + w) + 15) & ~(uintptr_t)15), *cN = cD + w, *cS = cN + w, *cA = cS + w;
+    memset(p->SD, 0, (size_t)ch * cw * sizeof(int64_t));
+    memset(p->ND, 0, (size_t)ch * cw * sizeof(int64_t));
+    memset(p->SA, 0, (size_t)ch * cw * sizeof(int64_t));
+    memset(p->NA, 0, (size_t)ch * cw * sizeof(int64_t));
+    memset(cD, 0, 4 * (size_t)w * sizeof(uint16_t));
+#if defined(__aarch64__)
+    const int fast3 = k == 3 && w >= 18;
+    /* padded vertical rows (index x + 1 = pixel x; [0] and [w + 1] repeat the border): 4 x (w + 2) bytes */
+    uint8_t *pv = (uint8_t *)(cA + w);
+    uint8_t *pA = pv, *qA = pA + w + 2, *pB = qA + w + 2, *qB = pB + w + 2;
+#endif
+    for (int y = 0; y < h; y++) {
+#if defined(__aarch64__)
+        if (fast3) {
+            const uint8_t *a0 = p->wa + (size_t)(y > 0 ? y - 1 : 0) * w, *a1 = p->wa + (size_t)y * w,
+                          *a2 = p->wa + (size_t)(y + 1 < h ? y + 1 : h - 1) * w;
+            const uint8_t *b0 = p->wb + (size_t)(y > 0 ? y - 1 : 0) * w, *b1 = p->wb + (size_t)y * w,
+                          *b2 = p->wb + (size_t)(y + 1 < h ? y + 1 : h - 1) * w;
+            int x = 0;
+            for (; x + 16 <= w; x += 16) {
+                const uint8x16_t u0 = vld1q_u8(a0 + x), u1 = vld1q_u8(a1 + x), u2 = vld1q_u8(a2 + x);
+                const uint8x16_t t0 = vld1q_u8(b0 + x), t1 = vld1q_u8(b1 + x), t2 = vld1q_u8(b2 + x);
+                vst1q_u8(pA + 1 + x, vmaxq_u8(vmaxq_u8(u0, u1), u2));
+                vst1q_u8(qA + 1 + x, vminq_u8(vminq_u8(u0, u1), u2));
+                vst1q_u8(pB + 1 + x, vmaxq_u8(vmaxq_u8(t0, t1), t2));
+                vst1q_u8(qB + 1 + x, vminq_u8(vminq_u8(t0, t1), t2));
+            }
+            for (; x < w; x++) {
+                uint8_t m0 = a0[x], m1 = a1[x], m2 = a2[x];
+                pA[1 + x] = m0 > m1 ? (m0 > m2 ? m0 : m2) : (m1 > m2 ? m1 : m2);
+                qA[1 + x] = m0 < m1 ? (m0 < m2 ? m0 : m2) : (m1 < m2 ? m1 : m2);
+                m0 = b0[x]; m1 = b1[x]; m2 = b2[x];
+                pB[1 + x] = m0 > m1 ? (m0 > m2 ? m0 : m2) : (m1 > m2 ? m1 : m2);
+                qB[1 + x] = m0 < m1 ? (m0 < m2 ? m0 : m2) : (m1 < m2 ? m1 : m2);
+            }
+            pA[0] = pA[1]; qA[0] = qA[1]; pB[0] = pB[1]; qB[0] = qB[1];
+            pA[w + 1] = pA[w]; qA[w + 1] = qA[w]; pB[w + 1] = pB[w]; qB[w + 1] = qB[w];
+            /* the horizontal step for the scalar tail (and nothing else) */
+            for (int xx = w & ~15; xx < w; xx++) {
+                const uint8_t *P0 = pA + xx, *Q0 = qA + xx, *P1 = pB + xx, *Q1 = qB + xx;
+                uint8_t m = P0[0] > P0[1] ? P0[0] : P0[1]; hiA[xx] = m > P0[2] ? m : P0[2];
+                m = Q0[0] < Q0[1] ? Q0[0] : Q0[1]; loA[xx] = m < Q0[2] ? m : Q0[2];
+                m = P1[0] > P1[1] ? P1[0] : P1[1]; hiB[xx] = m > P1[2] ? m : P1[2];
+                m = Q1[0] < Q1[1] ? Q1[0] : Q1[1]; loB[xx] = m < Q1[2] ? m : Q1[2];
+            }
+        } else
+#endif
+        {
+            mo_vert(p->wa, h, w, y, a, bb, vmx, vmn);
+            mo_horiz(vmx, w, a, bb, 1, hiA);
+            mo_horiz(vmn, w, a, bb, 0, loA);
+            mo_vert(p->wb, h, w, y, a, bb, vmx, vmn);
+            mo_horiz(vmx, w, a, bb, 1, hiB);
+            mo_horiz(vmn, w, a, bb, 0, loB);
+        }
+        const size_t o = (size_t)y * w;
+        const uint8_t *restrict c = p->cur + o, *restrict va = p->va + o, *restrict vb = p->vb + o;
+        const uint8_t *restrict ma = p->mask ? p->mask + o : NULL, *restrict wa = p->wa + o;
+        uint8_t *restrict D = p->D + o;
+        int x0 = 0;           /* pixels before x0 are done (NEON), including their column sums */
+#if defined(__aarch64__)
+        {
+            const int do_a = y % rs == 0;
+            const uint8x16_t one = vdupq_n_u8(1);
+            for (; x0 + 16 <= w; x0 += 16) {
+                const int x = x0;
+                const uint8x16_t q = vld1q_u8(c + x);
+                uint8x16_t hA, lA, hB, lB;
+                if (fast3) {          /* padded rows: x - 1, x, x + 1 are at x, x + 1, x + 2 */
+                    hA = vmaxq_u8(vmaxq_u8(vld1q_u8(pA + x), vld1q_u8(pA + x + 1)), vld1q_u8(pA + x + 2));
+                    lA = vminq_u8(vminq_u8(vld1q_u8(qA + x), vld1q_u8(qA + x + 1)), vld1q_u8(qA + x + 2));
+                    hB = vmaxq_u8(vmaxq_u8(vld1q_u8(pB + x), vld1q_u8(pB + x + 1)), vld1q_u8(pB + x + 2));
+                    lB = vminq_u8(vminq_u8(vld1q_u8(qB + x), vld1q_u8(qB + x + 1)), vld1q_u8(qB + x + 2));
+                } else {
+                    hA = vld1q_u8(hiA + x); lA = vld1q_u8(loA + x); hB = vld1q_u8(hiB + x); lB = vld1q_u8(loB + x);
+                }
+                const uint8x16_t b1 = vqsubq_u8(q, hA), b2 = vqsubq_u8(q, hB);
+                const uint8x16_t d1 = vqsubq_u8(lA, q), d2 = vqsubq_u8(lB, q);
+                const uint8x16_t r = vmaxq_u8(vminq_u8(b1, b2), vminq_u8(d1, d2));
+                uint8x16_t v = vandq_u8(vld1q_u8(va + x), vld1q_u8(vb + x));
+                if (ma) v = vandq_u8(v, vld1q_u8(ma + x));
+                const uint8x16_t dv = vandq_u8(r, v);
+                vst1q_u8(D + x, dv);
+                const uint8x16_t nz = vandq_u8(vtstq_u8(v, v), one);
+                vst1q_u16(cD + x, vaddw_u8(vld1q_u16(cD + x), vget_low_u8(dv)));
+                vst1q_u16(cD + x + 8, vaddw_high_u8(vld1q_u16(cD + x + 8), dv));
+                vst1q_u16(cN + x, vaddw_u8(vld1q_u16(cN + x), vget_low_u8(nz)));
+                vst1q_u16(cN + x + 8, vaddw_high_u8(vld1q_u16(cN + x + 8), nz));
+                if (do_a) {
+                    const uint8x16_t ad = vandq_u8(vabdq_u8(q, vld1q_u8(wa + x)), v);
+                    vst1q_u16(cS + x, vaddw_u8(vld1q_u16(cS + x), vget_low_u8(ad)));
+                    vst1q_u16(cS + x + 8, vaddw_high_u8(vld1q_u16(cS + x + 8), ad));
+                    vst1q_u16(cA + x, vaddw_u8(vld1q_u16(cA + x), vget_low_u8(nz)));
+                    vst1q_u16(cA + x + 8, vaddw_high_u8(vld1q_u16(cA + x + 8), nz));
+                }
+            }
+        }
+#endif
+        if (ma) {
+            for (int x = x0; x < w; x++) {
+                const uint8_t q = c[x];
+                const uint8_t b1 = q > hiA[x] ? (uint8_t)(q - hiA[x]) : 0, b2 = q > hiB[x] ? (uint8_t)(q - hiB[x]) : 0;
+                const uint8_t d1 = loA[x] > q ? (uint8_t)(loA[x] - q) : 0, d2 = loB[x] > q ? (uint8_t)(loB[x] - q) : 0;
+                const uint8_t br = b1 < b2 ? b1 : b2, dk = d1 < d2 ? d1 : d2;
+                const uint8_t v = (uint8_t)(va[x] & vb[x] & ma[x]);
+                D[x] = (uint8_t)((br > dk ? br : dk) & v);
+                vmx[x] = v;
+            }
+        } else {
+            for (int x = x0; x < w; x++) {
+                const uint8_t q = c[x];
+                const uint8_t b1 = q > hiA[x] ? (uint8_t)(q - hiA[x]) : 0, b2 = q > hiB[x] ? (uint8_t)(q - hiB[x]) : 0;
+                const uint8_t d1 = loA[x] > q ? (uint8_t)(loA[x] - q) : 0, d2 = loB[x] > q ? (uint8_t)(loB[x] - q) : 0;
+                const uint8_t br = b1 < b2 ? b1 : b2, dk = d1 < d2 ? d1 : d2;
+                const uint8_t v = (uint8_t)(va[x] & vb[x]);
+                D[x] = (uint8_t)((br > dk ? br : dk) & v);
+                vmx[x] = v;
+            }
+        }
+        const uint8_t *restrict v = vmx;
+        for (int x = x0; x < w; x++) {
+            cD[x] = (uint16_t)(cD[x] + D[x]);
+            cN[x] = (uint16_t)(cN[x] + (v[x] != 0));
+        }
+        if (y % rs == 0)
+            for (int x = x0; x < w; x++) {
+                const uint8_t d = c[x] > wa[x] ? (uint8_t)(c[x] - wa[x]) : (uint8_t)(wa[x] - c[x]);
+                cS[x] = (uint16_t)(cS[x] + (uint8_t)(d & v[x]));
+                cA[x] = (uint16_t)(cA[x] + (v[x] != 0));
+            }
+        if (y % cell == cell - 1 || y == h - 1) {          /* close this row of cells */
+            const size_t ci = (size_t)(y / cell) * cw;
+            for (int j = 0; j < cw; j++) {
+                const int x0 = j * cell, x1 = mo_imin(x0 + cell, w);
+                uint32_t sd = 0, nd = 0, sa = 0, na = 0;
+                for (int x = x0; x < x1; x++) { sd += cD[x]; nd += cN[x]; sa += cS[x]; na += cA[x]; }
+                p->SD[ci + j] = sd; p->ND[ci + j] = nd; p->SA[ci + j] = sa; p->NA[ci + j] = na;
+            }
+            memset(cD, 0, 4 * (size_t)w * sizeof(uint16_t));
+        }
+    }
+}
+
+TBOT_API int tbot_motion_kernel(tbot_motion_kparams *p) {
+    const int h = p->h, w = p->w, cell = p->cell;
+    const size_t n = (size_t)h * w;
+    const int ch = (h + cell - 1) / cell, cw = (w + cell - 1) / cell;
+    tbot_motion_warp(p->ref_a, p->src_valid, h, w, p->dxa, p->dya, p->block, p->wa, p->va);
+    tbot_motion_warp(p->ref_b, p->src_valid, h, w, p->dxb, p->dyb, p->block, p->wb, p->vb);
+    tbot_motion_gain(p->wa, (int64_t)n, p->ga, p->oa, p->wa);
+    tbot_motion_gain(p->wb, (int64_t)n, p->gb, p->ob, p->wb);
+    if (cell <= 256 && p->row_step >= 1 && p->env >= 1 && 6 * n >= 21 * (size_t)w + 32) {
+        mo_kernel_rows(p, p->scratch);
+    } else {
+    tbot_motion_envelope(p->cur, p->wa, p->wb, p->va, p->vb, p->mask, h, w, p->env, p->scratch, p->D);
+    uint8_t *valid = p->scratch + 5 * n;
+    for (size_t i = 0; i < n; i++) valid[i] = (uint8_t)(p->va[i] & p->vb[i] & (p->mask ? p->mask[i] : 0xFF));
+    tbot_motion_absdiff_sums(p->cur, p->wa, valid, h, w, cell, p->row_step, p->SA, p->NA);
+    tbot_motion_cell_sums(p->D, h, w, cell, 1, p->SD);
+    /* ND: count of valid != 0 (all rows), then np.maximum(ND, 1) */
+    memset(p->ND, 0, (size_t)ch * cw * sizeof(int64_t));
+    for (int y = 0; y < h; y++) {
+        const uint8_t *restrict v = valid + (size_t)y * w;
+        int64_t *o = p->ND + (size_t)(y / cell) * cw;
+        for (int j = 0; j < cw; j++) {
+            const int x0 = j * cell, x1 = mo_imin(x0 + cell, w);
+            uint32_t c = 0;
+            for (int x = x0; x < x1; x++) c += v[x] != 0;
+            o[j] += c;
+        }
+    }
+    }
+    for (int k = 0; k < ch * cw; k++) if (p->ND[k] < 1) p->ND[k] = 1;
+    p->sigma_n = tbot_motion_noise(p->SA, p->NA, ch * cw, cell, p->row_step, p->noise_quantile, p->noise_min_fill,
+                                   p->abs_to_sigma);
+    if (tbot_motion_threshold(p->SD, p->ND, p->SA, p->NA, ch, cw, p->sigma_n, p->t_min_dn, p->noise_k, p->cfar_gain,
+                              p->texture_gain, p->abs_to_sigma, p->cfar_box, p->thr, p->mD))
+        return -1;
+    tbot_motion_compare(p->D, h, w, p->thr, cw, cell, p->binary);
+    return 0;
+}
+
+/* --------------------------------------------------------------------------------------- measurement */
+typedef struct {
+    int32_t h, w, cell, scale, min_area, max_area, max_cand, cap_runs;
+    const uint8_t *binary, *D, *cur, *wa;
+    const double *mD;
+    uint8_t *joined;           /* h x w scratch */
+    int32_t *runs;             /* cap_runs x 4 scratch */
+    double *out;               /* max(max_cand, 0) x MO_DET_COLS */
+    double S[9];               /* slot.S, row-major */
+    double pixel_box_var, score_mass;
+    int32_t n_labels, n_cand, n_out, roi[4];   /* out: labels incl. background (0: nothing set), candidates */
+} tbot_motion_meas;
+
+TBOT_API int tbot_motion_meas_size(void) { return (int)sizeof(tbot_motion_meas); }
+
+typedef struct {
+    int32_t key, label, area, bx0, by0, bx1, by1, qx, qy, pk;
+    int64_t s0, sx, sy, sxx, syy, sxy;
+} mo_comp;
+
+static int mo_rank_cmp(const void *a, const void *b) {
+    const mo_comp *x = *(const mo_comp *const *)a, *y = *(const mo_comp *const *)b;
+    if (x->s0 != y->s0) return x->s0 > y->s0 ? -1 : 1;
+    return (x->label > y->label) - (x->label < y->label);
+}
+
+/* Returns 0, or -1 (capacity / memory: the caller measures with OpenCV / NumPy) */
+TBOT_API int tbot_motion_measure(tbot_motion_meas *p) {
+    const int h = p->h, w = p->w;
+    p->n_labels = p->n_cand = p->n_out = 0;
+    p->roi[0] = p->roi[1] = p->roi[2] = p->roi[3] = 0;
+    int minx = w, maxx = -1, miny = h, maxy = -1;
+    for (int y = 0; y < h; y++) {
+        const uint8_t *r = p->binary + (size_t)y * w;
+        int x = 0;
+        while (x + 8 <= w) {
+            uint64_t v;
+            memcpy(&v, r + x, 8);
+            if (v) break;
+            x += 8;
+        }
+        while (x < w && !r[x]) x++;
+        if (x >= w) continue;
+        if (x < minx) minx = x;
+        int xe = w - 1;
+        while (!r[xe]) xe--;
+        if (xe > maxx) maxx = xe;
+        if (y < miny) miny = y;
+        maxy = y;
+    }
+    if (maxy < 0) return 0;
+    p->roi[0] = minx; p->roi[1] = miny; p->roi[2] = maxx - minx + 1; p->roi[3] = maxy - miny + 1;
+    const int X0 = mo_imax(0, minx - 1), Y0 = mo_imax(0, miny - 1);
+    const int X1 = mo_imin(w, maxx + 2), Y1 = mo_imin(h, maxy + 2);
+    const int rw = X1 - X0, rh = Y1 - Y0;
+    /* joined = 3 x 3 max of the ROI (inside the ROI): columns first into a row, then rows */
+    uint8_t *J = p->joined;
+    for (int y = 0; y < rh; y++) {
+        uint8_t *jr = J + (size_t)y * rw;
+        const uint8_t *b0 = p->binary + (size_t)(Y0 + y) * w + X0;
+        const uint8_t *bm = y > 0 ? b0 - w : NULL, *bp = y + 1 < rh ? b0 + w : NULL;
+        for (int x = 0; x < rw; x++) jr[x] = (uint8_t)(b0[x] | (bm ? bm[x] : 0) | (bp ? bp[x] : 0));
+    }
+    /* horizontal pass in place with a carried left value */
+    for (int y = 0; y < rh; y++) {
+        uint8_t *jr = J + (size_t)y * rw;
+        uint8_t left = 0;
+        for (int x = 0; x < rw; x++) {
+            const uint8_t c = jr[x], r = x + 1 < rw ? jr[x + 1] : 0;
+            jr[x] = (uint8_t)(left | c | r);
+            left = c;
+        }
+    }
+    /* runs of the joined image (ROI coordinates) */
+    int32_t nr = 0;
+    int32_t *runs = p->runs;
+    int32_t *row_start = (int32_t *)malloc((size_t)(rh + 1) * sizeof(int32_t));
+    if (!row_start) return -1;
+    for (int y = 0; y < rh; y++) {
+        const uint8_t *jr = J + (size_t)y * rw;
+        row_start[y] = nr;
+        int x = 0;
+        while (x < rw) {
+            while (x < rw && !jr[x]) x++;
+            if (x >= rw) break;
+            const int x0 = x;
+            while (x < rw && jr[x]) x++;
+            if (nr >= p->cap_runs) { free(row_start); return -1; }
+            int32_t *r = runs + 4 * (size_t)nr++;
+            r[0] = y; r[1] = x0; r[2] = x; r[3] = 0;
+        }
+    }
+    row_start[rh] = nr;
+    int32_t *parent = (int32_t *)malloc((size_t)(nr > 0 ? nr : 1) * 2 * sizeof(int32_t));
+    if (!parent) { free(row_start); return -1; }
+    int32_t *slot = parent + nr;
+    for (int32_t i = 0; i < nr; i++) parent[i] = i;
+    for (int y = 1; y < rh; y++) {
+        const int32_t p1 = row_start[y], c1 = row_start[y + 1];
+        int32_t j = row_start[y - 1];
+        for (int32_t i = p1; i < c1; i++) {
+            const int32_t x0 = runs[4 * (size_t)i + 1], x1 = runs[4 * (size_t)i + 2];
+            while (j < p1 && runs[4 * (size_t)j + 2] < x0) j++;
+            for (int32_t k = j; k < p1 && runs[4 * (size_t)k + 1] <= x1; k++) {
+                const int32_t a = front_find(parent, i), b = front_find(parent, k);
+                if (a < b) parent[b] = a;
+                else if (b < a) parent[a] = b;
+            }
+        }
+    }
+    int32_t ncomp = 0;
+    for (int32_t i = 0; i < nr; i++) ncomp += parent[i] == i;
+    mo_comp *cs = (mo_comp *)calloc((size_t)(ncomp > 0 ? ncomp : 1), sizeof(mo_comp));
+    front_order *ord = (front_order *)malloc((size_t)(ncomp > 0 ? ncomp : 1) * sizeof(front_order));
+    mo_comp **rank = (mo_comp **)malloc((size_t)(ncomp > 0 ? ncomp : 1) * sizeof(mo_comp *));
+    if (!cs || !ord || !rank) { free(row_start); free(parent); free(cs); free(ord); free(rank); return -1; }
+    const int32_t bw2 = (rw + 1) / 2;
+    int32_t nc = 0;
+    for (int32_t i = 0; i < nr; i++) {
+        const int32_t *r = runs + 4 * (size_t)i;
+        const int32_t root = front_find(parent, i);
+        const int32_t key = (r[0] >> 1) * bw2 + (r[1] >> 1);
+        mo_comp *c;
+        if (root == i) {
+            slot[i] = nc;
+            c = cs + nc++;
+            c->key = key; c->bx0 = c->by0 = 1 << 30; c->bx1 = c->by1 = -1; c->pk = -1;
+        } else {
+            c = cs + slot[root];
+            if (key < c->key) c->key = key;
+        }
+        /* the thresholded pixels of the run (raster order), global coordinates */
+        const int gy = Y0 + r[0];
+        const uint8_t *br = p->binary + (size_t)gy * w, *dr = p->D + (size_t)gy * w;
+        for (int x = r[1]; x < r[2]; x++) {
+            const int gx = X0 + x;
+            if (!br[gx]) continue;
+            const int64_t d = dr[gx];
+            c->area++;
+            c->s0 += d; c->sx += d * gx; c->sy += d * gy;
+            c->sxx += d * gx * gx; c->syy += d * gy * gy; c->sxy += d * gx * gy;
+            if (gx < c->bx0) c->bx0 = gx;
+            if (gx > c->bx1) c->bx1 = gx;
+            if (gy < c->by0) c->by0 = gy;
+            if (gy > c->by1) c->by1 = gy;
+            if ((int32_t)d > c->pk) { c->pk = (int32_t)d; c->qx = gx; c->qy = gy; }
+        }
+    }
+    for (int32_t k = 0; k < nc; k++) { ord[k].key = cs[k].key; ord[k].root = k; }
+    qsort(ord, (size_t)nc, sizeof(front_order), front_order_cmp);
+    for (int32_t k = 0; k < nc; k++) cs[ord[k].root].label = k + 1;
+    p->n_labels = nc + 1;
+    int32_t nk = 0;
+    for (int32_t k = 0; k < nc; k++)
+        if (cs[k].area >= p->min_area && cs[k].area <= p->max_area) rank[nk++] = cs + k;
+    p->n_cand = nk;
+    qsort(rank, (size_t)nk, sizeof(mo_comp *), mo_rank_cmp);
+    const int mc = p->max_cand;
+    int nout = mc >= 0 ? mo_imin(mc, nk) : mo_imax(nk + mc, 0);      /* rank[:max_candidates] */
+    const double s = (double)p->scale, f_area = (double)(p->scale * p->scale);
+    const int cw = (w + p->cell - 1) / p->cell;
+    const double *S = p->S;
+    int m = 0;
+    for (int t = 0; t < nout; t++) {
+        const mo_comp *c = rank[t];
+        const double m0 = (double)c->s0;
+        if (m0 <= 0.0) continue;
+        const double cx = (double)c->sx / m0, cy = (double)c->sy / m0;
+        const double vxx = (double)c->sxx / m0 - cx * cx - p->pixel_box_var * 1.0;
+        const double vyy = (double)c->syy / m0 - cy * cy - p->pixel_box_var * 1.0;
+        const double vxy = (double)c->sxy / m0 - cx * cy;
+        const double tr = vxx + vyy, det = vxx * vyy - vxy * vxy;
+        const double disc = sqrt(mo_pymax(tr * tr * 0.25 - det, 0.0));
+        const double lmax = tr * 0.5 + disc, lmin = mo_pymax(tr * 0.5 - disc, 0.0);
+        const double diam = mo_pymax(1.0, 4.0 * sqrt(mo_pymax(lmax, 0.0)) * s);
+        const double pkv = (double)c->pk;
+        const double contrast = (double)((int)p->cur[(size_t)c->qy * w + c->qx] - (int)p->wa[(size_t)c->qy * w + c->qx]);
+        const double local = p->mD[(size_t)(c->qy / p->cell) * cw + c->qx / p->cell];
+        const double u = (cx + 0.5) * s - 0.5, v = (cy + 0.5) * s - 0.5;
+        const double ww = S[6] * u + S[7] * v + S[8];
+        const double st_u = (S[0] * u + S[1] * v + S[2]) / ww, st_v = (S[3] * u + S[4] * v + S[5]) / ww;
+        const double mass = m0 * f_area;
+        double *o = p->out + (size_t)m++ * MO_DET_COLS;
+        o[0] = u; o[1] = v; o[2] = (double)c->area * f_area; o[3] = diam; o[4] = contrast;
+        o[5] = pkv / mo_pymax(local, 1.0); o[6] = mass / (mass + p->score_mass);
+        o[7] = (double)c->bx0 * s; o[8] = (double)c->by0 * s;
+        o[9] = (double)(c->bx1 - c->bx0 + 1) * s; o[10] = (double)(c->by1 - c->by0 + 1) * s;
+        o[11] = st_u; o[12] = st_v; o[13] = mass; o[14] = mo_pymax(1.0, 4.0 * sqrt(lmin) * s);
+    }
+    p->n_out = m;
+    free(row_start); free(parent); free(cs); free(ord); free(rank);
+    return 0;
+}

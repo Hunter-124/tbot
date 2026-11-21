@@ -146,6 +146,84 @@ new_speed_sigma_mps = 13.0    # cartesian: a new track's velocity, 1 sigma per a
                               # sigma of the target p50 0.59 under 0.25 s against 1.18 for a true sigma)
 new_acc_sigma_mps2 = 6.0      # cartesian: its acceleration, 1 sigma per axis (gravity + drag + lift: 3-9 m/s^2 in all)
 
+[vision]                      # the motion-first front end (vision/motion.py, vision/tracker_motion.py)
+engine = "motion"             # motion: scenery is cancelled by registering earlier frames onto this one, what is left
+                              # moves against the world; a track is born only from detections in a straight, evenly
+                              # timed line | legacy: the single-frame contrast detector + scenery filter + tracker3d
+                              # births ([detector], [tracker]: the software of 2026-11-19)
+scale = 2                     # work at 1/scale of the frame (1 or 2; 2 = a 2x2 box mean, 320 x 200)
+lag_a_ms = 40.0               # the current frame is compared with the earlier frame nearest to this long ago ...
+lag_b_ms = 100.0              # ... and with the one nearest to this long ago. A mover differs from BOTH (so there is
+                              # no ghost where it was), and the longer lag is what shows a slow one
+envelope_px = 3               # "what scenery can look like here" = min..max of the registered earlier frame over this
+                              # neighbourhood: +-1 px of registration error and parallax leave nothing behind
+reg_downscale = 4             # registration: SAD search at 1/(2 x this) of the frame, refined at 1/this
+reg_search_px = 16.0          # largest correction to the gyro's prediction of the scenery shift, full-res px
+reg_min_response = 0.15       # depth of the SAD minimum, (median - min) / median of the coarse surface: below this
+                              # the gyro's prediction stands (open sky has nothing to hold; masked pixels never count)
+local_field = false           # true: after the global registration, a 3 x 4 grid of residual shifts (the parallax of
+                              # scenery a few metres away under a hand-held gun). About 2 ms a frame on the Pi 3B, and
+                              # on the 68 presses of 2026-11-17 to 20 nothing to show for it once texture_gain was in
+                              # (recall 0.600 with / 0.598 without, false tracks 0.29 / 0.27 per armed second)
+t_min_dn = 4.0                # a pixel must leave the envelope by max(this, noise_k x the frame's temporal noise) ...
+noise_k = 4.0
+cfar_gain = 6.0               # ... plus this times the mean residual around it: leaf flutter and parallax raise their
+                              # own bar, open sky keeps the low one
+texture_gain = 2.0            # ... plus this times the mean |current - registered earlier frame| around it above what
+                              # sensor noise gives: texture that does not register to the pixel raises its own bar
+cfar_cell_px = 8              # the mean residual is taken over cells of this size (working px), smoothed over 5 x 5 cells
+min_area_px = 2               # working px
+max_area_px = 2500            # working px
+max_candidates = 12           # per frame, strongest summed residual first
+native = true                 # C kernels when built (scripts/build_native.sh); false = the OpenCV/NumPy reference
+
+[vision.track]
+init_hits = 5                 # a track is born from this many detections on one straight, evenly timed line. Sim,
+                              # false tracks per 1000 frames (50 fps) with 4 / 5: 12 random specks a frame 0.1 / 0,
+                              # 24 specks 1.2 / 0, 12 in a 150x100 px patch 15 / 0, 20 in it 48 / 1.3. The solver
+                              # wants fire.min_track_hits = 5 and 200 ms from first sight anyway
+init_window_ms = 300.0        # ... all within this long (7 detections of a weak path at 30 frames/s take 200 ms)
+init_gate_px = 4.0            # the next detection may be this far from where the line says ...
+init_gate_frac = 0.15         # ... plus this fraction of the step since the last one
+init_min_speed_dps = 2.0      # against the scenery: slower is flutter on the spot
+init_min_speed_gyro_dps = 6.0 # ... and this where the scenery is only the gyro's word (open sky, nothing to register
+                              # on): an uncorrected gyro bias turns everything that stands still at that bias (-2.5
+                              # deg/s of yaw in the recordings of 2026-11-17 to 20). A clay going straight away over
+                              # open sky at 2-6 deg/s gets no track for it
+init_edge_px = 12.0           # a detection whose extent reaches within this of the picture's border starts and extends
+                              # no path: a tree top coming in at the corner of an open sky (which the gyro alone
+                              # cannot hold still) was tracked for 30 frames in press 20261119-092521. 0 = off
+init_max_speed_dps = 120.0
+init_min_travel_px = 8.0      # from the first to the last detection of the line, in stabilised pixels
+init_size_ratio = 2.5         # consecutive detections of one object differ in size by at most this factor
+init_max_branches = 3         # lines kept per starting detection
+max_misses = 6                # a track coasts this many frames without its detection
+gate_sigma = 4.0              # association gate of a live track, in sigmas of its prediction ...
+gate_min_px = 6.0             # ... and at least this wide; a live track's detection must also lie on the line of its
+                              # own recent detections in stab (init_gate_px + init_gate_frac * step) and keep the sign
+track_mass_ratio = 8.0        # ... and have at least 1/this of the median mass of its last 5 (a speck taken while the
+                              # clay dropped out bent the track off it in the sim); 0 = no mass test
+init_max_rms_px = 1.5         # a path's detections may scatter about it by this much (RMS, stabilised px) ...
+init_max_accel_dps2 = 300.0   # the path is constant acceleration up to this, not constant velocity: a clay going away
+                              # slows down in angle as it gains distance (the hit of 2026-11-19 16:02:43: 50 -> 12 deg/s
+                              # in 0.45 s, 86 deg/s^2, no track on a straight evenly timed line in 18 detections), a
+                              # near one curves under gravity (56 deg/s^2 at 10 m)
+init_mass_ratio = 4.0         # consecutive detections of one object differ in summed residual by at most this factor
+                              # (a clay: under 2.5 from frame to frame; a speck next to its path is 10-100x weaker)
+init_weak_mass = 600.0        # a path whose detections are weaker than this (median summed residual, DN px: flicker in
+init_weak_extra_hits = 2      # foliage is 80-300, a clay at 30 m 3000, at 14 m 10000-40000) needs this many more
+                              # detections than init_hits before it is believed
+same_sign = false             # true: the detections of one object must all be brighter, or all darker, than what is
+                              # behind them. Off: a clay lit from above is bright on top and dark underneath and its
+                              # measured sign flips from frame to frame, and one crossing from sky to trees changes
+                              # sign for good; the size, the mass and the path tell it from a speck
+init_gyro_frac = 0.05        # ... plus this fraction of the gun's own image motion where stab rests on the gyro alone
+                              # (reg_ok false); the same fraction widens the line's gate over each such step
+max_chains = 64               # candidate lines of 2+ detections kept at once (the weakest go first)
+max_coast_ms = 200.0          # a track also dies when its last detection is older than this
+stop_window_ms = 150.0        # a track whose detections over this long moved slower than init_min_speed_dps dies
+duplicate_deg = 1.0           # two tracks this close with a similar angular velocity: the younger one goes
+
 [imu]
 enabled = true
 i2c_bus = 1
@@ -354,6 +432,9 @@ host = "0.0.0.0"
 port = 8080
 fps = 10.0
 jpeg_quality = 70
+overlay_detail = "clean"      # clean: tracks, the firing solution, the bore, two text lines (raw detections: one dim
+                              # pixel each) | debug: every detection box, chip, scenery mark and stage timing.
+                              # Also what press clips are drawn with (`tbot clip --detail` overrides)
 
 [record]
 mode = "armed"                # off | armed (every held press of the arming button becomes one session) | continuous

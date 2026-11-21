@@ -149,8 +149,9 @@ def _frame_rows(session: Path) -> list[tuple[int, int, int]]:
 
 
 def render(session: str | Path, out: str | Path | None = None, fps: float | None = None,
-           scale: int = 1, threads: int = 1) -> Path:
-    """Write the annotated clip of one session and return its path."""
+           scale: int = 1, threads: int = 1, detail: str | None = None) -> Path:
+    """Write the annotated clip of one session and return its path. detail: the overlay's "clean" | "debug"
+    (None: stream.overlay_detail of the session's config, clean for a session that has none)."""
     session = Path(session)
     meta = json.loads((session / META_JSON).read_text())
     w, h, ch = int(meta["width"]), int(meta["height"]), int(meta.get("channels", 1))
@@ -168,6 +169,7 @@ def render(session: str | Path, out: str | Path | None = None, fps: float | None
     except Exception:  # noqa: BLE001
         mask = None
     bore_px = mount.bore_pixel(cam, float(cfg.tracker.range_prior_m))
+    detail = overlay.norm_detail(detail or getattr(getattr(cfg, "stream", None), "overlay_detail", None))
     telemetry = _load_telemetry(session)
     rows = _frame_rows(session)
     if not rows:
@@ -194,10 +196,12 @@ def render(session: str | Path, out: str | Path | None = None, fps: float | None
                 banner = f"{'HELD ' if held else ''}t{rel:+.3f}s  frame {i + 1}/{len(rows)}"
                 rec = telemetry.get(seq)
                 if rec is None:  # a frame the pipeline never processed (it was replaced by a newer one)
-                    bgr = overlay.draw(image, mask=mask, bore_px=bore_px, telemetry={"seq": seq})
+                    bgr = overlay.draw(image, mask=mask, bore_px=bore_px, telemetry={"seq": seq},
+                                       detail=detail)
                     overlay._text(bgr, (max(150, w - 8 * len(banner) - 6), 15), banner)
                 else:
-                    bgr = overlay.draw_record(image, rec, cam, mount, mask=mask, bore_px=bore_px, banner=banner)
+                    bgr = overlay.draw_record(image, rec, cam, mount, mask=mask, bore_px=bore_px, banner=banner,
+                                              detail=detail)
                 if scale > 1:
                     bgr = cv2.resize(bgr, (w * scale, h * scale), interpolation=cv2.INTER_NEAREST)
                 video.write(bgr)
@@ -225,6 +229,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--fps", type=float, default=None, help="playback rate (default: record.clip_fps)")
     parser.add_argument("--scale", type=int, default=1, help="integer upscale of the picture (default 1)")
     parser.add_argument("--out", default=None, help="output file (one session only; default <session>/clip.mp4)")
+    parser.add_argument("--detail", choices=overlay.DETAILS, default=None,
+                        help="overlay detail: clean (tracks, solution, bore) or debug (every detection, chip and "
+                             "timing); default stream.overlay_detail of the session's config")
     parser.add_argument("--threads", type=int, default=1, help="OpenCV threads (default 1; 0 = all cores)")
     parser.add_argument("--nice", type=int, default=0, help="lower this process's priority by N (the Pi service uses 15)")
     args = parser.parse_args(argv)
@@ -246,7 +253,8 @@ def main(argv: list[str] | None = None) -> int:
     for session in targets:
         t0 = time.monotonic()
         try:
-            path = render(session, out=args.out, fps=args.fps, scale=args.scale, threads=args.threads)
+            path = render(session, out=args.out, fps=args.fps, scale=args.scale, threads=args.threads,
+                          detail=args.detail)
         except Exception as exc:  # noqa: BLE001 - one bad session must not stop the rest
             print(f"tbot clip: {session}: {exc}", file=sys.stderr)
             status = 1

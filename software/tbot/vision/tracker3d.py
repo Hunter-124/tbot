@@ -511,6 +511,9 @@ def make_tracker(cfg: Config, cam: CameraModel, mount: MountModel) -> ClayTracke
     """The tracker named by cfg.tracker.model ("angular" | "cartesian")."""
     model = str(getattr(cfg.tracker, "model", "angular")).lower()
     if model == "cartesian":
+        if str(getattr(getattr(cfg, "vision", None), "engine", "legacy")).lower() == "motion":
+            from .tracker_motion import MotionTracker  # noqa: PLC0415 - tracker_motion imports this module
+            return MotionTracker(cfg, cam, mount)
         return CartesianClayTracker(cfg, cam, mount)
     if model == "angular":
         return ClayTracker(cfg, cam, mount)

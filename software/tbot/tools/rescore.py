@@ -16,6 +16,7 @@ work takes (`--work-ms`, default sim.process_ms: the Pi 3B's detect + track), wh
     tbot rescore <presses> --every                                                         # is P(hit) honest?
 
     tbot rescore <presses> --handover 1     # detection in a sensor process, tracks one frame stale (as live)
+    tbot rescore <presses> --set vision.engine=legacy                                      # the old front end
 
 `--handover N` runs the press the way the gun runs live (camera.detect_in_process): a child process replays the
 frames and detects, this process tracks and solves, and the scenery filter knows the tracks as they were N
@@ -78,6 +79,9 @@ def rerun(press: str | Path, cfg: Config, work_ms: float | None = None, handover
 
         if work <= 0.0:
             raise ValueError("--handover needs a modelled work time (--work-ms > 0): the clock is the session's")
+        if str(getattr(cfg.vision, "engine", "legacy")).strip().lower() != "legacy":
+            raise ValueError("--handover: detection in a sensor process is the legacy front end's "
+                             "(--set vision.engine=legacy); the motion engine detects in the pipeline's own loop")
         source.stop()
         source = SensorProcess(cfg, calib, f"replay:{press}", detect=True, work_ms=work,
                                lockstep=None if handover == "free" else int(handover))

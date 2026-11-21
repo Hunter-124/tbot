@@ -63,6 +63,40 @@ EXPOSURE_WARN_S = 2.0  # the scene must be out of the camera's exposure range th
 DELAY_MISMATCH_MS = 15.0  # a shot whose recoil comes this far from the assumed trigger delay is reported
 HOT_TEMP_C = 75.0  # warn before the Pi 3B firmware throttles at 80 C
 HEALTH_PERIOD_S = 2.0
+VISION_ENGINES = ("motion", "legacy")
+VISION_ERROR_LOG_FIRST = 3      # motion front end: stage failures logged with their traceback, the first few ...
+VISION_ERROR_LOG_EVERY = 500    # ... and then one in this many
+
+
+def vision_engine(cfg) -> str:
+    """cfg.vision.engine, checked: "motion" (vision/motion.py + vision/tracker_motion.py) or "legacy" (the contrast
+    detector + scenery filter + tracker3d births of 2026-11-19). Anything else is a configuration error."""
+    vis = getattr(cfg, "vision", None)
+    engine = str(getattr(vis, "engine", "legacy") if vis is not None else "legacy").strip().lower()
+    if engine not in VISION_ENGINES:
+        raise ValueError(f"vision.engine must be one of {'|'.join(VISION_ENGINES)}, got {engine!r}")
+    return engine
+
+
+def _plain_stats(stats: dict, depth: int = 0) -> dict:
+    """A detector's stats for the telemetry: numbers, flags, short strings, pairs of numbers, and (one level down)
+    dicts of those. Arrays, lists and anything else are left out (MotionDetector keeps its registration field in
+    there: kilobytes a frame that nobody reads)."""
+    out: dict = {}
+    for k, v in stats.items():
+        if isinstance(v, (bool, np.bool_)):
+            out[str(k)] = bool(v)
+        elif isinstance(v, (int, np.integer)):
+            out[str(k)] = int(v)
+        elif isinstance(v, (float, np.floating)):
+            out[str(k)] = round(float(v), 3) if math.isfinite(float(v)) else None
+        elif isinstance(v, str) and len(v) <= 64:
+            out[str(k)] = v
+        elif isinstance(v, tuple) and len(v) == 2 and all(isinstance(x, (int, float, np.number)) for x in v):
+            out[str(k)] = [round(float(x), 3) if math.isfinite(float(x)) else None for x in v]
+        elif isinstance(v, dict) and depth == 0:
+            out[str(k)] = _plain_stats(v, 1)
+    return out
 
 
 def _sd_notify(message: str) -> None:
@@ -123,13 +157,37 @@ class Pipeline:
         self.cam = CameraModel.from_calibration(calib.intrinsics, cfg, width, height)
         self.mount = MountModel.from_config(cfg, calib.boresight)
         self.mask = combined_mask(self.cam, self.mount, cfg, calib)
-        self.detector = ClayDetector(cfg, self.mask)
-        self.tracker = make_tracker(cfg, self.cam, self.mount)
-        self.clutter = StaticFilter(cfg, self.cam, self.mount) if bool(cfg.detector.static_reject) else None
+        # vision.engine: "motion" = registered frame differencing (vision/motion.py) + line-born tracks
+        # (vision/tracker_motion.py via make_tracker), no scenery filter; "legacy" = exactly the software of
+        # 2026-11-19 (ClayDetector + StaticFilter + tracker3d)
+        self.engine = vision_engine(cfg)
+        self._motion = self.engine == "motion"
+        self._vision_errors = 0     # motion front end: frames whose detection or tracking raised (see _vision_failed)
+        self._promotions = 0        # MotionTracker.stats["promotions"] after the last frame (tracks born per frame)
+        self._stab_epoch = None     # MotionDetector.stab_epoch of the last frame (a change re-bases stab: reset)
+        if self._motion:
+            from tbot.vision.motion import MotionDetector  # noqa: PLC0415 - only the motion engine needs it
+
+            self.detector = MotionDetector(cfg, self.mask, cam=self.cam, mount=self.mount)
+            self.tracker = make_tracker(cfg, self.cam, self.mount)
+            self.clutter = None     # registration cancels the scenery: the IMU scenery filter is legacy-only
+            if str(getattr(cfg.tracker, "model", "")).lower() != "cartesian":
+                log.warning("vision.engine = motion with tracker.model = %s: tracks are born the legacy way (the "
+                            "motion tracker needs tracker.model = cartesian)", cfg.tracker.model)
+        else:
+            self.detector = ClayDetector(cfg, self.mask)
+            self.tracker = make_tracker(cfg, self.cam, self.mount)
+            self.clutter = StaticFilter(cfg, self.cam, self.mount) if bool(cfg.detector.static_reject) else None
         self._movers: set[int] = set()  # tracks seen crossing the sky: the scenery filter never takes them
         # camera.detect_in_process: the sensor process detects (vision/handover.py) and this loop starts at the
         # tracker. Any frame that comes without detections is detected here, as in the single loop.
         self._remote = bool(getattr(source, "detects", False))
+        if self._remote and self._motion:
+            # the sensor process runs the legacy detector (vision/handover.py refuses to build one for the motion
+            # engine, so this is a child of an older build or one started by hand): ignore what it sends
+            log.warning("camera.detect_in_process is not supported by vision.engine = motion: detecting in this "
+                        "loop (the sensor process's detections are ignored)")
+            self._remote = False
         self._hints_sent = False
         self._early_imu: list = []  # IMU samples taken in while waiting for a frame that did not come
         self._idle_period = 0.0  # set by run(): the rate asked of the sensor process while the button is up
@@ -180,6 +238,10 @@ class Pipeline:
         self.frame_period_s = 1.0 / self.nominal_fps
         self.read_timeout_s = max(0.1, 5.0 * self.frame_period_s)
         self.bore_px = self.mount.bore_pixel(self.cam, float(cfg.tracker.range_prior_m))
+        detail = getattr(cfg.stream, "overlay_detail", overlay_mod.DETAIL_CLEAN)
+        self.overlay_detail = overlay_mod.norm_detail(detail)  # stream / display window: clean | debug
+        if str(detail).strip().lower() != self.overlay_detail:
+            log.warning("stream.overlay_detail must be clean|debug, got %r: clean", detail)
 
         # per-frame state (read by the overlay, the tools and the tests)
         self.frames = 0
@@ -555,10 +617,12 @@ class Pipeline:
             track_lead=track_lead,
             armed=bool(telemetry.get("armed", False)),
             fired=bool(telemetry.get("fired", False)),
+            detail=self.overlay_detail,
         )
 
     def _draw_record(self, image: np.ndarray, record: dict) -> np.ndarray:
-        return overlay_mod.draw_record(image, record, self.cam, self.mount, mask=self.mask, bore_px=self.bore_px)
+        return overlay_mod.draw_record(image, record, self.cam, self.mount, mask=self.mask, bore_px=self.bore_px,
+                                       detail=self.overlay_detail)
 
     def _publish(self, frame: Frame, R_wg: np.ndarray, telemetry: dict) -> float:
         """Render + publish/show the overlay when due. Returns the time spent in ms."""
@@ -666,6 +730,123 @@ class Pipeline:
             for rec in self.recoil.feed(samples):
                 self._on_recoil(rec)
 
+    # ------------------------------------------------------------------ motion front end
+    # Failure policy. The frame loop has no per-stage handler: an exception in any stage ends run(), close() aborts
+    # and rests the actuator, the process exits and systemd starts it again (tbot-run.service Restart=always: ~20 s
+    # of imports and camera start on the Pi 3B, the traceback only on stderr). The motion front end is new code: a
+    # frame on which its detector or tracker raises is logged WITH its traceback (to the log file too), the stage
+    # is reset and the frame goes on without detections / tracks: no target, so nothing can be fired at; the
+    # next frames start over. Counted in the telemetry (vision.errors). The legacy stages keep the old policy.
+    def _vision_failed(self, stage: str) -> None:
+        self._vision_errors += 1
+        n = self._vision_errors
+        if n <= VISION_ERROR_LOG_FIRST or n % VISION_ERROR_LOG_EVERY == 0:
+            log.exception("vision (motion engine): the %s raised on frame %d (%d such frame(s) so far): %s reset, "
+                          "the frame has no %s", stage, self.frames + 1, n, stage,
+                          "detections" if stage == "detector" else "tracks")
+
+    def _reset_detector(self) -> None:
+        """Detector history gone: the stabilised plane starts over, so the motion tracker (its chains and the stab
+        lines of its tracks live in that plane) starts over with it."""
+        try:
+            self.detector.reset()
+        except Exception:  # noqa: BLE001 - see _vision_failed
+            self._vision_failed("detector")
+        self._reset_tracker()
+
+    def _reset_tracker(self) -> None:
+        try:
+            self.tracker.reset()
+        except Exception:  # noqa: BLE001 - see _vision_failed
+            self._vision_failed("tracker")
+        self._promotions = 0
+
+    def _detect_motion(self, frame: Frame, R_wg: np.ndarray) -> list:
+        """The motion detector on this frame: with the gun's attitude at mid-exposure when there is a real one
+        that is ready (None otherwise: the detector then registers on the image alone)."""
+        att = self.attitude
+        R = R_wg if not isinstance(att, FixedAttitude) and bool(att.ready) else None
+        try:
+            dets = list(self.detector.detect(frame, R_wg=R))
+        except Exception:  # noqa: BLE001 - see _vision_failed
+            self._vision_failed("detector")
+            self._reset_detector()
+            return []
+        epoch = getattr(self.detector, "stab_epoch", None)
+        if epoch != self._stab_epoch:
+            # the detector re-based its stabilised plane: every stab jumped by a constant, the chains with it
+            if self._stab_epoch is not None:
+                log.info("vision: stabilised plane re-based (epoch %s): motion tracker reset", epoch)
+                self._reset_tracker()
+            self._stab_epoch = epoch
+        return dets
+
+    def _track_motion(self, t_ns: int, R_wg: np.ndarray) -> list:
+        try:
+            return self.tracker.update(t_ns, self.detections, R_wg)
+        except Exception:  # noqa: BLE001 - see _vision_failed
+            self._vision_failed("tracker")
+            self._reset_tracker()
+            return []
+
+    def _motion_detector_ms(self) -> dict:
+        tm = getattr(self.detector, "timings_ms", None)
+        return dict(tm) if isinstance(tm, dict) else {}
+
+    def _motion_detector_stats(self) -> dict:
+        """`detector` of the telemetry: scale and noise_dn first (the console reads noise_dn), then its stats."""
+        det = self.detector
+        try:
+            scale = int(getattr(det, "scale", 1) or 1)
+        except (TypeError, ValueError):
+            scale = 1
+        try:
+            noise = float(getattr(det, "noise_sigma", float("nan")))
+        except (TypeError, ValueError):
+            noise = float("nan")
+        st = getattr(det, "stats", None)
+        return {"scale": scale, "noise_dn": noise, **(_plain_stats(st) if isinstance(st, dict) else {})}
+
+    def _vision_telemetry(self) -> dict:
+        """The motion front end's state for the telemetry (`vision`): small, and never fails."""
+        ts = getattr(self.tracker, "stats", None)
+        ts = ts if isinstance(ts, dict) else {}
+        ds = getattr(self.detector, "stats", None)
+        ds = ds if isinstance(ds, dict) else {}
+        promotions = int(ts.get("promotions", 0) or 0)
+        born = max(0, promotions - self._promotions)
+        self._promotions = promotions
+
+        def num(v, nd=2):
+            try:
+                f = float(v)
+            except (TypeError, ValueError):
+                return None
+            return round(f, nd) if math.isfinite(f) else None
+
+        # registration onto the two reference frames (MotionDetector.stats reg_a / reg_b): ok only when both held;
+        # the shift is the correction to the predicted scenery shift of the first (full-res px)
+        ra, rb = ds.get("reg_a"), ds.get("reg_b")
+        ra = ra if isinstance(ra, dict) else {}
+        rb = rb if isinstance(rb, dict) else {}
+        reg_ok = (bool(ra.get("ok")) and bool(rb.get("ok"))) if ra and rb else None
+        shift = ra.get("shift")
+        if isinstance(shift, (list, tuple, np.ndarray)) and len(shift) >= 2:
+            shift = [num(shift[0]), num(shift[1])]
+        else:
+            shift = num(shift)
+        return {
+            "engine": self.engine,
+            "chains": int(ts.get("chains", 0) or 0),
+            "seeds": int(ts.get("seeds", 0) or 0),
+            "tracks": len(self.tracks),
+            "born": born,
+            "reg_ok": None if reg_ok is None else bool(reg_ok),
+            "reg_shift_px": shift,
+            "noise_dn": num(getattr(self.detector, "noise_sigma", None)),
+            "errors": int(self._vision_errors),
+        }
+
     # ------------------------------------------------------------------ one frame
     def step(self) -> dict | None:
         """Process the next frame. None = no frame (timeout or end of stream)."""
@@ -703,6 +884,8 @@ class Pipeline:
             self.tracker.reset()
             if self.clutter is not None:
                 self.clutter.reset()
+            if self._motion:
+                self._reset_detector()  # its earlier frames are from before the outage: nothing to register onto
             log.warning("camera restarted (%d so far): tracks reset", int(getattr(self.source, "restarts", 0)))
 
         samples = self.imu.read()
@@ -716,11 +899,16 @@ class Pipeline:
             R_wg = np.asarray(self.attitude.R_wg(int(frame.t_exposure_ns)), dtype=np.float64)
             t_att = time.perf_counter_ns()
 
-            self._arm_scenery_filter(int(frame.t_exposure_ns), R_wg)
-            self.detections = self.detector.detect(frame)
-            t_det = time.perf_counter_ns()
+            if self._motion:
+                self.detections = self._detect_motion(frame, R_wg)
+                t_det = time.perf_counter_ns()
+                filtered = False
+            else:
+                self._arm_scenery_filter(int(frame.t_exposure_ns), R_wg)
+                self.detections = self.detector.detect(frame)
+                t_det = time.perf_counter_ns()
+                filtered = self.detector.candidate_filter is not None
             detect_ms = _ms(t_att, t_det)
-            filtered = self.detector.candidate_filter is not None
             self.handover = None
         else:
             # detected in the sensor process, with the attitude it had for the frame: the tracker turns the
@@ -741,7 +929,10 @@ class Pipeline:
                 "hints_age": (self.frames + 1 - remote.hints_n) if remote.hints_n else None,
             }
 
-        self.tracks = self.tracker.update(int(frame.t_exposure_ns), self.detections, R_wg)
+        if self._motion:
+            self.tracks = self._track_motion(int(frame.t_exposure_ns), R_wg)
+        else:
+            self.tracks = self.tracker.update(int(frame.t_exposure_ns), self.detections, R_wg)
         t_trk = time.perf_counter_ns()
         if self._remote:
             self._send_hints()
@@ -882,14 +1073,21 @@ class Pipeline:
                 "imu2": _ms(t_trk, t_imu2),
                 "solve": _ms(t_imu2, t_sol),
             },
-            "detector_ms": dict(self.detector.timings_ms if remote is None else remote.timings_ms),
-            "detector": ({"scale": int(self.detector.scale), "noise_dn": float(self.detector.noise_sigma),
+            "detector_ms": (self._motion_detector_ms() if self._motion else
+                            dict(self.detector.timings_ms if remote is None else remote.timings_ms)),
+            "detector": (self._motion_detector_stats() if self._motion else
+                         {"scale": int(self.detector.scale), "noise_dn": float(self.detector.noise_sigma),
                           **self.detector.stats} if remote is None else
                          {"scale": int(remote.scale), "noise_dn": float(remote.noise_sigma), **remote.stats}),
-            # [u, v, diameter_px, snr, contrast_dn, bbox x, y, w, h, area_px] per detection, full-res pixels
-            "dets": [[round(float(d.u), 2), round(float(d.v), 2), round(float(d.diameter_px), 2),
-                      round(float(d.snr), 1), round(float(d.contrast), 1), *d.bbox, float(d.area_px)]
-                     for d in self.detections],
+            # [u, v, diameter_px, snr, contrast_dn, bbox x, y, w, h, area_px] per detection, full-res pixels; the
+            # motion engine appends [10] mass (summed residual against the registered background, DN * px)
+            "dets": ([[round(float(d.u), 2), round(float(d.v), 2), round(float(d.diameter_px), 2),
+                       round(float(d.snr), 1), round(float(d.contrast), 1), *d.bbox, float(d.area_px),
+                       round(float(getattr(d, "mass", 0.0) or 0.0), 1)]
+                      for d in self.detections] if self._motion else
+                     [[round(float(d.u), 2), round(float(d.v), 2), round(float(d.diameter_px), 2),
+                       round(float(d.snr), 1), round(float(d.contrast), 1), *d.bbox, float(d.area_px)]
+                      for d in self.detections]),
             "static": ((self.clutter.static_px if remote is None else remote.static_px) if filtered else None),
             # how fast fixed scenery slides in the IMU's world (camera x / y, deg/s): an uncorrected gyro bias
             "scenery_drift_dps": ([round(math.degrees(v * self.clutter.ifov), 3)
@@ -937,6 +1135,8 @@ class Pipeline:
         }
         if self.handover is not None:
             tele["handover"] = self.handover
+        if self._motion:
+            tele["vision"] = self._vision_telemetry()
         if fired:
             ev = {
                 "t_ns": now,

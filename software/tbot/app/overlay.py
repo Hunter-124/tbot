@@ -3,9 +3,19 @@
 Pure drawing, no per-frame state: the caller supplies the per-frame objects and a `project_w` closure that maps
 a WORLD direction to a pixel in the frame that is being drawn.
 
+Two detail levels (`detail`, stream.overlay_detail, `tbot clip --detail`):
+
+    clean (default)  what a shooter needs to trust the gun, nothing else: a ring on every confirmed track (the
+                     solver's target: the emphasised double ring, its motion arrow and the "#id range" chip; the
+                     others a thin ring), the firing solution when there is a target, the bore crosshair, the
+                     status band, ONE bottom line (decision + P(hit) meter) and the FIRE plate. A raw detection
+                     that belongs to no drawn track is a single dim pixel (detector health stays visible).
+                     Tentative tracks, brackets, chips, scenery marks and the mask wash are not drawn.
+    debug            everything below, as it always was.
+
 Layout: a semi-transparent status band on top (ARMED/SAFE, LIVE/DRY, shots, fps, frame age; Pi temperature,
 power/exposure warnings, exposure and the clip clock on the right), the scene marks in the picture, and a band
-at the bottom with the fire decision, a P(hit) meter and the stage timings. Legend of the marks:
+at the bottom with the fire decision, a P(hit) meter and the stage timings. Legend of the marks (debug):
 
     green corner brackets   detection (the detector's box), "snr 13 6.8px" chip under it
     grey x                  candidate dropped as scenery fixed in the world
@@ -70,6 +80,17 @@ LINE_H = 15           # bottom band line height, px
 HOT_C, WARM_C = 75.0, 70.0  # Pi temperature colours (tbot.app.run.HOT_TEMP_C warns at 75 C)
 OLD_FRAME_MS = 100.0  # frame age shown amber above this
 DET_LABELS = 4        # detections that get an snr/size chip (the strongest; the rest only brackets)
+
+DETAIL_CLEAN, DETAIL_DEBUG = "clean", "debug"
+DETAILS = (DETAIL_CLEAN, DETAIL_DEBUG)
+C_DET_DOT = (110, 150, 110)   # clean: a detection that belongs to no track, one dim pixel
+TRACK_OWN_PX = 16             # clean: a detection this close to a drawn track ring is that track's (not dotted)
+
+
+def norm_detail(detail) -> str:
+    """'clean' | 'debug' (anything else, None included, is clean: the calm picture is the safe default)."""
+    d = str(detail or DETAIL_CLEAN).strip().lower()
+    return d if d in DETAILS else DETAIL_CLEAN
 
 _BAR_RE = re.compile(r"p_hit\s+[-+0-9.eE]+\s*<\s*([0-9.]+)")  # the solver's "p_hit 0.12 < 0.50"
 
@@ -581,7 +602,12 @@ def _fire_flash(img: np.ndarray) -> None:
 
 # ------------------------------------------------------------------------------------------- the frame
 def _render(img: np.ndarray, *, detections, tracks, decision, mask, bore_px, tele: dict, project_w, track_lead,
-            armed: bool, fired: bool, static=None, banner: str | None = None) -> np.ndarray:
+            armed: bool, fired: bool, static=None, banner: str | None = None,
+            detail: str = DETAIL_DEBUG) -> np.ndarray:
+    if norm_detail(detail) == DETAIL_CLEAN:
+        return _render_clean(img, detections=detections, tracks=tracks, decision=decision, bore_px=bore_px,
+                             tele=tele, project_w=project_w, track_lead=track_lead, armed=armed, fired=fired,
+                             banner=banner)
     import cv2
 
     h, w = img.shape[:2]
@@ -666,23 +692,117 @@ def _render(img: np.ndarray, *, detections, tracks, decision, mask, bore_px, tel
     # --- fire solution: predicted bore (ring + pattern circle), lead point (diamond), the miss between them
     lead, bore, pat = pts[-3], pts[-2], pts[-1]
     if decision is not None and project_w is not None:
-        fire = bool(getattr(decision, "fire", False)) or fired
-        lead_in = lead is not None and 0 <= lead[0] < w and lim[0] <= lead[1] < lim[1]
-        if lead is not None and bore is not None:
-            _line(img, bore, lead, C_BORE_PRED)
-        if bore is not None:
-            rp = None if pat is None else int(round(math.hypot(pat[0] - bore[0], pat[1] - bore[1])))
-            if rp is not None and 3 <= rp <= 4 * max(h, w):
-                if fire:
-                    _ring(img, bore, rp, C_FIRE, 2)
-                else:
-                    _dashed_ring(img, bore, rp, C_BORE_PRED, 16)
-            _ring(img, bore, 4, C_BORE_PRED, 2)
-        if lead_in:
-            _diamond(img, lead, C_LEAD)
-        elif lead is not None:
-            src = bore if bore is not None else (w // 2, (lim[0] + lim[1]) // 2)
-            _edge_arrow(img, src, lead, C_LEAD, lim)
+        _solution(img, decision, fired, lead, bore, pat, lim)
+
+    # --- HUD
+    _status_band(img, tele, armed, banner)
+    _decision_band(img, decision, lines)
+    if fired or (decision is not None and bool(getattr(decision, "fire", False))):
+        _fire_flash(img)
+    return img
+
+
+def _solution(img: np.ndarray, decision, fired: bool, lead, bore, pat, lim: tuple[int, int]) -> None:
+    """The firing solution: predicted bore at the shot (ring + pattern circle, solid red when firing), the lead
+    point (diamond, or an arrow at the picture's edge) and the miss line between them."""
+    h, w = img.shape[:2]
+    fire = bool(getattr(decision, "fire", False)) or fired
+    lead_in = lead is not None and 0 <= lead[0] < w and lim[0] <= lead[1] < lim[1]
+    if lead is not None and bore is not None:
+        _line(img, bore, lead, C_BORE_PRED)
+    if bore is not None:
+        rp = None if pat is None else int(round(math.hypot(pat[0] - bore[0], pat[1] - bore[1])))
+        if rp is not None and 3 <= rp <= 4 * max(h, w):
+            if fire:
+                _ring(img, bore, rp, C_FIRE, 2)
+            else:
+                _dashed_ring(img, bore, rp, C_BORE_PRED, 16)
+        _ring(img, bore, 4, C_BORE_PRED, 2)
+    if lead_in:
+        _diamond(img, lead, C_LEAD)
+    elif lead is not None:
+        src = bore if bore is not None else (w // 2, (lim[0] + lim[1]) // 2)
+        _edge_arrow(img, src, lead, C_LEAD, lim)
+
+
+def _same_id(a, b) -> bool:
+    try:
+        return a is not None and b is not None and int(a) == int(b)
+    except (TypeError, ValueError):
+        return False
+
+
+def _render_clean(img: np.ndarray, *, detections, tracks, decision, bore_px, tele: dict, project_w, track_lead,
+                  armed: bool, fired: bool, banner: str | None = None) -> np.ndarray:
+    """The clean detail level (module docstring): tracks, the solution on the target, the bore, two bands."""
+    import cv2
+
+    h, w = img.shape[:2]
+    lines = (decision is not None, [], [])    # one bottom line: the decision and the P(hit) meter
+    lim = (min(h, TOP_H), max(min(h, TOP_H), h - _band_height(lines)))
+
+    bp = _ipt(bore_px)
+    if bp is not None:
+        _crosshair(img, bp, C_BORE_STATIC)
+
+    target = getattr(decision, "track_id", None) if decision is not None else None
+    # confirmed tracks only (in the motion engine every track is): a tentative legacy track is noise to a shooter
+    shown = [t for t in (tracks or ()) if bool(getattr(t, "confirmed", False)) or _same_id(t.track_id, target)]
+    is_tgt = [_same_id(t.track_id, target) for t in shown]
+    has_target = target is not None
+    lead_w = getattr(decision, "lead_dir_w", None) if has_target else None
+    bore_w = getattr(decision, "bore_dir_w", None) if has_target else None
+    pat_rad = _fnum(getattr(decision, "pattern_rad", None)) if has_target else None
+    pts: list = [None] * (2 * len(shown) + 3)
+    if project_w is not None:
+        dirs: list = []
+        for t, tg in zip(shown, is_tgt):
+            dirs.append(_azel(float(t.az), float(t.el)))
+            dirs.append(track_lead.get(t.track_id) if tg and track_lead is not None else None)
+        dirs += [lead_w, bore_w, _cone_dir(bore_w, pat_rad)]
+        pts = _project_all(project_w, dirs)
+    rings = [pts[2 * k] for k in range(len(shown)) if pts[2 * k] is not None]
+
+    # --- detector health: a detection no drawn track owns is one dim pixel (none under the bands)
+    own2 = TRACK_OWN_PX * TRACK_OWN_PX
+    for d in detections or ():
+        p = _ipt((getattr(d, "u", None), getattr(d, "v", None)))
+        if p is None or not (0 <= p[0] < w and lim[0] <= p[1] < lim[1]):
+            continue
+        if any((p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2 <= own2 for q in rings):
+            continue
+        img[p[1], p[0]] = C_DET_DOT
+
+    # --- tracks: the others first (thin ring), the target last and emphasised
+    order = sorted(range(len(shown)), key=lambda k: is_tgt[k])
+    for k in order:
+        p = pts[2 * k]
+        if p is None:
+            continue
+        if not is_tgt[k]:
+            if 0 <= p[0] < w and lim[0] <= p[1] < lim[1]:   # (not over the bands)
+                _ring(img, p, 12, C_TRACK, 1)
+            continue
+        q = pts[2 * k + 1]
+        if q is not None and (abs(q[0] - p[0]) + abs(q[1] - p[1])) >= 2:
+            cv2.arrowedLine(img, p, q, C_SHADOW, 4, cv2.LINE_8, 0, 0.25)
+            cv2.arrowedLine(img, p, q, C_VEL, 2, cv2.LINE_AA, 0, 0.25)
+        _ring(img, p, 14, C_TRACK, 2)
+        _ring(img, p, 19, C_TRACK, 1)
+        t = shown[k]
+        rng = _fnum(t.range_m)
+        label = f"#{t.track_id}" + (f" {rng:.0f}m" if rng is not None else "")
+        # the chip sits on the side away from the lead point and its miss line (they leave the ring that way)
+        lead = pts[-3] if has_target else None
+        right = lead is None or lead[0] <= p[0]
+        below = lead is not None and lead[1] < p[1] - 8
+        tw = _tsize(label, 0.38)[0]
+        org = (p[0] + 23 if right else p[0] - 23 - tw, p[1] + 26 if below else p[1] - 10)
+        _chip(img, org, label, C_TRACK, 0.38, lim, p)
+
+    # --- the firing solution on the target
+    if has_target and project_w is not None:
+        _solution(img, decision, fired, pts[-3], pts[-2], pts[-1], lim)
 
     # --- HUD
     _status_band(img, tele, armed, banner)
@@ -705,15 +825,18 @@ def draw(
     track_lead: dict[int, np.ndarray] | None = None,
     armed: bool | None = None,
     fired: bool = False,
+    detail: str = DETAIL_CLEAN,
 ) -> np.ndarray:
-    """Render the debug overlay for one frame and return a new BGR uint8 image of the input size."""
+    """Render the overlay for one frame and return a new BGR uint8 image of the input size.
+    detail: "clean" (default) | "debug" (see the module docstring)."""
     img = _as_bgr(image)
     tele = telemetry or {}
     if armed is None:
         armed = bool(tele.get("armed", False))
     fired = bool(fired or tele.get("fired", False))
     return _render(img, detections=detections, tracks=tracks, decision=decision, mask=mask, bore_px=bore_px,
-                   tele=tele, project_w=project_w, track_lead=track_lead, armed=bool(armed), fired=fired)
+                   tele=tele, project_w=project_w, track_lead=track_lead, armed=bool(armed), fired=fired,
+                   detail=detail)
 
 
 # ------------------------------------------------------------------------------------------ from a record
@@ -790,12 +913,13 @@ def _record_tracks(rec: dict) -> tuple[list, dict]:
 
 
 def draw_record(image: np.ndarray, rec: dict, cam, mount, *, mask: np.ndarray | None = None,
-                bore_px: Sequence[float] | None = None, banner: str | None = None) -> np.ndarray:
+                bore_px: Sequence[float] | None = None, banner: str | None = None,
+                detail: str = DETAIL_CLEAN) -> np.ndarray:
     """The overlay for one frame from its telemetry record alone (tbot.app.run: the dict written to a
     session's telemetry.jsonl). The live stream and the recorded clips are both drawn through here, off the
     pipeline thread, so what a clip shows is what the pipeline computed on that frame.
     `banner` is extra text at the right of the status band (the clip's clock). Records of older software
-    versions lack some fields; whatever is missing is not drawn."""
+    versions lack some fields; whatever is missing is not drawn. detail: "clean" (default) | "debug"."""
     from types import SimpleNamespace as NS
 
     rec = rec or {}
@@ -816,4 +940,4 @@ def draw_record(image: np.ndarray, rec: dict, cam, mount, *, mask: np.ndarray | 
             project = None
     return _render(_as_bgr(image), detections=_record_dets(rec), tracks=tracks, decision=decision, mask=mask,
                    bore_px=bore_px, tele=rec, project_w=project, track_lead=lead, armed=bool(rec.get("armed")),
-                   fired=bool(rec.get("fired")), static=rec.get("static"), banner=banner)
+                   fired=bool(rec.get("fired")), static=rec.get("static"), banner=banner, detail=detail)

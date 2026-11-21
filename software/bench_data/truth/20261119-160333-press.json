@@ -1,0 +1,92 @@
+{
+ "press": "20261119-160333-press",
+ "frames": 34,
+ "objects": [
+  {
+   "id": 1,
+   "label": "clay",
+   "note": "white clay followed in front of trees; shot row 22, recoil row 24; at row 25 the clay is still visible (intact) lower in the frame after the recoil jump - not labelled; rows 25-26 dropped (wrong blobs)",
+   "frames": [
+    [
+     14,
+     123.19,
+     213.47,
+     18.0,
+     8.0
+    ],
+    [
+     15,
+     174.9,
+     231.6,
+     16.0,
+     8.0
+    ],
+    [
+     16,
+     184.19,
+     232.19,
+     16.0,
+     7.0
+    ],
+    [
+     17,
+     192.98,
+     232.6,
+     15.0,
+     7.0
+    ],
+    [
+     18,
+     199.78,
+     232.93,
+     15.0,
+     7.0
+    ],
+    [
+     19,
+     206.63,
+     232.57,
+     14.0,
+     6.0
+    ],
+    [
+     20,
+     215.68,
+     229.56,
+     14.0,
+     6.0
+    ],
+    [
+     21,
+     218.5,
+     229.93,
+     14.0,
+     6.0
+    ],
+    [
+     22,
+     219.02,
+     234.33,
+     13.0,
+     6.0
+    ],
+    [
+     23,
+     219.09,
+     236.85,
+     13.0,
+     5.0
+    ],
+    [
+     24,
+     187.33,
+     302.62,
+     13.0,
+     6.0
+    ]
+   ]
+  }
+ ],
+ "reviewed": true,
+ "note": "reviewed; clay visible from row 13 (left of the oracle's start) - row 13 not labelled"
+}

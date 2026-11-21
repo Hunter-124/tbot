@@ -1,7 +1,8 @@
 """`tbot bench` — per-stage processing time at the configured resolution.
 
 Runs the real pipeline stages (detector -> tracker -> fire solver -> overlay -> JPEG encode) over
-synthetic frames, or over a live source with --source, and says whether this machine keeps up with
+synthetic frames, with the front end vision.engine names (motion: vision/motion.py + the motion tracker;
+legacy: the contrast detector + tracker3d; the scenery filter is not timed), or over a live source with --source, and says whether this machine keeps up with
 camera.fps. Writes calib/bench.json, which `tbot latency-report` reads for the processing term.
 Use --no-overlay for headless processing, --compare FILE for deltas against a previous bench.json,
 and --profile [N] / --profile-out FILE for a separate cProfile run without skewing bench timings.
@@ -85,9 +86,12 @@ def run_bench(
     from tbot.fire.solver import FireSolver
     from tbot.imu.attitude import FixedAttitude
     from tbot.optics import CameraModel, MountModel, combined_mask
+    from tbot.app.run import vision_engine
     from tbot.vision import _native
     from tbot.vision.detector import ClayDetector
     from tbot.vision.tracker3d import make_tracker
+
+    engine = vision_engine(cfg)
 
     if threads is not None:
         cv2.setNumThreads(int(threads))
@@ -113,7 +117,12 @@ def run_bench(
         cam = CameraModel.from_calibration(calib.intrinsics, cfg, source.width, source.height)
         mount = MountModel.from_config(cfg, calib.boresight)
         mask = combined_mask(cam, mount, cfg, calib)
-        detector = ClayDetector(cfg, mask)
+        if engine == "motion":
+            from tbot.vision.motion import MotionDetector  # noqa: PLC0415
+
+            detector = MotionDetector(cfg, mask, cam=cam, mount=mount)
+        else:
+            detector = ClayDetector(cfg, mask)
         tracker = make_tracker(cfg, cam, mount)
         solver = FireSolver(cfg, ShotModel(cfg), mount, budget)
         bore_px = mount.bore_pixel(cam, float(cfg.tracker.range_prior_m))
@@ -130,7 +139,8 @@ def run_bench(
                 if timing and profiler is not None:
                     profiler.disable()
                 break
-            dets = detector.detect(frame)
+            # (the motion detector gets no attitude: a FixedAttitude is no real one, as in the pipeline)
+            dets = detector.detect(frame, R_wg=None) if engine == "motion" else detector.detect(frame)
             t2 = time.perf_counter_ns()
             R_wg = attitude.R_wg(frame.t_exposure_ns)
             tracks = tracker.update(frame.t_exposure_ns, dets, R_wg)
@@ -189,6 +199,7 @@ def run_bench(
         "opencv": opencv_info(),
         # the detector's C measurement kernel: in use, or why not (not built, switched off, stale)
         "native_measure": _native.describe(bool(getattr(cfg.detector, "native", True))),
+        "engine": engine,
         "source": getattr(source, "name", "?"),
         "scenario": scenario if source_spec is None else None,
         "frames": processed,
@@ -213,6 +224,7 @@ def run_bench(
 def format_bench(result: dict) -> str:
     lines = [
         f"bench {result['source']} {result['resolution'][0]}x{result['resolution'][1]} "
+        f"({result.get('engine', 'legacy')} front end) "
         f"x {result['frames']} frames on {result['platform']}",
         f"  python {result['python']}  numpy {result['numpy']}  opencv {result['opencv']['version']}"
         f"  threads {result['opencv']['threads']}  optimized {result['opencv']['use_optimized']}",
@@ -266,7 +278,8 @@ def _profile_group(filename: str) -> str:
     path = filename.replace("\\", "/")
     for fragment, group in (
         ("/tbot/vision/detector.py", "detector"),
-        ("/tbot/vision/tracker.py", "tracker"),
+        ("/tbot/vision/motion.py", "detector"),
+        ("/tbot/vision/tracker", "tracker"),
         ("/tbot/fire/", "solver"),
         ("/tbot/imu/attitude.py", "attitude"),
         ("/tbot/optics", "optics"),

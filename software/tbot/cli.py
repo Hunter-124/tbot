@@ -14,6 +14,7 @@ COMMANDS: dict[str, tuple[str, str]] = {
     "rescore": ("tbot.tools.rescore", "recorded presses through today's software, scored against what really happened"),
     "cadence": ("tbot.tools.cadence", "frames a second and frame age on recorded presses: one loop vs detection in the sensor process"),
     "vclay": ("tbot.tools.vclay", "virtual clays through recorded gun motion: clays hit per firing rule / frame rate / delay"),
+    "vbench": ("tbot.bench.harness", "vision front end at pixel level: clays injected into recorded presses / clean presses, scored"),
     "clip": ("tbot.tools.clip", "annotated video (boxes, tracks, decision) of a recorded press -> <session>/clip.mp4"),
     "board": ("tbot.tools.make_board", "write a printable calibration chessboard"),
     "focus": ("tbot.tools.focus", "headless focus and exposure calibration"),

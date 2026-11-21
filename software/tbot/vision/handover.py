@@ -191,6 +191,13 @@ class SensorDetector:
     detections here as there. Its tracker never tracks: it only predicts the hinted tracks to the frame time."""
 
     def __init__(self, cfg, calib, width: int, height: int, has_imu: bool) -> None:
+        # The legacy front end only. The motion engine (vision/motion.py) keeps a ring of earlier frames and is
+        # not split across processes: refusing here makes the sensor process send plain frames (camera/proc.py:
+        # "detection stays in the pipeline"), and the pipeline detects them in its own loop.
+        engine = str(getattr(getattr(cfg, "vision", None), "engine", "legacy")).strip().lower()
+        if engine != "legacy":
+            raise RuntimeError(f"camera.detect_in_process works with vision.engine = legacy only (this is "
+                               f"{engine!r}): the pipeline detects in its own loop")
         from tbot.imu.attitude import AttitudeEstimator
         from tbot.optics import CameraModel, MountModel, combined_mask
         from tbot.vision.clutter import StaticFilter

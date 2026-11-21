@@ -1,7 +1,8 @@
 # TBOT software
 
 Vision-assisted trigger release for clay shooting (skeet / trap, sporting use only). A monochrome global-shutter
-camera under the barrel of a Weatherby Element finds the clay against the sky, a Kalman tracker in world
+camera under the barrel of a Weatherby Element finds the clay by what moves against the world (the scenery is
+registered and cancelled frame to frame: [docs/VISION_MOTION.md](docs/VISION_MOTION.md)), a Kalman tracker in world
 coordinates (IMU-referenced) predicts where it will be when the shot arrives, and a fire solver decides whether
 pressing the trigger *now* is the best moment — then, and only then, drives the trigger actuator. The same package
 runs on the gun (Raspberry Pi 3 Model B v1.2) and on a laptop, where every stage can be
@@ -108,6 +109,7 @@ tbot calib-detector --session sessions/20261026-141230-rec --gui    # tune on re
 | `tbot run` | Live pipeline: camera → detect → track → fire solver. Dry run unless `--live`. `--stream`/`--port` HTTP overlay, `--display` local window, `--record off\|armed\|continuous`, `--log-jsonl`, `--max-frames`, `--sim-armed`. |
 | `tbot sim` | Closed-loop evaluation on the synthetic scenarios (`--scenarios`, `--seeds N`, `--not-armed`, `--out JSON`): detection rate, track latency, shots, predicted miss, hit rate. Runs on the gun's time (`sim.process_ms`) and repeats exactly. |
 | `tbot vclay` | Virtual clays through recorded gun motion: the real swing and frame times of recorded presses, a synthetic target, the real tracker and solver, judged at the true trigger delay. Clays hit per firing rule (`--policies`), per frame rate (`--fps`), per delay error (`--delay-error-ms`); `--calibration` checks P(hit). |
+| `tbot vbench` | The vision front end scored on recorded presses: `inject` composites virtual clays with exact truth into real footage and runs the whole pipeline (recall by size / background / polarity, scenery detections, false tracks, time to a track, shots and hits), `clean` runs the footage as recorded, `compare A.json B.json` puts two runs side by side. Pin the engine: `--set vision.engine=motion\|legacy`. [docs/VISION_MOTION.md](docs/VISION_MOTION.md) |
 | `tbot rescore` | Recorded presses through today's software (real frames, real IMU, the button as it was held), scored like `tbot score`. The regression test for the decision chain. |
 | `tbot score` | Would each shot of a recorded press have hit? Bore at the exit time against the target at the arrival time, from the frames after the shot; `--every` scores every frame with a solution, `--image` draws the arrival frame. |
 | `tbot doctor` | Offline configuration, calibration and layout checks; fix FAILs before assembly. |
@@ -141,7 +143,12 @@ software/
   tbot/
     config.py types.py optics.py stats.py cli.py
     camera/    picam (Picamera2) | cv_source (webcam/video) | replay | synthetic + base/open_source
-    vision/    detector.py (contrast/HSV blob detector), tracker.py (per-track CA Kalman in world az/el)
+    vision/    motion.py (registered frame differencing: what moves against the world) + tracker_motion.py (tracks
+               born from a path of detections): the default front end, docs/VISION_MOTION.md. The front end of
+               2026-11-19 (vision.engine = "legacy"): detector.py (contrast blob detector), clutter.py (IMU scenery
+               filter), tracker.py / tracker3d.py (per-track Kalman filters in the world frame; tracker3d's EKF is
+               the one both engines use)
+    bench/     tbot vbench: clay injection into recorded presses, metrics, the offline truth oracle
     fire/      ballistics.py (pellet drag, ToF, drop, pattern), solver.py (lead, P(hit), fire/no-fire)
     imu/       mpu6050.py (I2C FIFO reader), attitude.py (complementary filter → R_wg, omega)
     hw/        gpio.py (lgpio|sim), arming.py (debounced interlock), actuator.py (servo|pq12|sim|none)
