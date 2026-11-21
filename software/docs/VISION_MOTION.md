@@ -157,6 +157,18 @@ says less: 8 shots / 5 hits old, 7 / 3 new.
 - **Something that does not move against the world is not seen.** A clay at the top of a lob, or one flying
   straight at the muzzle, has no angular rate for a moment: no detections until it moves again. Below
   `init_min_speed_dps` (2 deg/s) nothing gets a track.
+- **A slow mover cancels itself.** A target has to move more than about its own size against the scenery
+  between reference A (40 ms back) and now. On sky, virtual clays that move less than half of that are seen in
+  52 % of their frames, faster ones in about 90 % (2026-11-21, 68 presses): a clay going away at 2-5 deg/s once
+  the gun steadies. Longer lags for every frame do not help (100 / 250 ms: clays hit 18.8 -> 14.9 %, 44 % never
+  tracked). `vision.slow_gain` (off) adds a second comparison, against B and a frame about 2.5 x B's lag back
+  laid over through the stabilised plane, with its own CFAR bar, an edge veto and nothing added next to what the
+  A/B test already has: virtual clay seen 60 -> 62 % of its frames (sky 71 -> 74 %, under 4 px 27 -> 38 %),
+  scenery detections 0.99 -> 1.16 a frame, the same clays hit and the same 15 shots on the footage as recorded.
+  The Pi 3B pays 10 ms a frame for it (detection 12.1 -> 22.5 ms at the median), so it stays off. Without the
+  "nothing next to the A/B candidates" rule it also moved tracks the A/B test already had: on the footage as
+  recorded it then fired on the thrown ball of 155103 (a real target the A/B test does not shoot) but also on a
+  bird (104601), and lost the foam glider of 071755.
 - **Everything that moves is seen**: birds, a thrown ball, a hand, a person walking through the picture. The
   recordings of 2026-11-20 have tracks on the thrower's hand. What keeps a shot off such a track is what kept
   it off before: the solver's gates (a clay's speed, elevation, P(hit)) and the shooter, who holds the arming
@@ -201,6 +213,7 @@ at the range:
 |---|---|---|
 | `vision.engine` | `motion` | `legacy` = the software of 2026-11-19 |
 | `vision.scale` | 2 | 1 = full resolution (far clays; slower) |
+| `vision.slow_gain` | 0 | 2.5 = the slow-mover test (sky 71 -> 74 %; +10 ms a frame on the Pi 3B) |
 | `vision.noise_k`, `vision.cfar_gain`, `vision.texture_gain` | 4, 6, 2 | the detection bar: lower sees fainter, and more flicker |
 | `vision.track.init_hits` | 5 | detections on one path before a track exists |
 | `vision.track.init_strong_hits`, `init_strong_mass` | 4, 2000 | ... when they are this strong and alone (0 = off) |

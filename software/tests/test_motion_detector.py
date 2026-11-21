@@ -465,6 +465,29 @@ def test_open_sky_followed_clay_is_never_cancelled(sky, mount, rays, cam, scale,
     assert abs(vx) == pytest.approx(math.radians(swing) * FX, rel=0.1)
 
 
+def test_slow_mover_on_sky_is_seen_by_the_slow_test(sky_trees, mount, rays, cam):
+    """vision.slow_gain: a disc going 1.5 deg/s against the world over the sky of a frame the tree line registers
+    (a clay going away once the gun steadies) moves less than its own size per lag_a and cancels itself in the A/B
+    test; compared also with B and a frame about slow_gain x B's lag back, it is seen in every frame, and nothing
+    on the trees is."""
+    seen = {}
+    for gain in (0.0, 2.5):
+        det = MotionDetector(_cfg(2, sets=(f"vision.slow_gain={gain}",)), None, cam, mount)
+        res = run(det, sky_trees, mount, rays, cam, n=40, disc=centred(cam, mount, 1.5, 8.0, 140.0, 0.0, t_c=0.4),
+                  gyro_bias_dps=(1.0, 0.5, 0.0))
+        n = 0
+        seen[gain] = 0
+        for _, dets, truth, _ in res[15:]:     # 15 frames: the slow test's reference is 260 ms back
+            n += 1
+            near = [d for d in dets if math.hypot(d.u - truth[0], d.v - truth[1]) < 7.0]
+            seen[gain] += bool(near)
+            assert len(dets) == len(near), [(d.u, d.v) for d in dets]
+        if gain:
+            assert det.stats["slow"]["lag_ms"] >= 200.0
+    assert seen[0.0] <= n // 5, seen          # the A/B test alone: (almost) never
+    assert seen[2.5] == n, seen
+
+
 @pytest.mark.parametrize("scale", [1, 2])
 def test_tree_line_registers_and_stays_quiet(sky_trees, mount, rays, cam, scale):
     # (with the local residual field, which is off by default: vision.local_field)

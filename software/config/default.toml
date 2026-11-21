@@ -176,6 +176,16 @@ min_area_px = 2               # working px
 max_area_px = 2500            # working px
 max_candidates = 12           # per frame, strongest summed residual first
 native = true                 # C kernels when built (scripts/build_native.sh); false = the OpenCV/NumPy reference
+slow_gain = 0.0               # slow-mover test: the current frame is also compared with B and a frame this many times
+                              # B's lag back (C, laid over through the stabilised plane), with a CFAR bar of its own,
+                              # and what clears it away from the A/B candidates is added (motion.py _slow_pass). 0 = off.
+                              # 2.5 on the 68 presses of 2026-11-17 to 20: virtual clay seen 60 -> 62 % of its frames
+                              # (sky 71 -> 74 %, trees 52 -> 53 %, under 4 px 27 -> 38 %), scenery detections 0.99 ->
+                              # 1.16 a frame, the same clays hit and the same 15 shots on the footage as recorded. Off
+                              # because the Pi 3B pays 10 ms a frame for it (detection 12.1 -> 22.5 ms at the median)
+slow_min_extra_ms = 60.0      # ... C at least this much older than B
+slow_edge_k = 2.0             # ... and nothing is added where C's own 3x3 min..max is wider than this x the detection
+                              # floor (an edge in C: not open sky)
 
 [vision.track]
 init_hits = 5                 # a track is born from this many detections on one straight, evenly timed line. Sim,

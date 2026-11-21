@@ -193,6 +193,9 @@ class VisionConfig:
     max_candidates: int
     native: bool
     track: VisionTrackConfig
+    slow_gain: float = 0.0
+    slow_min_extra_ms: float = 60.0
+    slow_edge_k: float = 2.0
 
 
 @dataclass

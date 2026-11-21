@@ -388,6 +388,32 @@ def test_detector_parity_synthetic(scale, scene, imu):
     assert n > 10
 
 
+@pytest.mark.parametrize("scene", ["world", "sky_trees"])
+def test_detector_parity_slow_test(scene):
+    """The slow-mover test (vision.slow_gain) through the C primitives == through their NumPy references."""
+    import tests.test_motion_detector as T
+    from tbot.types import Frame
+    cam, mount = T.make_cam(), T.make_mount()
+    rays = T.make_rays(cam)
+    tex = T.make_world() if scene == "world" else T.make_sky_trees(T.make_sky())
+    on, off = _pair(["vision.scale=2", "vision.slow_gain=2.5"], None, cam, mount)
+    slow = T.centred(cam, mount, 1.5, 8.0, 140.0, 0.0, t_c=0.4)
+    fast = T.centred(cam, mount, 30.0, 8.0, 40.0, 5.0, t_c=0.5)
+    rng = np.random.default_rng(5)
+    n = added = 0
+    for k in range(36):
+        t = k * T.DT_NS * 1e-9
+        R = T.R_of(t, 5.0, 1.0, 0.0)
+        img = T.render(tex, R, mount, rays, 1.0 if k % 9 else 1.1)
+        for d in (slow, fast):
+            u, v, dm, val = d(t, R)
+            T.draw_disc(img, u, v, dm, val)
+        fr = Frame(image=T.to_u8(img, rng), seq=k, t_exposure_ns=10**9 + k * T.DT_NS, t_capture_ns=0)
+        n += _same_frame(on, off, fr, T.R_of(t, 1.0, -0.5, 0.0) @ R, k)
+        added += (on.stats.get("slow") or {}).get("px", 0)
+    assert n > 10 and added > 0
+
+
 PRESSES = [Path(__file__).resolve().parents[1] / "pi-pulls" / "pi-2026-11-20" / "sessions" / p
            for p in ("20261120-072712-press", "20261119-160243-press")]
 

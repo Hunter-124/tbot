@@ -79,6 +79,7 @@ TEXTURE_FRAC = 0.03      # global registration counts only with this fraction of
 SKY_LAG_GAIN = 2.5       # where the scene cannot hold a registration (open sky: nothing to cancel, so nothing that a
                          # longer lag could leave behind) both lags are this much longer: a clay going away at
                          # 3 deg/s moves 4 px in 40 ms, less than its own size, and cancels itself
+SLOW_CLEAR_PX = 4        # the slow-mover test adds nothing within this of an A/B candidate (working px)
 LAG_SHIFT_FRAC = 0.15    # the reference lags shrink so the scenery moved at most this part of the frame width since B
 TENSOR_MIN = 3.0        # ... and in full only when the weaker eigenvalue of the textured pixels' gradient tensor is
                          # at least this, DN^2 per overlap pixel (fine level); the stronger one alone: across the edge
@@ -1289,6 +1290,8 @@ class MotionDetector:
                 max(1, int(vc.envelope_px)), cell, float(vc.t_min_dn), float(vc.noise_k), float(vc.cfar_gain),
                 float(vc.texture_gain), self._bufs)
         self.noise_sigma = sig
+        if float(getattr(vc, "slow_gain", 0.0) or 0.0) > 1.0:
+            self._slow_pass(slot, B, D, binary, sig)
         t_ker = time.perf_counter()
         # ---- components
         dets: list[Detection] = []
@@ -1341,6 +1344,139 @@ class MotionDetector:
                            "kernel": (t_ker - t_reg) * 1e3, "components": (t_cc - t_ker) * 1e3,
                            "measure": (t_end - t_cc) * 1e3, "total": (t_end - t0) * 1e3}
         return dets
+
+    def _slow_pass(self, slot: _Slot, B: _Slot, D: np.ndarray, binary: np.ndarray, sig: float) -> None:
+        """The slow-mover test, merged into D and binary in place (vision.slow_gain > 1).
+
+        A target that moves less than its own size against the scenery between reference A and now (a clay going
+        away at 2-5 deg/s once the gun steadies: 52 % of such frames on sky are seen, 90 % of faster ones) cancels
+        itself in the A/B test. Here the current frame is compared with B and with C, an older frame about
+        slow_gain x B's lag back (at least slow_min_extra_ms older than B): the same envelope residual, so a mover
+        must differ from both and leaves no ghost. C is laid over the current frame through the stabilised plane
+        (C.S^-1 S: the registrations chained since C, no search of its own); where that is not good to the pixel
+        (texture, parallax over a quarter of a second) the residual is high everywhere around and this test's own
+        CFAR bar rises with it, so it adds what open sky and flat ground show. Only pixels over its own bar and away
+        from the A/B test's own candidates are added (D raised to the slow residual there).
+
+        Off by default (vision.slow_gain = 0): on the 68 recorded presses it lifts what is seen (sky 71 -> 74 % of
+        the frames, targets under 4 px 27 -> 38 %) but hits the same virtual clays and fires on the same targets,
+        and on the Pi 3B it costs 10 ms a frame through these primitives (a second full-frame residual pass)."""
+        vc = self.vc
+        g = float(vc.slow_gain)
+        t = int(slot.t)
+        lag_b = t - int(B.t)
+        if lag_b <= 0:
+            return
+        want = t - int(g * lag_b)
+        newest = int(B.t) - int(float(getattr(vc, "slow_min_extra_ms", 60.0)) * 1e6)
+        C, best = None, None
+        for k in self._order:
+            s_ = self._slots[k]
+            if s_ is slot or s_.t > newest or s_.S is None:
+                continue
+            d = abs(int(s_.t) - want)
+            if best is None or d < best:
+                C, best = s_, d
+        if C is None:
+            return
+        try:
+            m_c = np.linalg.inv(C.S) @ slot.S
+        except np.linalg.LinAlgError:
+            return
+        if not np.isfinite(m_c).all() or abs(m_c[2, 2]) < 1e-12:
+            return
+        m_c = m_c / m_c[2, 2]
+        hw, ww = self._wshape
+        sb = getattr(self, "_slow_bufs", None)
+        if sb is None or sb["wc"].shape != (hw, ww):
+            sb = self._slow_bufs = {
+                "wc": np.empty((hw, ww), np.uint8), "vc": np.empty((hw, ww), np.uint8),
+                "Ds": np.empty((hw, ww), np.uint8), "bs": np.empty((hw, ww), np.uint8),
+                "valid": np.empty((hw, ww), np.uint8), "gather": _GatherIdx(hw, ww, WARP_BLOCK),
+                "env": {k: np.empty((hw, ww), np.uint8) for k in ("hi", "lo", "t1", "t2")}}
+        bufs = self._bufs
+        wc, vcv, Ds, bs, valid = sb["wc"], sb["vc"], sb["Ds"], sb["bs"], sb["valid"]
+        cur = slot.work
+        env = max(1, int(vc.envelope_px))
+        cell = max(2, int(vc.cfar_cell_px))
+        # the C primitives of the same steps (each held equal to its NumPy reference: tests/test_native_motion.py)
+        K = self._nat.K if self._nat is not None else None
+        mm = np.ascontiguousarray(self._lw @ m_c @ self._lwi, dtype=np.float64)
+        if K is not None:
+            nb = (ww + WARP_BLOCK - 1) // WARP_BLOCK
+            ch, cw = -(-hw // cell), -(-ww // cell)
+            nk = sb.get("nat")
+            if nk is None or nk["thr"].shape != (ch, cw):
+                nk = sb["nat"] = {
+                    "dx": np.zeros((hw, nb), np.int32), "dy": np.zeros((hw, nb), np.int32),
+                    "rx": np.zeros((hw, nb)), "ry": np.zeros((hw, nb)), "res": np.zeros(2),
+                    "ab": np.zeros(2), "gq": np.zeros(2, np.int32), "scratch": np.empty(5 * hw * ww, np.uint8),
+                    "v01": np.empty((hw, ww), np.uint8), "SA": np.zeros((ch, cw), np.int64),
+                    "NA": np.zeros((ch, cw), np.int64), "SD": np.zeros((ch, cw), np.int64),
+                    "ND": np.zeros((ch, cw), np.int64), "thr": np.zeros((ch, cw), np.uint8),
+                    "mD": np.zeros((ch, cw))}
+            A_ = lambda a: a.ctypes.data  # noqa: E731
+            K.block_offsets(A_(mm), 3, hw, ww, WARP_BLOCK, None, None, A_(nk["dx"]), A_(nk["dy"]), A_(nk["rx"]),
+                            A_(nk["ry"]), A_(nk["res"]), K.np_chunk)
+            K.warp(A_(C.work), A_(self._srcv_w), hw, ww, A_(nk["dx"]), A_(nk["dy"]), WARP_BLOCK, A_(wc), A_(vcv))
+        else:
+            dx, dy, _ = block_offsets(mm, hw, ww)
+            warp_gather(C.work, self._srcv_w, dx, dy, WARP_BLOCK, wc, vcv, sb["gather"])
+        cv2.bitwise_and(bufs.vb, vcv, dst=valid)
+        cv2.bitwise_and(valid, self._mask_d, dst=valid)
+        if K is not None:
+            K.photometric(A_(cur), A_(wc), A_(valid), hw, ww, BLACK_DN, GAIN_MIN, GAIN_MAX, FIT_STD_MIN, A_(nk["ab"]),
+                          A_(nk["gq"]))
+            K.gain(A_(wc), hw * ww, int(nk["gq"][0]), int(nk["gq"][1]), A_(wc))
+            K.envelope(A_(cur), A_(bufs.wb), A_(wc), A_(bufs.vb), A_(vcv), A_(self._mask_d), hw, ww, env,
+                       A_(nk["scratch"]), A_(Ds))
+        else:
+            _, _, gq = photometric_fit(cur, wc, valid)
+            apply_gain_q8(wc, gq[0], gq[1], wc)
+            envelope_residual(cur, bufs.wb, wc, bufs.vb, vcv, self._mask_d, env, sb["env"], Ds)
+        # edges of C are not open sky: where C's own envelope is wide (a tree line, a roof, a wire: laid over through
+        # the chained registrations it is off by a pixel or two, and its residual is an edge-thin line that a
+        # cell-mean bar does not raise) nothing is added. A target is not in C where it is now: C there shows what
+        # is behind it.
+        k = _rect(env)
+        hi, lo = sb["env"]["hi"], sb["env"]["lo"]
+        cv2.dilate(wc, k, dst=hi)
+        cv2.erode(wc, k, dst=lo)
+        cv2.subtract(hi, lo, dst=hi)
+        wmax = int(min(255, math.ceil(float(getattr(vc, "slow_edge_k", 2.0)) *
+                                      max(float(vc.t_min_dn), float(vc.noise_k) * (sig if math.isfinite(sig) else 0.0)))))
+        cv2.compare(hi, wmax, cv2.CMP_LE, dst=lo)
+        cv2.bitwise_and(Ds, lo, dst=Ds)
+        prm = (float(vc.t_min_dn), float(vc.noise_k), float(vc.cfar_gain), float(vc.texture_gain))
+        done = False
+        if K is not None:
+            SA, NA, SD, ND, thr = nk["SA"], nk["NA"], nk["SD"], nk["ND"], nk["thr"]
+            K.absdiff_sums(A_(cur), A_(wc), A_(valid), hw, ww, cell, NOISE_ROW_STEP, A_(SA), A_(NA))
+            K.cell_sums(A_(Ds), hw, ww, cell, 1, A_(SD))
+            cv2.min(valid, 1, dst=nk["v01"])
+            K.cell_sums(A_(nk["v01"]), hw, ww, cell, 1, A_(ND))
+            np.maximum(ND, 1, out=ND)
+            if K.threshold(A_(SD), A_(ND), A_(SA), A_(NA), ch, cw, sig, *prm, ABS_TO_SIGMA, CFAR_BOX, A_(thr),
+                           A_(nk["mD"])) == 0:
+                K.compare(A_(Ds), hw, ww, A_(thr), cw, cell, A_(bs))
+                done = True
+        if not done:
+            SA, NA = cell_absdiff_sums(cur, wc, valid, cell)
+            SD = cell_sums(Ds, cell)
+            ND = np.maximum(cell_sums((valid != 0).view(np.uint8), cell), 1)
+            thr, _ = threshold_cells(SD, ND, SA, NA, sig, *prm, cell)
+            compare_cells(Ds, thr, cell, bs)
+        # only what the A/B test did not see: nothing within SLOW_CLEAR_PX of its candidates (their measurement, and
+        # so every track the A/B test feeds, stays exactly as it was)
+        if cv2.countNonZero(binary):
+            near = cv2.dilate(binary, _rect(2 * SLOW_CLEAR_PX + 1))
+            cv2.bitwise_not(near, dst=near)
+            cv2.bitwise_and(bs, near, dst=bs)
+        n = int(cv2.countNonZero(bs))
+        self.stats["slow"] = {"lag_ms": round((t - int(C.t)) * 1e-6, 1), "px": n}
+        if n:
+            np.copyto(D, np.maximum(D, Ds), where=bs != 0)
+            cv2.bitwise_or(binary, bs, dst=binary)
 
     def to_stab(self, u: float, v: float) -> tuple[float, float] | None:
         """Full-res pixel (u, v) of the LAST frame given to detect() in background-stabilised pixels."""
