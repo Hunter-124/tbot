@@ -169,8 +169,10 @@ class AeStatus:
                     f"shortest exposure ({self.exposure_us:.0f} us, gain {self.gain:.1f}), at least "
                     f"{abs(self.error_stops):.1f} stops over - fit an ND filter or a smaller aperture")
         if self.state == "too_dark":
-            return (f"scene too dark for the camera: {self.error_stops:.1f} stops under at the longest exposure "
-                    f"and highest gain allowed ({self.exposure_us:.0f} us, gain {self.gain:.1f})")
+            under = f"{self.error_stops:.1f} stops under" if self.error_stops > 0.05 else "only just exposed"
+            return (f"scene too dark for the camera: {under} at the longest exposure and highest gain allowed "
+                    f"({self.exposure_us:.0f} us, gain {self.gain:.1f}). In daylight: is the lens cap on or the "
+                    "lens covered/fogged? Nothing can be tracked like this")
         return ""
 
 
@@ -373,7 +375,11 @@ class AutoExposure:
         at_max = landed and cmd >= self.total_max / 1.02
         if at_min and (kind == "clip" or stops < -math.log2(FAST_OVER)):
             state = "too_bright"
-        elif at_max and (kind == "black" or stops > 1.0):
+        elif at_max and (kind == "black" or stops > -math.log2(1.0 + DEADBAND)):
+            # held at the longest exposure and the highest gain, whatever the level: a covered lens lets enough light
+            # through to meet the target there (backyard 2026-11-21: lens covered, 4 ms x16, level 127 of 160, AE
+            # "ok", zero detections in 10 presses). Daylight needs 9-50 us at gain 1; nothing moving can be tracked
+            # at 4 ms, so the limit itself is the warning, from the configured limits, not a brightness threshold
             state = "too_dark"
         elif self._acquire or self._slewing or abs(err) > band:
             state = "adjusting"

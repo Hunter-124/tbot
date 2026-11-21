@@ -441,6 +441,7 @@ input[type=range] { accent-color: var(--accent); width: 100%; }
 .spinner { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--border-strong); border-top-color: var(--accent); animation: spin .7s linear infinite; flex: none; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .live-banner { background: var(--danger); color: #fff; text-align: center; font-weight: 700; letter-spacing: .06em; font-size: 12.5px; padding: 6px 12px; display: flex; gap: 10px; align-items: center; justify-content: center; }
+.cam-banner { background: var(--warn); color: #1a1200; text-align: center; font-weight: 700; font-size: 12.5px; padding: 6px 12px; display: flex; gap: 10px; align-items: center; justify-content: center; }
 .live-banner .btn { height: 24px; font-size: 12px; background: rgba(0,0,0,.25); border-color: rgba(255,255,255,.4); color: #fff; }
 hr.sep { border: 0; border-top: 1px solid var(--border); margin: 4px 0; }
 

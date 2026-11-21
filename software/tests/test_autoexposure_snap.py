@@ -252,6 +252,19 @@ def test_out_of_range_scenes_are_reported():
     assert ok.ae.status.state == "ok" and ok.ae.status.message() == ""
 
 
+def test_covered_lens_that_still_meets_the_target_is_reported():
+    # backyard 2026-11-21: a covered lens let ~1/2000 of daylight through; at 4 ms x16 the level came to 127 DN
+    # (0.5 stop under) and the status said "ok" for 10 presses with zero detections
+    cam = SimCam()
+    cam.run(lambda t: sky(SKY / 700), 3.0)
+    st = cam.ae.status
+    assert (st.exposure_us, st.gain) == (4000, 15.9) and st.level_dn > 100 and st.error_stops < 1.0
+    assert st.state == "too_dark" and "lens cap" in st.message()
+    dim = SimCam()                                         # dim but inside the range: below the top gain
+    dim.run(lambda t: sky(SKY / 200), 3.0)
+    assert dim.ae.status.state == "ok" and dim.ae.gain < 15
+
+
 def test_decisions_come_from_the_applied_exposure_not_the_commanded_one():
     ae = AutoExposure(S, 125, 1, CURVE)
     level = CURVE.dn_of(CURVE.linear_of(S.target_dn) * 3)             # a frame 3x over, taken at 375 us

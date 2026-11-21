@@ -297,6 +297,17 @@ function renderChrome() {
       $("#go-dry").onclick = () => pipelineAction("start", "dry");
     }
   } else if (lb.dataset.on) { delete lb.dataset.on; lb.innerHTML = ""; }
+  // The camera at its longest exposure and highest gain sees nothing it can track (backyard 2026-11-21: lens covered,
+  // ten presses, zero detections, and nothing on screen said so).
+  const ae = p && p.active && st.pipeline_telemetry ? st.pipeline_telemetry.ae : null;
+  const cb = $("#cam-banner");
+  const camMsg = ae && ae.state === "too_dark"
+    ? "CAMERA CAN'T SEE — too dark at its longest exposure. In daylight: is the lens cap on, or the lens covered or fogged?"
+    : ae && ae.state === "too_bright" ? "CAMERA OVER-EXPOSED at its shortest exposure — the picture is clipped" : "";
+  if (cb.dataset.msg !== camMsg) {
+    cb.dataset.msg = camMsg;
+    cb.innerHTML = camMsg ? `<div class="cam-banner">${icon("alert", 'width="14" height="14"')} ${esc(camMsg)}</div>` : "";
+  }
 }
 
 function setTheme(t) {
