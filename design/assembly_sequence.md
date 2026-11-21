@@ -1,6 +1,6 @@
 # TBOT — assembly sequence
 
-Assembly: `asm/tbot_full.step+` (front module + MG996R trigger set + harness). Fit evidence: [layout.md](layout.md)
+Assembly: `cad/asm/tbot_full.step+` (front module + MG996R trigger set + harness). Fit evidence: [layout.md](layout.md)
 "Verification". Hardware and wire cut lengths: [BOM.md](BOM.md). Gun frame: +X muzzle, +Y gun-left, +Z up.
 
 **Gun unloaded, muzzle in a safe direction, battery lever connector OPEN throughout.**

@@ -162,13 +162,13 @@ shaft reaches inside it, where the printed cam presses the trigger's lower hook.
 - A modelled wiring harness and camera ribbon in the assembly, and an M12 × 0.5 split clamp nut to lock lens
   focus against recoil.
 
-CAD: `parts/` (native), `export/STEP/` and `export/STL/` (open in anything), [BOM](design/BOM.md),
+CAD: `cad/parts/` (native), `cad/export/STEP/` and `cad/export/STL/` (open in anything), [BOM](design/BOM.md),
 [assembly sequence](design/assembly_sequence.md).
 
 ### Reference model by Gaussian splatting
 
 The forend and trigger guard are compound curves that calipers cannot capture, so the gun itself was scanned
-from phone video ([refs/scan/](refs/scan/)):
+from phone video ([cad/refs/scan/](cad/refs/scan/)):
 
 1. Walk-around video with printed ChArUco boards in frame.
 2. Structure from motion for camera poses (407 frames, 1.23 px mean reprojection error).
@@ -272,9 +272,10 @@ makes the actuator safe. All bench work is done with the gun unloaded.
 | Path | Contents |
 |---|---|
 | `design/` | BOM, layout (every dimension with its source), assembly sequence, harness report |
-| `parts/`, `refs/`, `asm/` | Native CAD: printed parts, reference models of purchased parts, full assembly |
-| `export/` | STEP and STL of every part and the assembly |
-| `print/` | Slicer settings and G-code for an Ender 3 |
+| `cad/parts/`, `cad/refs/`, `cad/asm/` | Native CAD: printed parts, reference models of purchased parts (by kind), assemblies. Every reference between them is relative, so `cad/` opens from any folder on any OS |
+| `cad/archive/` | Superseded parts kept for reference |
+| `cad/export/` | STEP and STL of every part and the assembly |
+| `cad/print/` | Slicer settings and G-code for an Ender 3 |
 | `software/` | The `tbot` Python package, tests, calibration data, field data, Pi provisioning |
 | `docs/media/` | Photos, CAD renders and range GIFs used in this file |
 

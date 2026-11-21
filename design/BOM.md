@@ -1,21 +1,21 @@
 # TBOT — print list + hardware BOM
 
 Geometry, placement and clearances: [layout.md](layout.md). Build order: [assembly_sequence.md](assembly_sequence.md).
-Assembly: `asm/tbot_full.step+`. Units mm; gun frame +X muzzle, +Y gun-left, +Z up, origin at the trigger face.
+Assembly: `cad/asm/tbot_full.step+`. Units mm; gun frame +X muzzle, +Y gun-left, +Z up, origin at the trigger face.
 
 ## Printed parts
 
-All PLA. Files: `print/creality_ender_3_0_4_mm_nozzle/<part>.gcode` (+ `.3mf`, `.print.json`). STEP: `export/<part>.step`
+All PLA. Files: `cad/print/creality_ender_3_0_4_mm_nozzle/<part>.gcode` (+ `.3mf`, `.print.json`). STEP: `cad/export/<part>.step`
 (gun frame — re-orient to the build direction below if you slice yourself).
 
 Slicer: PrusaSlicer 2.9.6, Creality Ender-3 0.4, PLA+ 215 °C nozzle / 60 °C bed, 0.2 mm layers, 4 walls, gyroid infill
-(25 % structural / 15 % covers), scarf seams, complete-individual-objects plates. Saved defaults: `print/print_defaults.json`; G-code is named `<HH>h<MM>m_<plate>`. Don't leave the parts in a hot car — PLA softens at ~55–60 °C.
+(25 % structural / 15 % covers), scarf seams, complete-individual-objects plates. Saved defaults: `cad/print/print_defaults.json`; G-code is named `<HH>h<MM>m_<plate>`. Don't leave the parts in a hot car — PLA softens at ~55–60 °C.
 
 ### Front module
 
 No supports intended, except under carrier_R's MI-1 section (rev U, see below). 8 parts (`camera_cover` added rev W),
-231.0 g solid-PLA model mass without it (rev U; +4.5 g for the cover). The g / h figures and G-code in `print/` below are from rev R: every front-module part changed in rev S, five
-changed in rev T and four again in rev U, so re-slice all seven from `export/<part>.step` before printing. The nose clamps changed again in rev W (FPC slot opened
+231.0 g solid-PLA model mass without it (rev U; +4.5 g for the cover). The g / h figures and G-code in `cad/print/` below are from rev R: every front-module part changed in rev S, five
+changed in rev T and four again in rev U, so re-slice all seven from `cad/export/<part>.step` before printing. The nose clamps changed again in rev W (FPC slot opened
 through the nose front): re-slice them too. `chin_lid`
 is obsolete (no chin since rev S); do not print it.
 
@@ -33,7 +33,7 @@ is obsolete (no chin since rev S); do not print it.
 
 ### Trigger set (rev AH, current)
 
-G-code in `print/creality_ender_3_0_4_mm_nozzle/`. PLA, 0.2 mm layers, 4 walls.
+G-code in `cad/print/creality_ender_3_0_4_mm_nozzle/`. PLA, 0.2 mm layers, 4 walls.
 
 | Part | Build (up) | Supports | Sliced |
 |---|---|---|---|
@@ -51,7 +51,7 @@ Hardware for rev AH:
 |---|---|---|
 | 11 | M3 heat-set insert | servo_mount_L: 3 pocket floor, 4 recessed in the outer face, 4 ear seats |
 | 3 | M3 × 20 ISO 10642 countersunk | P1, P2, P3: right plate, through the plug, into the pocket-floor inserts |
-| 4 | M3 × 25 ISO 10642 countersunk | U1, U2, F1, F2 (model `refs/fhcs_m3x25`; M3 × 20 is `refs/fhcs_m3x20`): right plate, through the saddle, into the recessed inserts |
+| 4 | M3 × 25 ISO 10642 countersunk | U1, U2, F1, F2 (model `cad/refs/fasteners/fhcs_m3x25`; M3 × 20 is `cad/refs/fasteners/fhcs_m3x20`): right plate, through the saddle, into the recessed inserts |
 | 4 | M3 × 10 ISO 10642 countersunk | servo ears (all four) |
 | 1 | M3 × 10 ISO 10642 countersunk + M3 hex nut | jack screw and its trapped nut |
 | 1 | M3 × 12 ISO 10642 countersunk | cam and horn onto the servo shaft |
@@ -63,8 +63,8 @@ or M3 × 35 is used. The table below is rev AG and earlier.
 
 ### Trigger set (rev AG, superseded)
 
-No G-code in `print/` for these three: the earlier files were sliced from older geometry and have been removed. Slice
-them from `export/<part>.step` with the settings above.
+No G-code in `cad/print/` for these three: the earlier files were sliced from older geometry and have been removed. Slice
+them from `cad/export/<part>.step` with the settings above.
 
 | Part | Build (up) | Supports | Model mass |
 |---|---|---|---|

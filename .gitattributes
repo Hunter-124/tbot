@@ -5,7 +5,7 @@
 *.step -diff
 *.gcode -diff
 *.MOV filter=lfs diff=lfs merge=lfs -text
-refs/scan/2026-11-09_iphone/*.ply filter=lfs diff=lfs merge=lfs -text
+cad/refs/scan/2026-11-09_iphone/*.ply filter=lfs diff=lfs merge=lfs -text
 software/scripts/* text eol=lf
 software/pi/systemd/* text eol=lf
 software/field_data/**/frames.bin filter=lfs diff=lfs merge=lfs -text

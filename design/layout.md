@@ -1,7 +1,7 @@
 # TBOT — current layout contract
 
 All dimensions are in millimetres and angles in degrees unless stated otherwise.
-The single assembly is `asm/tbot_full.step+`; its front module, trigger set,
+The single assembly is `cad/asm/tbot_full.step+`; its front module, trigger set,
 references and harness are shown at their installed positions. Moving parts are
 specified at rest unless a motion angle is stated. Dimensions marked
 [INFERENCE] are estimates, not measurements or physical validation.
@@ -25,7 +25,7 @@ specified at rest unless a motion angle is stated. Dimensions marked
 
 ## Gun reference geometry
 
-### `refs/gun_body.step+`
+### `cad/refs/gun/gun_body.step+`
 
 - Receiver: X -35..178.5, Y ±19, Z 16..76.6; its bottom is Z 16 and its rear
   top slopes to Z 68 at X -35. Preserve the loading-port access keep-out
@@ -87,7 +87,7 @@ specified at rest unless a motion angle is stated. Dimensions marked
   uncertain [INFERENCE]. The stud axis may be up to 1.5 above the cap axis:
   the scan puts its centre at Z 31..32.
 
-### `refs/guard_measured.step+`
+### `cad/refs/gun/guard_measured.step+`
 
 This is the fit reference for the trigger set. Since rev AH the guard inside
 `gun_body` (f171/f6/f175) uses the same profile, so the two overlap exactly;
@@ -114,7 +114,7 @@ their overlap in the assembly is two models of one guard, not two parts.
 - Guard-side liner is 1 mm neoprene, compressed to 0.85 on each side; the
   intended land face follows h(X) + 0.85.
 
-### `refs/gun_trigger.step+`
+### `cad/refs/gun/gun_trigger.step+`
 
 A deep crescent, not a straight blade (measured 2026-11-18 from the same
 photo). Moving reference, Y ±3.5. Front face (X,Z), tip to root: (4.6,−11.5),
@@ -282,15 +282,15 @@ up to approximately 2 and the lens-screw heads are approximately D3.8.
   exit edge (X 514.5, Z -9.2).
 - Lens holder (innomaker manual V1.4 + measured): 17 × 17 square, 4.85 above
   the PCB front, then a D14 round boss 4.85 tall; lens screws at Y ±10.
-- `camera_cover` (parts/camera_cover.step+): 32 × 32 × 1.6 plate on the PCB
+- `camera_cover` (cad/parts/camera_cover.step+): 32 × 32 × 1.6 plate on the PCB
   front (X 522.0..523.6, 0.3 to the pocket walls) with a shroud over the
   holder (Y ±14.5, Z -2.4..18.4, front X 532.3). Holder pocket 17.6 square ×
   5.1 plus ear pockets to Y ±12.9; the roof tapers 43° from vertical so it
   prints plate-down without support; D14.6 hole for the boss/lens. Remove the
   lens to fit it if the lens will not pass the D14.6 hole.
-- Assembly: `camera_cover` is component k80 in `asm/tbot_full.step+`, placed with
+- Assembly: `camera_cover` is component k80 in `cad/asm/tbot_full.step+`, placed with
   the same +10 X offset as the camera (`cam_inno9281`, k30); the four camera
-  screws are now `m2x8_cam1..4` (k81..k84, `refs/hw/screw_m2x8_pan.step+`),
+  screws are now `m2x8_cam1..4` (k81..k84, `cad/refs/fasteners/screw_m2x8_pan.step+`),
   head on the cover front X 533.6, tip X 525.6. Their 4.18 mm³ overlap each with
   the nose pilots (D1.7 vs D2) is the intended self-tap.
 - The GY-521 PCB is 21.2 × 16.4 × 1.6, X 472.5..493.7, Y -8.2..8.2,
@@ -344,7 +344,7 @@ up to approximately 2 and the lens-screw heads are approximately D3.8.
 ### `carrier_R` and `cover_R`
 
 - Battery hold-down (rev Y): a 3-point friction clamp. `batt_retainer`
-  (parts/batt_retainer.step+, 2.2 PLA plate, Y -49.6..-47.4, lightly
+  (cad/parts/batt_retainer.step+, 2.2 PLA plate, Y -49.6..-47.4, lightly
   skeletonised Y-frame, 0.8 chamfer on the pack face) lies flat on the
   pack's outboard face, touching only the cell crowns (nothing enters the
   valleys between the shrink-wrapped cells). 3 x M3 x 8 ISO 10642 pull it
@@ -448,7 +448,7 @@ up to approximately 2 and the lens-screw heads are approximately D3.8.
   (X 473.6, Y ±23.75). Pilot-wall minimum is 1.0. The other two holes rest
   on plain pads; the inaccessible terminal/part area is not a fastener point.
 - Buck #2 (7.0 V servo supply) is in the battery lobe; see `carrier_R`.
-  `chin_lid` is obsolete (since rev S), no longer in the assembly, and has been removed from `parts/`.
+  `chin_lid` is obsolete (since rev S), no longer in the assembly, and has been removed from `cad/parts/`.
 - The covers' approximately 2.4 hook stroke does not collide with the belly;
   the belly can stay installed while a cover is serviced.
 
@@ -517,7 +517,7 @@ X 381. Both runs to the trigger set are routed separately.
 
 ### Harness model and wire routing
 
-`refs/harness/` models each straight segment as a cylinder and each bend as a
+`cad/refs/harness/` models each straight segment as a cylinder and each bend as a
 sphere, rather than a fused sweep. Bundle diameters: 20 AWG single 1.9, servo
 22 AWG pair 3.2, cap leads 1.6, 26 AWG single 1.1, four-wire IMU 2.7,
 seven-wire GPIO 3.3, three-wire exit 3.0. Wires that pass under the Pi's
@@ -616,7 +616,7 @@ contacts and connector seating remain open.
 
 ### Servo, horn and motion
 
-- `refs/mg996r` is photo-derived, approximately ±0.7, cross-checked against
+- `cad/refs/actuators/mg996r` is photo-derived, approximately ±0.7, cross-checked against
   the TowerPro side-view drawing (ear underside 26.6 above the case bottom).
   The case is X -6.3..34.4, Y 5.65..25.35, Z -51.3..-16.0. Ears span X
   -12.95..41.05, Z -24.7..-21.7; D4.6 ear holes are X -10.7/38.8, Y 10.5/20.5.
@@ -880,10 +880,10 @@ the set could ride down and back off it.
 Replaces `servo_bracket_L`, `servo_lever`, `trig_clamp_R_v2` and `u18_spacer`
 (rev AG and earlier stay in the repo for reference, suppressed in the assembly).
 New parts: `servo_mount_L`, `btn_mount_R`, `trig_cam`, `jack_shoe`.
-`asm/tbot_full.step+` shows rev AH with all hardware; `asm/trigger_set_AH.step+`
+`cad/asm/tbot_full.step+` shows rev AH with all hardware; `cad/asm/trigger_set_AH.step+`
 is the four parts plus the servo.
 
-Guard and trigger geometry: see `refs/guard_measured` and `refs/gun_trigger`
+Guard and trigger geometry: see `cad/refs/gun/guard_measured` and `cad/refs/gun/gun_trigger`
 above (both measured 2026-11-18).
 
 - Safety button: in the guard's rear web, about X −16.4..−7.9, Z 2.3..12.2.
@@ -893,7 +893,7 @@ above (both measured 2026-11-18).
 Servo and cam:
 
 - MG996R on gun-left, output axis along −Y, shaft at (X 10.5, Z 1.2). Pose of
-  `refs/mg996r`: rotate +90° about X, then translate (6.9, −3.6, −14.3). Case
+  `cad/refs/actuators/mg996r`: rotate +90° about X, then translate (6.9, −3.6, −14.3). Case
   X 0.6..41.3, Z −8.65..11.05, Y 12.4..47.7; gear cover top Y 10.0; ear seat
   Y 18.1; spline tip Y 2.7. Case top is 1.15 below the receiver underside.
   Rev AH-3 moved the servo 2.0 forward (+X) so the upper rear ear screw fits
@@ -961,7 +961,7 @@ the plug.
 Screws: P1..P3 are M3 × 20, U1, U2, F1, F2 are M3 × 25, heads in the right
 plate at Y −12.5, tips at Y 7.5 and 12.5.
 
-Checks in `asm/tbot_full.step+` (trigger area, 24 members, rev AH-3): no
+Checks in `cad/asm/tbot_full.step+` (trigger area, 24 members, rev AH-3): no
 interference between printed parts, gun and hardware except the expected ones
 (the two guard models; horn spline teeth on the smooth modelled servo spline,
 14 mm³; M2 self-tapper in the horn hole; jack thread in its nut). Clearances:
@@ -1016,7 +1016,7 @@ guard-recess floor, round output-hole crown and insert-bore ends; the clamp's
 round switch-hole and rear-access-hole crowns are short bridges. The trigger
 print set has not been regenerated and verified for the current geometry.
 
-Rev V re-sliced only the two nose halves (`print/creality_ender_3_0_4_mm_nozzle/nose_clamp_L|R.*`).
+Rev V re-sliced only the two nose halves (`cad/print/creality_ender_3_0_4_mm_nozzle/nose_clamp_L|R.*`).
 The other front-module print files predate rev U and must be re-sliced before printing.
 
 ## Current-geometry verification
@@ -1042,9 +1042,9 @@ The other front-module print files predate rev U and must be re-sliced before pr
     the clamp collar now fills that space. The closure wall is Y ±17.3,
     Z -12..-3.4, and `SignalExitHoleProfile` was rebuilt without its stale
     external reference.
-  - `refs/gun_body`: `RibPost1..9` placed from the measured photo (see
+  - `cad/refs/gun/gun_body`: `RibPost1..9` placed from the measured photo (see
     "gun_body"); three placeholder posts deleted.
-  - `refs/hose_clamp_rear` / `hose_clamp_front` (`band_B1` / `band_B2`): band
+  - `cad/refs/fasteners/hose_clamp_rear` / `hose_clamp_front` (`band_B1` / `band_B2`): band
     path and worm housing rebuilt on the new path; B1 sits at X 428.4..441.1.
   - Checks run (final): `verify_battery` passes on nose_clamp_L/R, carrier_L/R,
     belly_cover and band_B1. `gun_body` fails only feature_attachment, on its
@@ -1089,7 +1089,7 @@ The other front-module print files predate rev U and must be re-sliced before pr
   All six parts pass `verify_battery` (carrier_R's SaddleLeadInProfile had a
   redundant dimension, now set to driven). Open risers: the 1.6-long square
   steps at the J-hook ends on both covers (the kernel rejects fillets there).
-- Harness (rev Y): study `tbot_front` in `asm/tbot_full.step+` is now routed with the
+- Harness (rev Y): study `tbot_front` in `cad/asm/tbot_full.step+` is now routed with the
   harness tools (35 connectors, 25 wires, 0 unrouted; `harness_check` 0 issues at
   0.3 clearance). The old solid bodies k56/k57/k63/k64/k65 are removed from the
   assembly; `ffc_cam_15p` (k59) stays because the ribbon is not in the study. The
@@ -1199,17 +1199,17 @@ The other front-module print files predate rev U and must be re-sliced before pr
 
 ## Files
 
-- `asm/tbot_full.step+`: the only current master assembly, including the gun
+- `cad/asm/tbot_full.step+`: the only current master assembly, including the gun
   references, front module, trigger set and modelled harness.
-- `parts/`: `nose_clamp_L`, `nose_clamp_R`, `carrier_L`, `carrier_R`,
+- `cad/parts/`: `nose_clamp_L`, `nose_clamp_R`, `carrier_L`, `carrier_R`,
   `cover_L`, `cover_R`, `belly_cover`, `camera_cover`, `servo_bracket_L`, `servo_lever` and
   `trig_clamp_R` native `.step+` parts. `chin_lid.step+` (and its print files)
   are obsolete since rev S and not in the assembly.
-- `refs/` and `refs/hw/`: gun, guard, components, hose clamps and fastener
-  references; `refs/harness/` contains the six modelled harness/FFC parts.
-- `export/`: part STEP exports, `refs/` reference exports, and
+- `cad/refs/`: reference models by kind: `gun/` (gun, guard, trigger), `electronics/`,
+  `actuators/`, `fasteners/` (screws, nuts, hose clamps) and `hardware/`; `cad/refs/harness/` contains the six modelled harness/FFC parts.
+- `cad/export/`: part STEP exports, `refs/` reference exports, and
   `asm/tbot_full.step` assembly export.
-- `print/creality_ender_3_0_4_mm_nozzle/`: front-module `.gcode`, `.3mf`
+- `cad/print/creality_ender_3_0_4_mm_nozzle/`: front-module `.gcode`, `.3mf`
   and `.print.json` files; see the print table for their actual check status.
 - `design/BOM.md` and `design/assembly_sequence.md`: hardware, wiring cuts
   and build/service order. `design/renders/` contains the rev R, rev S, rev T

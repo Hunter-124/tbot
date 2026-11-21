@@ -7,9 +7,9 @@ M12 x 0.5 thread.
 
 | File | What |
 |---|---|
-| `parts/lens_lock_nut.step+` | primary: split clamp nut with pinch screw |
-| `parts/lens_lock_nut_plain.step+` | fallback: plain knurled jam nut |
-| `export/STEP/lens_lock_nut*.step`, `export/STL/lens_lock_nut*.stl` | exports, modelled in print orientation (front face on Z 0) |
+| `cad/parts/lens_lock_nut.step+` | primary: split clamp nut with pinch screw |
+| `cad/parts/lens_lock_nut_plain.step+` | fallback: plain knurled jam nut |
+| `cad/export/STEP/lens_lock_nut*.step`, `cad/export/STL/lens_lock_nut*.stl` | exports, modelled in print orientation (front face on Z 0) |
 | `design/renders/lens_lock_nut.png`, `lens_lock_nut_plain.png`, `lens_lock_nut_thread_section.png` | renders |
 
 ## Dimensions

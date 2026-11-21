@@ -50,7 +50,7 @@ work stays out of this document. The gun is **unloaded, bolt open, muzzle in a s
   M2 only where a board needs it. Every part prints without support inside circular holes. Prefer parts that print
   flat with no overhang.
 - The motor is the user's NEMA 17 with its factory pinion; the reference model is built from caliper
-  measurements (`refs/stepper_nema17_pinion.step+`). The pinion tooth count is **not yet confirmed**, so the
+  measurements (`cad/refs/actuators/stepper_nema17_pinion.step+`). The pinion tooth count is **not yet confirmed**, so the
   gear stage has an adjustable centre distance (slotted motor holes).
 - Axle: M8 bolt through two 608 bearings; the table is clamped to the inner races only. Load path is the axle,
   not the motor.
@@ -111,10 +111,10 @@ None of this is part of the mechanical task. It is listed so the mechanical desi
 ## 4. Candidate A: gear-reduced yaw table (parked, over-built for a first rig)
 
 Kept as a potential candidate. Candidate B (simple, direct drive, 2 printed parts) is in section 7. Everything below
-in section 4 describes candidate A only; its assembly is `asm/calrig_A.step+`.
+in section 4 describes candidate A only; its assembly is `cad/asm/calrig_A.step+`.
 
-CAD: parts in `parts/calrig/`, motor reference in `refs/stepper_nema17_pinion.step+`, hardware references in
-`refs/hw/` (M8 x 70 bolt, M8 nut, 608 bearing, 500 mm 2020 extrusion), assembly `asm/calrig.step+`. Rig frame:
+CAD: parts in `cad/parts/calrig/`, motor reference in `cad/refs/actuators/stepper_nema17_pinion.step+`, hardware references in
+`cad/refs/fasteners/` (M8 x 70 bolt, M8 nut) and `cad/refs/hardware/` (608 bearing, 500 mm 2020 extrusion), assembly `cad/asm/calrig.step+`. Rig frame:
 origin on the axle axis at the top face of the base plate, +Z up, +X toward the motor.
 
 ### 4.1 Concept
@@ -252,9 +252,9 @@ Total printed mass is about 1.0 kg (base 359, saddles 340, turntable 83, gear 61
 Simple rig chosen by Hunter: motor screwed under a printed arch, gun straight on the motor, no gear, no bearings.
 Rev B2 replaces the first B layout (pinion pulled off, barrel cradle). Candidate A (section 4) stays parked.
 
-CAD: `parts/calrig_B/motor_mount_arch.step+`, `parts/calrig_B/yaw_arm.step+`, motor reference
-`refs/stepper_nema17_pinion.step+` (the user's motor, pinion ON), assembly `asm/calrig_B_final.step+`.
-`refs/stepper_nema17_bare.step+` is no longer used. Frame: origin on the shaft axis at the motor face, +Z up,
+CAD: `cad/parts/calrig_B/motor_mount_arch.step+`, `cad/parts/calrig_B/yaw_arm.step+`, motor reference
+`cad/refs/actuators/stepper_nema17_pinion.step+` (the user's motor, pinion ON), assembly `cad/asm/calrig_B_final.step+`.
+`cad/refs/actuators/stepper_nema17_bare.step+` is no longer used. Frame: origin on the shaft axis at the motor face, +Z up,
 motor body Z -37.15..0, bench plane Z -40.
 Software: `software/firmware/calrig_uno/` (Arduino Uno + CNC Shield V3), host and analysis in
 `software/tbot/calrig/`, CLI `tbot calrig`, operator guide `software/docs/CALRIG.md`, interface contract
@@ -315,7 +315,7 @@ Truth angle is the step count; the hall home detects lost steps (HOMED offset, h
 
 ### 7.5 Checks run (2026-11-09, tool results)
 
-- `check_interference` on `asm/calrig_B_final`: no interference. Contacts at 0.00 mm are the designed face contacts
+- `check_interference` on `cad/asm/calrig_B_final`: no interference. Contacts at 0.00 mm are the designed face contacts
   (motor face/plate, flange/plate). Pinion tips to socket 0.158 mm.
 - `verify_battery`: no FAIL on `motor_mount_arch`, `yaw_arm`, `stepper_nema17_pinion` and the assembly.
 - `dfm_check` (FDM, Ender 3, orientations above): `yaw_arm` support envelope 0.08 cm^3; remaining overhang rows

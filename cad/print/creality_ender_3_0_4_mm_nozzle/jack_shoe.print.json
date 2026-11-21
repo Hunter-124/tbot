@@ -1,0 +1,147 @@
+{
+  "schema": "chudware.print_job/1",
+  "part": "jack_shoe",
+  "source": {
+    "kind": "doc",
+    "doc_id": "doc-cpp00000004"
+  },
+  "copies": 1,
+  "printer": {
+    "name": "Creality Ender-3 (0.4 mm nozzle)",
+    "vendor": "Creality",
+    "bed_polygon": [
+      [
+        3.0,
+        3.0
+      ],
+      [
+        228.0,
+        3.0
+      ],
+      [
+        228.0,
+        228.0
+      ],
+      [
+        3.0,
+        228.0
+      ]
+    ],
+    "max_height_mm": 250.0
+  },
+  "presets": {
+    "print": "0.20 mm NORMAL (0.4 mm nozzle) @CREALITY",
+    "filament": "Generic PLA @CREALITY"
+  },
+  "goal": "strength",
+  "settings_changed": {
+    "perimeters": "4",
+    "fill_density": "100%",
+    "fill_pattern": "rectilinear",
+    "top_solid_layers": "6",
+    "bottom_solid_layers": "5",
+    "support_material": "0",
+    "binary_gcode": "0",
+    "overhangs": "1"
+  },
+  "effective": {
+    "layer_height": "0.20",
+    "first_layer_height": "0.2",
+    "perimeters": "4",
+    "fill_density": "100%",
+    "fill_pattern": "rectilinear",
+    "top_solid_layers": "6",
+    "bottom_solid_layers": "5",
+    "support_material": "0",
+    "support_material_style": null,
+    "support_material_threshold": "40",
+    "dont_support_bridges": "1",
+    "overhangs": "1",
+    "brim_width": "0",
+    "temperature": "205",
+    "first_layer_temperature": "210",
+    "bed_temperature": "60",
+    "first_layer_bed_temperature": "60",
+    "nozzle_diameter": "0.4",
+    "retract_length": "5"
+  },
+  "orientation": {
+    "build_dir": [
+      0.0,
+      0.0,
+      -1.0
+    ],
+    "yaw_deg": 0.0,
+    "source": "caller",
+    "why": "caller-specified build direction"
+  },
+  "slicer": {
+    "kind": "flatpak",
+    "argv_prefix": [
+      "/usr/bin/flatpak",
+      "run",
+      "--user",
+      "--command=prusa-slicer",
+      "com.prusa3d.PrusaSlicer"
+    ],
+    "version": "2.9.7",
+    "profiles_dir": "/home/hunter/.local/share/flatpak/app/com.prusa3d.PrusaSlicer/x86_64/stable/22caa5995fef8170cbed1d404f993996e5552e47159391666a7b096a85d8f641/files/share/PrusaSlicer/profiles",
+    "source": "flatpak_user",
+    "identity": "22caa5995fef8170cbed1d404f993996e5552e47159391666a7b096a85d8f641",
+    "usable": true
+  },
+  "config_sha256": "9646b6c97941f79fc22e11e645a723eb69ce5201440749953a693fde38099235",
+  "mesh_sha256": "8f5b21e685de0a5ccffccae768763efd9027a756d973c24f39a795f903cdbb2a",
+  "gcode": "jack_shoe.gcode",
+  "gcode_sha256": "02f55e7a2d40cf5364c4aef47a4ec30beca4ed589d7642e487eb6e2ada165861",
+  "project_3mf": "jack_shoe.3mf",
+  "stats": {
+    "layers": 15,
+    "height_mm": 3.0,
+    "filament_mm": 120.258,
+    "filament_g": 0.36,
+    "print_time_s": 283.0,
+    "support_share": 0.0,
+    "by_type_mm": {
+      "Custom": 260.0,
+      "External perimeter": 526.728,
+      "Internal infill": 120.801,
+      "Perimeter": 1285.015,
+      "Skirt/Brim": 338.836,
+      "Solid infill": 724.073,
+      "Top solid infill": 85.501
+    },
+    "slicer": "PrusaSlicer 2.9.7"
+  },
+  "estimate": {
+    "part_volume_mm3": 214.695,
+    "support_volume_mm3": 0.0,
+    "material_g": 0.266,
+    "support_g": 0.0,
+    "time_h": 0.012,
+    "layers": 15,
+    "support_share": 0.0,
+    "method": "deterministic shell/infill/flow ranking estimate, not slicer output"
+  },
+  "printability": {
+    "status": "pass",
+    "issues": []
+  },
+  "gcode_check": {
+    "status": "pass",
+    "issues": []
+  },
+  "slicer_warnings": [],
+  "slicer_mesh_repairs": {
+    "available": true,
+    "volumes": 1,
+    "counts": {
+      "edges_fixed": 0,
+      "degenerate_facets": 0,
+      "facets_removed": 0,
+      "facets_reversed": 0,
+      "backwards_edges": 0
+    }
+  },
+  "print_ready": true
+}
