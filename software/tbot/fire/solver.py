@@ -199,6 +199,15 @@ class FireSolver:
         self._hold_since_ns = 0
         # a target must have been SEEN to travel across the world before it is shot at (fire.min_travel_deg)
         self._min_travel = math.radians(float(getattr(fc, "min_travel_deg", 0.0) or 0.0))
+        # the youngest target that may be shot at: fire.min_track_age_ms (the single-frame detector's scenery filter
+        # needs that much history), or vision.track.fire_min_age_ms under the motion front end, whose tracks are
+        # born from a path of detections already (negative: fire.min_track_age_ms there too)
+        self._min_age_ms = float(getattr(fc, "min_track_age_ms", 0.0) or 0.0)
+        vis = getattr(cfg, "vision", None)
+        if vis is not None and str(getattr(vis, "engine", "")) == "motion":
+            m = float(getattr(getattr(vis, "track", None), "fire_min_age_ms", -1.0))
+            if m >= 0.0:
+                self._min_age_ms = m
         self._born: dict[int, list] = {}  # track id -> [direction when first seen, farthest it has been from it]
 
     def _note_only(self, tracker, now_ns: int) -> None:
@@ -315,7 +324,7 @@ class FireSolver:
         age_ms = (now_ns - int(track.first_t_ns)) * 1e-6 if getattr(track, "first_t_ns", None) else float("inf")
         if track.hits < fc.min_track_hits:
             reason = "track young"
-        elif age_ms < float(getattr(fc, "min_track_age_ms", 0.0) or 0.0):
+        elif age_ms < self._min_age_ms:
             # too new for the scenery filter to have had its say (it needs detector.static_min_age_ms of history)
             reason = f"track young ({age_ms:.0f} ms)"
         elif track.misses > int(getattr(fc, "max_target_misses", 1_000_000)):

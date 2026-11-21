@@ -162,6 +162,12 @@ class VisionTrackConfig:
     max_coast_ms: float
     stop_window_ms: float
     duplicate_deg: float
+    init_strong_mass: float = 0.0
+    init_strong_hits: int = 0
+    init_strong_radius_px: float = 48.0
+    init_strong_max_neighbours: int = 1
+    post_birth_hits: int = 2
+    fire_min_age_ms: float = -1.0
 
 
 @dataclass

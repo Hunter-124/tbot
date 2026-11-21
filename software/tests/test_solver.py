@@ -301,7 +301,7 @@ def test_incoming_clay_with_the_bore_on_it_fires(scene_cfg):
     assert fired is not None, sorted({d.reason for d in decisions})
     # There is no lead to wait for, so the solver fires as soon as the filter has settled enough for
     # P(hit) to clear the gate; before that the young track's own uncertainty holds the shot.
-    assert fired <= 26  # ... and never before fire.min_track_age_ms (200 ms = 20 frames here)
+    assert fired <= 26  # ... and never before the age gate (vision.track.fire_min_age_ms, 120 ms = 15 frames here)
     d = decisions[fired]
     # (it fires while the filter is still settling: the rate estimate is small, not yet zero)
     assert d.extra["clay_rate_rad_s"] < 0.05, "a radially incoming clay has no angular velocity"
@@ -452,19 +452,40 @@ def test_a_target_that_reads_too_far_is_solved_at_the_assumed_range(scene_cfg):
     assert FireSolver(cfg, scene.shot, scene.mount, scene.latency)._solve_range(T) == (70.0, 7.0)
 
 
-def test_a_target_just_born_is_not_shot_at(scene_cfg):
-    """fire.min_track_age_ms: a track younger than this is refused whatever its P(hit) (a speck of scenery is a
-    firing solution until the scenery filter has had time to reject it); off, the same swing fires earlier."""
+@pytest.mark.parametrize("engine", ["legacy", "motion"])
+def test_a_target_just_born_is_not_shot_at(scene_cfg, engine):
+    """The age gate: a track younger than fire.min_track_age_ms (vision.track.fire_min_age_ms under the motion front
+    end) is refused whatever its P(hit) (a speck of scenery is a firing solution until the scenery filter has had
+    time to reject it); off, the same swing fires earlier."""
     cfg, scene = scene_cfg
+    cfg.vision.engine = engine
     delay = scene.latency.fire_delay_s("servo")
     rate, best_frame = 0.5, 12   # the best moment comes 120 ms after the target appears
     az_i, el_i = scene.ideal_aim(_slow_crosser, T0 + best_frame * DT_NS, delay)
     att = SwingAttitude(az_i - rate * (best_frame / FPS + delay), el_i, rate)
-    assert cfg.fire.min_track_age_ms >= 150.0  # as shipped
+    gate = cfg.vision.track.fire_min_age_ms if engine == "motion" else cfg.fire.min_track_age_ms
+    assert gate >= (100.0 if engine == "motion" else 150.0)  # as shipped
     decisions = _run(cfg, scene, att, _slow_crosser, 60)
     fired = _first_fire(decisions)
-    assert fired is None or fired * DT_NS >= cfg.fire.min_track_age_ms * 1e6
+    assert fired is None or fired * DT_NS >= gate * 1e6
     assert any(d.reason.startswith("track young (") for d in decisions)
     cfg.fire.min_track_age_ms = 0.0
+    cfg.vision.track.fire_min_age_ms = 0.0
     early = _first_fire(_run(cfg, scene, att, _slow_crosser, 60))
     assert early is not None and (fired is None or early <= fired)
+
+
+def test_the_age_gate_follows_the_front_end(scene_cfg):
+    """fire.min_track_age_ms is the legacy front end's (its scenery filter needs the history); the motion front end
+    has vision.track.fire_min_age_ms, and a negative value there falls back to the fire key."""
+    cfg, scene = scene_cfg
+
+    def gate():
+        return FireSolver(cfg, scene.shot, scene.mount, scene.latency)._min_age_ms
+
+    cfg.vision.engine = "legacy"
+    assert gate() == cfg.fire.min_track_age_ms == 200.0
+    cfg.vision.engine = "motion"
+    assert gate() == cfg.vision.track.fire_min_age_ms == 120.0
+    cfg.vision.track.fire_min_age_ms = -1.0
+    assert gate() == cfg.fire.min_track_age_ms

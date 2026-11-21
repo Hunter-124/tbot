@@ -13,10 +13,12 @@ when it is built), different lifecycle:
    the size and the contrast sign fit (at most init_max_branches pairs per seed, the most clay-like first). A chain
    of 2+ points predicts its next point by constant velocity (least squares over its points) and takes the
    best-fitting detection inside init_gate_px + init_gate_frac * step (wider by init_gyro_frac of the gun's own
-   image motion where stab rests on the gyro alone). A chain of init_hits points over 3+ frame intervals that has
-   travelled init_min_travel_px and lies on its line (RMS <= init_max_rms_px) becomes a TRACK: the EKF starts from
-   its first point exactly as the parent's `_new_track` does and runs over the other points with their own times
-   and attitudes, so the track is born confirmed with position, velocity and range from all of them. Chains are not
+   image motion where stab rests on the gyro alone). A chain of init_hits points (init_strong_hits when their median
+   summed residual is init_strong_mass or more, init_hits + init_weak_extra_hits under init_weak_mass) over 3+ frame
+   intervals that has travelled init_min_travel_px and lies on its line (RMS <= init_max_rms_px) becomes a TRACK:
+   the EKF starts from its first point exactly as the parent's `_new_track` does and runs over the other points with
+   their own times and attitudes, so the track is born confirmed with position, velocity and range from all of them,
+   and post_birth_hits detections short of the solver's fire.min_track_hits. Chains are not
    tracks: nothing downstream sees them (`self.chains`, `self.seeds`, `self.stats` are for debugging).
 3. Death. A track coasts at most vision.track.max_misses frames and max_coast_ms; one that has stopped moving
    against the scenery (stop_window_ms of detections slower than init_min_speed_dps) dies; of two tracks on the same
@@ -47,6 +49,7 @@ _SIZE_MEDIAN_N = 5
 _CELL = 32.0           # grid cell of the chain search, stab px
 _LINE_N = 8             # a live track's stab gate is the line through its last this many detections
 _POST_BIRTH_HITS = 2    # see _promote
+_FRAME_PTS_N = 16       # frames of points kept for the isolation test of a strong path (320 ms at 50 frames/s)
 _ACC_TYPICAL_DPS2 = 60.0  # the angular acceleration a clay typically shows (recorded clays: 40-100 deg/s^2) and ...
 _ACC_NOISE_PX = 0.5       # ... the centroid noise of a detection: together the weight of a short path's acceleration
 
@@ -273,6 +276,19 @@ class MotionTracker(CartesianClayTracker):
         self._chain_mass_ratio = max(0.0, float(vt.init_mass_ratio))
         self._weak_mass = max(0.0, float(vt.init_weak_mass))
         self._weak_hits = max(0, int(vt.init_weak_extra_hits))
+        # A path of strong detections (median summed residual init_strong_mass or more: a clay at 30 m is ~3000, at
+        # 14 m 10000-40000; leaf flicker 80-300) is believed after init_strong_hits of them (at least 3). 0 = off.
+        sm = max(0.0, float(getattr(vt, "init_strong_mass", 0.0) or 0.0))
+        sh = int(getattr(vt, "init_strong_hits", 0) or 0)
+        self._strong_mass = sm if sm > 0.0 and 0 < sh < self._init_hits else 0.0
+        self._strong_hits = max(3, sh) if self._strong_mass > 0.0 else self._init_hits
+        self._ready_hits = min(self._init_hits, self._strong_hits)
+        # ... and only when its detections stood alone: chance lines of strong specks are as likely as the specks are
+        # crowded (a patch of strong flicker, 12 specks a frame in 150 x 100 px, made 170 tracks in 1500 frames with
+        # 4 detections a line, 9 with 5)
+        self._iso_px = max(0.0, float(getattr(vt, "init_strong_radius_px", 48.0)))
+        self._iso_max = max(0, int(getattr(vt, "init_strong_max_neighbours", 1)))
+        self._post_birth = max(0, int(getattr(vt, "post_birth_hits", _POST_BIRTH_HITS)))
         self._ridge = (_ACC_NOISE_PX / (0.5 * _ACC_TYPICAL_DPS2 * rad * self._fx)) ** 2   # see _quad
         self._ratio = max(1.0, float(vt.init_size_ratio))
         self._dup_rad = math.radians(float(vt.duplicate_deg))
@@ -289,6 +305,7 @@ class MotionTracker(CartesianClayTracker):
         self.chains: list[_Chain] = []
         self.seeds: list[_Pt] = []
         self._hist: dict[int, list[_Pt]] = {}
+        self._frame_pts: dict[int, list[_Pt]] = {}   # every point of the last _FRAME_PTS_N frames (see _isolated)
         self._ref: tuple | None = None    # (r, e1, e2) of the world-direction fallback, 9 floats
         self._sref: tuple | None = None   # the same for the detector's stabilised directions (Detection.stab_dir)
         self._frame = 0
@@ -313,6 +330,11 @@ class MotionTracker(CartesianClayTracker):
 
         preds = [self._predict_one(tr, t_ns) for tr in self.tracks]
         pts = self._points(t_ns, detections, rot, bore)
+        fp = self._frame_pts
+        fp[self._frame] = pts
+        if len(fp) > _FRAME_PTS_N:
+            for k in [k for k in fp if k <= self._frame - _FRAME_PTS_N]:
+                del fp[k]
 
         # ---- 1. live tracks take their detections
         same_sign = self._same_sign
@@ -452,10 +474,10 @@ class MotionTracker(CartesianClayTracker):
         if tr.t_ns < t_ns:   # the line's last point is older than this frame (cannot happen today: kept for safety)
             tr.s, tr.S = self._predict_one(tr, t_ns)
             tr.t_ns = t_ns
-        # Credited with at most fire.min_track_hits - _POST_BIRTH_HITS detections: the solver's bar is then only
-        # reached by detections the filter itself gated after the birth, never on the frame a path is first
-        # believed (2026-11-17 presses 105639 and 105308 fired on that frame: the path was 200 ms old already)
-        tr.hits = min(len(pts), max(1, int(self.cfg.fire.min_track_hits) - _POST_BIRTH_HITS))
+        # Credited with at most fire.min_track_hits - vision.track.post_birth_hits detections: the solver's bar is
+        # then only reached by detections the filter itself gated after the birth, never on the frame a path is
+        # first believed (2026-11-17 presses 105639 and 105308 fired on that frame: the path was 200 ms old already)
+        tr.hits = min(len(pts), max(1, int(self.cfg.fire.min_track_hits) - self._post_birth))
         tr.misses = 0
         tr.age = pts[-1].frame - p0.frame + 1
         tr.confirmed = True
@@ -623,6 +645,10 @@ class MotionTracker(CartesianClayTracker):
                 for p in h:
                     if p.fb:
                         self._project(p)
+            for fr in self._frame_pts.values():
+                for p in fr:
+                    if p.fb:
+                        self._project(p)
 
     def _project(self, p: _Pt) -> bool:
         rx, ry, rz, ax, ay, az, bx, by, bz = self._ref
@@ -764,6 +790,10 @@ class MotionTracker(CartesianClayTracker):
                     for q in h:
                         if q.sd:
                             self._project_s(q)
+                for fr in self._frame_pts.values():
+                    for q in fr:
+                        if q.sd:
+                            self._project_s(q)
         for p in sd:
             self._project_s(p)
 
@@ -875,7 +905,7 @@ class MotionTracker(CartesianClayTracker):
             ch.add(best, sums, fit, quad)
             extended.add((last.pid, best.pid))
             keep.append(ch)
-            if len(ch.pts) >= self._init_hits:
+            if len(ch.pts) >= self._ready_hits:
                 ready.append(ch)
 
         # seeds pair with this frame's detections
@@ -947,7 +977,11 @@ class MotionTracker(CartesianClayTracker):
                 a, b = ch.pts[0], ch.pts[-1]
                 if b.frame - a.frame < 3:
                     continue
-                if self._weak_hits and len(ch.pts) < self._init_hits + self._weak_hits and                         _median([q.mass for q in ch.pts]) < self._weak_mass:
+                med = _median([q.mass for q in ch.pts])
+                if len(ch.pts) < self._init_hits and not (
+                        self._strong_mass > 0.0 and med >= self._strong_mass and self._isolated(ch)):
+                    continue   # not strong, or not alone: init_hits detections before it is believed
+                if self._weak_hits and len(ch.pts) < self._init_hits + self._weak_hits and med < self._weak_mass:
                     continue   # speck-sized: more detections before it is believed
                 if math.hypot(b.sx - a.sx, b.sy - a.sy) < min_travel:
                     continue
@@ -986,6 +1020,27 @@ class MotionTracker(CartesianClayTracker):
             keep = head + tail
         self.chains = keep
         return born
+
+    def _isolated(self, ch: _Chain) -> bool:
+        """True when, over the frames of the chain's points, at most init_strong_max_neighbours other detections lay
+        within init_strong_radius_px of them (stabilised px). A clay on open sky has none; a path through a patch of
+        flicker or along a tree line does not count as alone, and waits for init_hits detections."""
+        r2 = self._iso_px * self._iso_px
+        lim = self._iso_max
+        n = 0
+        for p in ch.pts:
+            fr = self._frame_pts.get(p.frame)
+            if fr is None:
+                return False
+            for q in fr:
+                if q is p or q.fb != p.fb or q.sx != q.sx:
+                    continue
+                dx, dy = q.sx - p.sx, q.sy - p.sy
+                if dx * dx + dy * dy <= r2:
+                    n += 1
+                    if n > lim:
+                        return False
+        return True
 
     def _rms_allow_pts(self, pts: list[_Pt]) -> float:
         """Extra RMS allowed where stab rests on the gyro alone: init_gyro_frac of the gun's mean image motion per

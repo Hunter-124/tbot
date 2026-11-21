@@ -213,6 +213,19 @@ init_mass_ratio = 4.0         # consecutive detections of one object differ in s
 init_weak_mass = 600.0        # a path whose detections are weaker than this (median summed residual, DN px: flicker in
 init_weak_extra_hits = 2      # foliage is 80-300, a clay at 30 m 3000, at 14 m 10000-40000) needs this many more
                               # detections than init_hits before it is believed
+init_strong_mass = 2000.0     # a path whose detections are this strong or stronger (median summed residual) is believed
+init_strong_hits = 4          # after this many (3 at least; 0 = off) ...
+init_strong_radius_px = 48.0  # ... when, over its frames, at most init_strong_max_neighbours other detections lay within
+init_strong_max_neighbours = 1  # this of its points (stabilised px). Chance lines of strong specks are as likely as
+                              # the specks are crowded: a patch of strong flicker (sim, 12 a frame in 150 x 100 px) made
+                              # 170 tracks in 1500 frames with 4 detections a line, 9 with 5
+post_birth_hits = 2           # a newborn track is this many detections short of fire.min_track_hits: the solver never
+                              # fires on the frame a path is first believed (2026-11-17, presses 105639 and 105308)
+fire_min_age_ms = 120.0       # the solver's fire.min_track_age_ms under this front end (negative: that key): a track is
+                              # born from a path already, so the 200 ms the single-frame detector's scenery filter needs
+                              # is not. 68 presses: clays hit +2, the same 15 fire decisions on the footage as recorded.
+                              # Not 100 (+3): an incoming clay with the bore on it was then shot on a filter that had
+                              # not settled (predicted miss at the pattern's edge, P 0.56); at 120 ms P is 0.85
 same_sign = false             # true: the detections of one object must all be brighter, or all darker, than what is
                               # behind them. Off: a clay lit from above is bright on top and dark underneath and its
                               # measured sign flips from frame to frame, and one crossing from sky to trees changes

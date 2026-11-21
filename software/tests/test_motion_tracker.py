@@ -76,8 +76,9 @@ class Scene:
         w = rays_g @ R.T
         return w / np.linalg.norm(w, axis=1, keepdims=True)
 
-    def clutter(self, rng, R, t_ns, n=12, patch=None, with_stab=True) -> list[Detection]:
-        """n specks uniform over the frame, or over a patch of scenery (patch = (centre stab x, y, w, h))."""
+    def clutter(self, rng, R, t_ns, n=12, patch=None, with_stab=True, mass=(50.0, 200.0)) -> list[Detection]:
+        """n specks uniform over the frame, or over a patch of scenery (patch = (centre stab x, y, w, h)); summed
+        residual uniform in `mass` (the default: leaf flicker)."""
         if patch is None:
             uv = np.stack([rng.uniform(0, W, n), rng.uniform(0, H, n)], axis=1)
             w = self.to_world(uv, R)
@@ -94,7 +95,7 @@ class Scene:
             inside = (uv[:, 0] >= 2.0) & (uv[:, 0] < W - 2.0) & (uv[:, 1] >= 2.0) & (uv[:, 1] < H - 2.0)
             st, uv = st[front][inside], uv[inside]
         sizes = rng.uniform(3.0, 6.0, len(uv))
-        mass = rng.uniform(50.0, 200.0, len(uv))
+        mass = rng.uniform(mass[0], mass[1], len(uv))
         sign = rng.choice([-1.0, 1.0], len(uv))
         out = []
         for k in range(len(uv)):
@@ -105,7 +106,7 @@ class Scene:
                                  mass=float(mass[k])))
         return out
 
-    def clay(self, rng, w, R, t_ns, range_m=30.0, sigma=0.7, with_stab=True, score=CLAY):
+    def clay(self, rng, w, R, t_ns, range_m=30.0, sigma=0.7, with_stab=True, score=CLAY, mass=1500.0):
         uv = self.to_pixel(w, R)
         if uv is None:
             return None
@@ -116,7 +117,7 @@ class Scene:
         d = math.hypot(self.cfg.mount.clay_diameter_m / (range_m * ifov), self.cfg.detector.psf_px)
         return Detection(t_ns=t_ns, u=float(uv[0]), v=float(uv[1]), area_px=math.pi * d * d / 4, diameter_px=d,
                          contrast=-40.0, snr=20.0, score=score, bbox=(0, 0, 1, 1),
-                         stab=(float(st[0]), float(st[1])) if with_stab else None, mass=1500.0)
+                         stab=(float(st[0]), float(st[1])) if with_stab else None, mass=float(mass))
 
 
 def _swing(rate_dps: float, amp_deg: float = 6.0):
@@ -150,7 +151,7 @@ def _clay_tracks(tracker, score=CLAY):
 
 
 # ------------------------------------------------------------------------------------------------ (a) clutter only
-def _false_tracks(scene, seed, rate, n_frames=300, n=12, patch=None, with_stab=True):
+def _false_tracks(scene, seed, rate, n_frames=300, n=12, patch=None, with_stab=True, mass=(50.0, 200.0)):
     rng = np.random.default_rng(seed)
     tracker = scene.tracker()
     R_of = _swing(rate)
@@ -158,7 +159,7 @@ def _false_tracks(scene, seed, rate, n_frames=300, n=12, patch=None, with_stab=T
     for f in range(n_frames):
         t = T0 + f * DT_NS
         R = R_of(f / FPS)
-        tracker.update(t, scene.clutter(rng, R, t, n=n, patch=patch, with_stab=with_stab), R)
+        tracker.update(t, scene.clutter(rng, R, t, n=n, patch=patch, with_stab=with_stab, mass=mass), R)
         born = max(born, tracker.stats["promotions"])
     return born, tracker
 
@@ -192,9 +193,40 @@ def test_clutter_without_stab_never_makes_a_track():
         assert born == 0
 
 
+@pytest.mark.parametrize("rate", [0.0, 30.0, 80.0])
+def test_strong_clutter_never_makes_a_track(rate):
+    """Specks as strong as a clay (summed residual 3000-8000, above init_strong_mass), 4 a frame over the picture
+    (the recorded presses: 1 detection a frame that is not a target on average, 5 at the 95th percentile, most of
+    them weak): a strong path is believed after init_strong_hits detections, and random ones still never line up."""
+    scene = Scene()
+    vt = scene.cfg.vision.track
+    assert vt.init_strong_hits < vt.init_hits and vt.init_strong_mass <= 3000.0
+    total = 0
+    for seed in range(10):
+        born, tr = _false_tracks(scene, 300 + seed, rate, n=4, mass=(3000.0, 8000.0))
+        total += born
+    assert total == 0
+
+
+def test_strong_flicker_in_a_patch_waits_for_init_hits():
+    """A crowded patch of strong flicker (12 specks a frame in 150 x 100 px) is where chance lines come from: a path
+    through it is not alone (init_strong_radius_px), so it needs init_hits detections like any other. Without the
+    isolation test, lines of init_strong_hits made 170 tracks here; with it, no more than with the rule off."""
+    patch = (0.0, 0.0, 150.0, 100.0)
+
+    def births(scene):
+        return sum(_false_tracks(scene, 400 + seed, 0.0, patch=patch, mass=(3000.0, 8000.0))[0] for seed in range(5))
+
+    on = births(Scene())
+    off = births(Scene(["vision.track.init_strong_hits=0"]))
+    lonely = births(Scene(["vision.track.init_strong_max_neighbours=1000"]))
+    assert on <= off
+    assert lonely > 5 * max(off, 1)   # what the isolation test is there for
+
+
 # ------------------------------------------------------------------------------------------------ (b, c, d) one clay
 def _run_clay(scene, seed, rate_dps, follow=False, with_stab=True, clutter=12, dropout=0.15, gun_rate=0.0,
-              heading=10.0):
+              heading=10.0, mass=1500.0):
     rng = np.random.default_rng(seed)
     tracker = scene.tracker()
     span = 16.0 if not follow else 20.0
@@ -222,7 +254,7 @@ def _run_clay(scene, seed, rate_dps, follow=False, with_stab=True, clutter=12, d
         dets = scene.clutter(rng, R, t, n=clutter, with_stab=with_stab) if clutter else []
         cd = None
         if rng.random() >= dropout:
-            cd = scene.clay(rng, w, R, t, with_stab=with_stab)
+            cd = scene.clay(rng, w, R, t, with_stab=with_stab, mass=mass)
             if cd is not None:
                 dets.append(cd)
                 seen += 1
@@ -268,6 +300,22 @@ def test_a_clay_amid_clutter_gets_one_track_quickly(rate):
         err, _ = r["birth"]
         assert err <= max(1.5, 0.15 * rate), f"seed {seed}: velocity error at birth {err:.2f} deg/s"
         assert r["tracker"].stats["promotions"] == 1
+
+
+@pytest.mark.parametrize("rate", [5.0, 20.0, 60.0])
+def test_a_strong_clay_is_believed_sooner(rate):
+    """A clay whose detections are strong (a clay at 14-30 m: summed residual 3000-40000) is born after
+    init_strong_hits of them, one weaker than init_strong_mass after init_hits."""
+    scene = Scene()
+    vt = scene.cfg.vision.track
+    for seed in range(6):
+        strong = _run_clay(scene, 1000 + seed, rate, mass=2.0 * vt.init_strong_mass)
+        weak = _run_clay(scene, 1000 + seed, rate, mass=0.5 * vt.init_strong_mass)
+        assert strong["born_at"] is not None and vt.init_strong_hits <= strong["born_at"] <= vt.init_strong_hits + 2
+        assert weak["born_at"] is not None and vt.init_hits <= weak["born_at"] <= vt.init_hits + 2
+        assert len(strong["ids"]) == 1 and strong["stolen"] == 0
+        err, _ = strong["birth"]
+        assert err <= max(2.0, 0.2 * rate), f"seed {seed}: velocity error at birth {err:.2f} deg/s"
 
 
 @pytest.mark.parametrize("rate", [20.0, 60.0])
