@@ -417,6 +417,26 @@ of the swing rate (`gun_rate_drift_per_s` 1.0), 0.6 of the acceleration term, 0.
 the last 100 ms. Error / sigma on those frames: p50 1.11, p90 2.29, p99 3.27 at 164 ms (a perfect model reads
 1.18 / 2.15 / 3.03), the same at 104 and 190 ms.
 
+**Refit for the fast trigger, 2026-11-21.** Those terms all grow with the square of the delay, so when the trigger
+came down to 48-69 ms (2026-11-19) the gun's sigma fell to 0.04-0.2 deg while the real error did not: scored
+against what followed, every solved frame of 135 presses (`tbot.tools.score`, every=True), the gun extrapolation
+error is 0.57 x the swing during the delay at every size of swing (0.07 deg at < 0.25 deg of swing, 0.74 at 1-2
+deg), 2-2.6 x the sigma the solver gave. Even a perfect constant-rate guess from the 500 Hz gyro misses by 0.40 x
+the swing over 69 ms: a hand does not keep its rate that long. P(hit) was overconfident (frames given 0.5-1.0
+hit 0-46 %), and the backyard shots of 2026-11-21 went on frames that missed (3 of 7 hit). A term linear in the
+delay, `fire.gun_swing_sigma_frac` x |rate| x delay, fixes the scale. Replayed (`tbot rescore`) and scored:
+
+| gun_swing_sigma_frac | range shots hit | backyard shots hit | virtual clays hit |
+|---|---|---|---|
+| 0 (before) | 9 / 16 | 3 / 7 | 74.8 % |
+| **0.25 (now)** | **12 / 16** | **4 / 6** | **74.7 %** |
+| 0.4 | 11 / 15 | 4 / 6 | 74.7 % |
+| 0.55 | 10 / 12 | 3 / 6 | - |
+
+The virtual clays are built around the path the bore took, so they hardly see the gun's error (0.14 deg at the
+shot against 0.26-0.51 on real frames) and are neutral; the real shots are few (23) but move the same way at every
+value tried.
+
 Consequence worth knowing: **the trigger delay is the largest lever on the whole gun.** Virtual clays, clays
 hit, at a trigger delay (command to muzzle) of 220 ms 42 %, 164 ms (now) 62 %, 100 ms 81 %, 60 ms 88 %. The
 bench notes say part of the 155 ms is the servo waking from limp. Holding the rest position while the button

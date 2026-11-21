@@ -261,7 +261,7 @@ def test_actuator_delay_changes_the_fire_time(scene_cfg):
     # Both actuator budgets, one scene; the slower actuator must commit much earlier in the swing.
     # (a turntable's constant rate, not a hand: 0.9 s ahead the fitted hand model would leave no chance at all)
     sets = ["tracker.jerk_psd_deg=0.2", "tracker.meas_sigma_px=0.1", "fire.gun_accel_floor_dps2=0",
-            "fire.gun_rate_drift_per_s=0", "fire.gun_rate_sigma_dps=0.7",
+            "fire.gun_rate_drift_per_s=0", "fire.gun_swing_sigma_frac=0", "fire.gun_rate_sigma_dps=0.7",
             "fire.fire_now_p=0", "fire.max_hold_ms=0"]  # the top of P(hit) itself: no limit on the wait
     cfg_servo = load_config(sets=sets + ["actuator.type=servo"])
     cfg_pq12 = load_config(sets=sets + ["actuator.type=pq12"])

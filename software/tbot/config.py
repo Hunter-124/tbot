@@ -263,6 +263,7 @@ class FireConfig:
     gun_accel_decay_s: float = 0.02
     gun_accel_floor_dps2: float = 20.0
     gun_rate_drift_per_s: float = 1.0
+    gun_swing_sigma_frac: float = 0.25
     subframe: bool = True
     min_hit_probability_settled: float = 0.0
     settled_ms: float = 150.0

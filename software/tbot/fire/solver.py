@@ -564,6 +564,9 @@ class FireSolver:
             (math.radians(float(getattr(fc, "gun_rate_sigma_dps", 0.0))) * dt_sigma) ** 2
             + (math.radians(float(getattr(fc, "gun_accel_floor_dps2", 0.0))) * half_s2) ** 2
             + (float(getattr(fc, "gun_rate_drift_per_s", 0.0)) * norm_omega * half_s2) ** 2
+            # a share of the swing itself, linear in the delay: at a short trigger delay the delay^2 terms above
+            # vanish while a hand still changes its rate (2026-11-21: real error 0.57 x the swing at 69 ms)
+            + (float(getattr(fc, "gun_swing_sigma_frac", 0.0)) * norm_omega * dt_sigma) ** 2
             + (float(fc.gun_accel_sigma_frac) * norm_alpha * k_acc_s) ** 2
             + (float(getattr(fc, "gun_rate_change_sigma_frac", 0.0)) * float(rate_change)
                / max(window_s, 1e-3) * half_s2) ** 2

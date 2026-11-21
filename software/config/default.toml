@@ -377,6 +377,13 @@ gun_accel_decay_s = 0.02      # swing extrapolation over the trigger delay (fire
                               # 2026-11-17, 164 ms ahead, frames with a target: bore error rms 2.19 -> 1.00 deg
 gun_accel_floor_dps2 = 20.0   # its uncertainty, 1 sigma per axis, each x delay^2 / 2: what the steadiest hand does,
 gun_rate_drift_per_s = 1.0    # this x the swing rate (a faster swing changes faster),
+gun_swing_sigma_frac = 0.25   # and this share of the swing the gyro predicts over the delay (|rate| x delay), 1 sigma
+                              # per axis: a hand does not hold its rate for 50-70 ms. The terms above grow with delay^2
+                              # and were fitted at 104-190 ms; at the 69 ms trigger they gave 0.04-0.2 deg against a
+                              # real error of 0.57 x the swing (scored, every solved frame of 135 presses; even a
+                              # perfect constant-rate guess from the gyro misses by 0.40 x). Replayed shots scored
+                              # against what followed, 0 -> 0.25: range 9/16 -> 12/16 hit, backyard 3/7 -> 4/6;
+                              # virtual clays 74.8 -> 74.7 % (no cost). 0.4 / 0.55: 15/21, 13/18. 0 = off
 gun_rate_change_sigma_frac = 0.1   # this share of the mean acceleration over the last window;
 gun_rate_change_window_ms = 100.0
 gun_accel_sigma_frac = 0.6    # plus this share of the acceleration term itself,
