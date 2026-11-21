@@ -106,10 +106,16 @@ What the remaining numbers are:
 - The virtual clays are drawn into footage whose gun was not following them, so "hit" is low for both; it
   compares the front ends, it does not predict a score.
 
-On the Pi 3B (C kernel, one core, with `tbot-run` and the console running beside it; measured before the
-closed-form prior and with the local field still on, each worth about 2 ms): detection 17.8 ms a frame at the
-median (register 11.0, difference kernel 5.0, the rest 1.8), tracker 0.5 ms, the whole loop 18.5 ms (p95 21.6).
-The front end of 2026-11-19 was budgeted at 22 ms a frame with a target in view (`sim.process_ms`).
+On the Pi 3B (C kernel, as deployed 2026-11-20, commit 112198a): detection takes 11.7 ms a frame at the
+median and 13.7 ms at the 95th percentile on a recorded press with its IMU (register 6.1, difference kernel
+3.8, pyramid 1.2, components and measurement 0.6), measured while the gun's own service ran beside it; the
+tracker 0.6 ms, the solver 0.4 ms. Live on the gun (idle, in the dark) the telemetry shows 10 to 17 ms for
+detection. The front end of 2026-11-19 was budgeted at 22 ms a frame with a target in view (`sim.process_ms`)
+and logged 11 to 12 ms idle. `tbot bench` gives the detector no attitude, which is the slower search without
+an IMU: it reads 22 ms for detection on the same Pi and is not the gun's number.
+
+Replayed on the Pi itself (`tbot rescore`), the hit of 2026-11-19 16:02:43 is one shot on track #1, scored a
+hit (0.35 deg against a 0.75 deg pattern); the old front end hits it too, on track #357 of that press.
 
 The simulator (`tbot sim`, a clean synthetic sky, the gun's lens, 10 runs) is the old detector's best case and
 says less: 8 shots / 5 hits old, 7 / 3 new.
