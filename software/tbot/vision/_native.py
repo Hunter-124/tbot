@@ -255,7 +255,7 @@ def _load_front(lib: ctypes.CDLL) -> None:
     front_status = "loaded"
 
 
-MOTION_ABI = 4        # TBOT_MOTION_ABI in _measure.c
+MOTION_ABI = 5        # TBOT_MOTION_ABI in _measure.c
 MOTION_DET_COLS = 15  # MO_DET_COLS: u, v, area, diameter, contrast, snr, score, bbox x, y, w, h, stab u, v, mass, minor
 motion_status = "not loaded"
 _motion = None
@@ -290,7 +290,7 @@ class MotionKParams(ctypes.Structure):
 
     _fields_ = [
         ("h", ctypes.c_int32), ("w", ctypes.c_int32), ("block", ctypes.c_int32), ("env", ctypes.c_int32),
-        ("cell", ctypes.c_int32), ("row_step", ctypes.c_int32), ("cfar_box", ctypes.c_int32), ("pad_", ctypes.c_int32),
+        ("cell", ctypes.c_int32), ("row_step", ctypes.c_int32), ("cfar_box", ctypes.c_int32), ("cfar_guard", ctypes.c_int32),
         ("ga", ctypes.c_int64), ("oa", ctypes.c_int64), ("gb", ctypes.c_int64), ("ob", ctypes.c_int64),
         ("cur", _ptr), ("ref_a", _ptr), ("ref_b", _ptr), ("src_valid", _ptr), ("mask", _ptr),
         ("dxa", _ptr), ("dya", _ptr), ("dxb", _ptr), ("dyb", _ptr),
@@ -349,7 +349,7 @@ def _load_motion(lib: ctypes.CDLL) -> None:
         "cell_sums": (None, [p, i32, i32, i32, i32, p]),
         "absdiff_sums": (None, [p, p, p, i32, i32, i32, i32, p, p]),
         "noise": (d, [p, p, i32, i32, i32, d, d, d]),
-        "threshold": (ctypes.c_int, [p, p, p, p, i32, i32, d, d, d, d, d, d, i32, p, p]),
+        "threshold": (ctypes.c_int, [p, p, p, p, i32, i32, d, d, d, d, d, d, i32, i32, p, p]),
         "compare": (None, [p, i32, i32, p, i32, i32, p]),
         "sad": (None, [p, p, p, p, i32, i32, i32, i32, i32, i32, i32, i32, i32, p, p]),
         "sad_cells": (None, [p, p, p, p, i32, i32, i32, p, i32, p, i32, p, p]),

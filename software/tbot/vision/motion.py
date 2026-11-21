@@ -70,6 +70,7 @@ NOISE_QUANTILE = 0.10    # ... of the cell means of |cur - warped A|, the quiete
 NOISE_MIN_FILL = 0.75    # a cell counts for the noise estimate when this much of it is valid
 ABS_TO_SIGMA = 1.0 / (2.0 / math.sqrt(math.pi))  # mean |x - y| of two N(0, s) = 2 s / sqrt(pi) -> s
 CFAR_BOX = 5             # threshold smoothing over 5 x 5 cells
+CFAR_GUARD = 3           # ... less the 3 x 3 at the centre (guard cells: a target never raises its own bar). 0 = none
 SCORE_MASS = 400.0       # score = mass / (mass + SCORE_MASS), full-resolution DN px
 PIXEL_BOX_VAR = 1.0 / 12.0
 CORR_GAIN = 0.3         # running correction of the IMU prior: gain per registered frame ...
@@ -80,7 +81,7 @@ SKY_LAG_GAIN = 2.5       # where the scene cannot hold a registration (open sky:
                          # longer lag could leave behind) both lags are this much longer: a clay going away at
                          # 3 deg/s moves 4 px in 40 ms, less than its own size, and cancels itself
 SLOW_CLEAR_PX = 4        # the slow-mover test adds nothing within this of an A/B candidate (working px)
-LAG_SHIFT_FRAC = 0.15    # the reference lags shrink so the scenery moved at most this part of the frame width since B
+LAG_SHIFT_FRAC = 0.15   # the reference lags shrink so the scenery moved at most this part of the frame width since B
 TENSOR_MIN = 3.0        # ... and in full only when the weaker eigenvalue of the textured pixels' gradient tensor is
                          # at least this, DN^2 per overlap pixel (fine level); the stronger one alone: across the edge
 CELL_TEXTURE_FRAC = 0.05  # ... and a cell of the local field with this fraction of the cell
@@ -295,12 +296,13 @@ def threshold_cells(SD, ND, SA, NA, sigma_n: float, t_min_dn: float, noise_k: fl
         mA    = (box sum of SA) / (box sum of NA)              mean |cur - warped A| around the cell
         exc   = max(0, mA - sigma_n / ABS_TO_SIGMA)            ... less what sensor noise alone gives
         thr   = clamp(floor(floor + cfar_gain * mD + texture_gain * exc), 0, 255)
-    box = the CFAR_BOX x CFAR_BOX cells around, clipped to the grid. SD, ND: cell sums of D and pixel counts
+    box = the CFAR_BOX x CFAR_BOX cells around less the CFAR_GUARD x CFAR_GUARD at its centre, clipped to the grid
+    (the guard keeps a target out of its own bar: _ring_clipped). SD, ND: cell sums of D and pixel counts
     (cell_sums, all rows); SA, NA: cell_absdiff_sums (every row_step-th row, valid pixels). Texture that does
     not register to the pixel (sub-pixel misregistration x gradient, leaf flutter, parallax) raises its own bar
     through mA, open sky keeps the floor."""
-    S, N = _box_clipped(SD, CFAR_BOX), _box_clipped(ND, CFAR_BOX)
-    sa, na = _box_clipped(SA, CFAR_BOX), _box_clipped(NA, CFAR_BOX)
+    S, N = _ring_clipped(SD), _ring_clipped(ND)
+    sa, na = _ring_clipped(SA), _ring_clipped(NA)
     sig = sigma_n if math.isfinite(sigma_n) else 0.0
     fl = max(float(t_min_dn), float(noise_k) * sig)
     mD = S / np.maximum(N, 1)
@@ -321,6 +323,28 @@ def compare_cells(D: np.ndarray, thr: np.ndarray, cell: int, binary: np.ndarray 
         binary = np.empty((h, w), np.uint8)
     cv2.compare(D, big, cv2.CMP_GT, dst=binary)
     return binary
+
+
+def _ring_clipped(a: np.ndarray, box: int | None = None, guard: int | None = None) -> np.ndarray:
+    """The CFAR neighbourhood sum: box x box cells around, less the guard x guard cells at its centre (guard 0 =
+    the whole box). The guard keeps a target out of its own bar: a big near one (a ball 25-40 px across at half
+    resolution covers 2-3 cells) raised the bar at its cells from 4 DN to 110-230 over open sky and vanished
+    (backyard 2026-11-21, press 102337), where scenery around it raises the bar as before."""
+    box = CFAR_BOX if box is None else box
+    guard = CFAR_GUARD if guard is None else guard
+    s = _box_clipped(a, box)
+    if guard > 0:
+        g = _box_clipped(a, guard)
+        # only where the whole box lies inside the grid: at the border the box is already cut in half, and
+        # scenery coming into view there (a horizon's end under an uncorrected gyro bias) must keep raising its
+        # own bar (the tracker starts no path at the border anyway)
+        r = box // 2
+        g[:r, :] = 0
+        g[g.shape[0] - r:, :] = 0
+        g[:, :r] = 0
+        g[:, g.shape[1] - r:] = 0
+        s = s - g
+    return s
 
 
 def _box_clipped(a: np.ndarray, k: int) -> np.ndarray:
@@ -620,7 +644,7 @@ class _NativeMotion:
         self.kscratch = np.empty(6 * hw * ww, u8)
         kp = self.kp = N.MotionKParams()
         kp.h, kp.w, kp.block = hw, ww, WARP_BLOCK
-        kp.row_step, kp.cfar_box = NOISE_ROW_STEP, CFAR_BOX
+        kp.row_step, kp.cfar_box, kp.cfar_guard = NOISE_ROW_STEP, CFAR_BOX, CFAR_GUARD
         kp.src_valid, kp.mask = P(det._srcv_w, u8), P(det._mask_d, u8)
         kp.dxa, kp.dya, kp.dxb, kp.dyb = (a.ctypes.data for a in self.offs)
         kp.wa, kp.wb, kp.va, kp.vb = P(b.wa, u8), P(b.wb, u8), P(b.va, u8), P(b.vb, u8)
@@ -1456,7 +1480,7 @@ class MotionDetector:
             cv2.min(valid, 1, dst=nk["v01"])
             K.cell_sums(A_(nk["v01"]), hw, ww, cell, 1, A_(ND))
             np.maximum(ND, 1, out=ND)
-            if K.threshold(A_(SD), A_(ND), A_(SA), A_(NA), ch, cw, sig, *prm, ABS_TO_SIGMA, CFAR_BOX, A_(thr),
+            if K.threshold(A_(SD), A_(ND), A_(SA), A_(NA), ch, cw, sig, *prm, ABS_TO_SIGMA, CFAR_BOX, CFAR_GUARD, A_(thr),
                            A_(nk["mD"])) == 0:
                 K.compare(A_(Ds), hw, ww, A_(thr), cw, cell, A_(bs))
                 done = True

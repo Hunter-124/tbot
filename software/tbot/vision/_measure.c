@@ -1470,7 +1470,7 @@ TBOT_API int tbot_front_cells(const uint8_t *absd, int32_t h, int32_t w, int32_t
  * "linear" method, medians the mean of the two middle values, max / min where Python's builtins are used have
  * their argument-order semantics. Anything computed with BLAS / LAPACK / cv2.findHomography in the reference
  * (the prior, the level matrices) stays in Python and is passed in. */
-#define TBOT_MOTION_ABI 4
+#define TBOT_MOTION_ABI 5
 #if defined(__ARM_NEON) || defined(__aarch64__)
 #include <arm_neon.h>
 #endif
@@ -1905,19 +1905,32 @@ static void mo_box_clipped(const int64_t *a, int h, int w, int k, int64_t *ii, i
     }
 }
 
-/* threshold_cells (ND as given: the caller's np.maximum(ND, 1) included); thr uint8, mD float64, ch x cw */
+/* _ring_clipped: the box sums less the guard x guard sums at the centre (guard 0 = the whole box) */
+static void mo_ring_clipped(const int64_t *a, int h, int w, int box, int guard, int64_t *ii, int64_t *g,
+                            int64_t *out) {
+    mo_box_clipped(a, h, w, box, ii, out);
+    if (guard > 0) {                     /* only where the whole box lies inside the grid (see _ring_clipped) */
+        const int r = box / 2;
+        mo_box_clipped(a, h, w, guard, ii, g);
+        for (int y = r; y < h - r; y++)
+            for (int x = r; x < w - r; x++) out[(size_t)y * w + x] -= g[(size_t)y * w + x];
+    }
+}
+
+/* threshold_cells (ND as given: the caller's np.maximum(ND, 1) included); thr uint8, mD float64, ch x cw.
+   The neighbourhood is the box less its guard x guard centre: a target never raises its own bar. */
 TBOT_API int tbot_motion_threshold(const int64_t *SD, const int64_t *ND, const int64_t *SA, const int64_t *NA,
                                    int32_t ch, int32_t cw, double sigma_n, double t_min_dn, double noise_k,
                                    double cfar_gain, double texture_gain, double abs_to_sigma, int32_t box,
-                                   uint8_t *thr, double *mD) {
+                                   int32_t guard, uint8_t *thr, double *mD) {
     const size_t n = (size_t)ch * cw;
-    int64_t *b = (int64_t *)malloc((4 * n + (size_t)(ch + 1) * (cw + 1)) * sizeof(int64_t));
+    int64_t *b = (int64_t *)malloc((5 * n + (size_t)(ch + 1) * (cw + 1)) * sizeof(int64_t));
     if (!b) return -1;
-    int64_t *S = b, *N = b + n, *sa = b + 2 * n, *na = b + 3 * n, *ii = b + 4 * n;
-    mo_box_clipped(SD, ch, cw, box, ii, S);
-    mo_box_clipped(ND, ch, cw, box, ii, N);
-    mo_box_clipped(SA, ch, cw, box, ii, sa);
-    mo_box_clipped(NA, ch, cw, box, ii, na);
+    int64_t *S = b, *N = b + n, *sa = b + 2 * n, *na = b + 3 * n, *g = b + 4 * n, *ii = b + 5 * n;
+    mo_ring_clipped(SD, ch, cw, box, guard, ii, g, S);
+    mo_ring_clipped(ND, ch, cw, box, guard, ii, g, N);
+    mo_ring_clipped(SA, ch, cw, box, guard, ii, g, sa);
+    mo_ring_clipped(NA, ch, cw, box, guard, ii, g, na);
     const double sig = isfinite(sigma_n) ? sigma_n : 0.0;
     const double fl = mo_pymax(t_min_dn, noise_k * sig);
     const double base = sig / abs_to_sigma;
@@ -2411,7 +2424,7 @@ TBOT_API void tbot_motion_offsets(const double *m, int32_t h, int32_t w, int32_t
 }
 
 typedef struct {
-    int32_t h, w, block, env, cell, row_step, cfar_box, pad_;
+    int32_t h, w, block, env, cell, row_step, cfar_box, cfar_guard;
     int64_t ga, oa, gb, ob;
     const uint8_t *cur, *ref_a, *ref_b, *src_valid, *mask;    /* mask may be NULL */
     const int32_t *dxa, *dya, *dxb, *dyb;
@@ -2643,7 +2656,7 @@ TBOT_API int tbot_motion_kernel(tbot_motion_kparams *p) {
     p->sigma_n = tbot_motion_noise(p->SA, p->NA, ch * cw, cell, p->row_step, p->noise_quantile, p->noise_min_fill,
                                    p->abs_to_sigma);
     if (tbot_motion_threshold(p->SD, p->ND, p->SA, p->NA, ch, cw, p->sigma_n, p->t_min_dn, p->noise_k, p->cfar_gain,
-                              p->texture_gain, p->abs_to_sigma, p->cfar_box, p->thr, p->mD))
+                              p->texture_gain, p->abs_to_sigma, p->cfar_box, p->cfar_guard, p->thr, p->mD))
         return -1;
     tbot_motion_compare(p->D, h, w, p->thr, cw, cell, p->binary);
     return 0;

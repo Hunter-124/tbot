@@ -242,7 +242,8 @@ def test_primitives_match_their_definitions():
     thr, mD = M.threshold_cells(SD, ND, SD, ND, 1.0, 4.0, 4.0, 6.0, 2.0, 8)
     i, j = 10, 20
     sl = (slice(i - 2, i + 3), slice(j - 2, j + 3))
-    m = SD[sl].sum() / ND[sl].sum()
+    gl = (slice(i - 1, i + 2), slice(j - 1, j + 2))     # the guard cells: the cell's own neighbourhood is left out
+    m = (SD[sl].sum() - SD[gl].sum()) / (ND[sl].sum() - ND[gl].sum())
     assert thr[i, j] == min(255, int(math.floor(4.0 + 6.0 * m + 2.0 * max(0.0, m - 1.0 / M.ABS_TO_SIGMA))))
     binary = M.compare_cells(D, thr, 8)
     big = np.repeat(np.repeat(thr, 8, 0), 8, 1)[:a.shape[0], :a.shape[1]]
@@ -604,3 +605,23 @@ def test_stab_dir_survives_a_90_degree_swing(world, mount, rays, cam, native):
     st = np.array(stabs)
     assert (not np.all(np.isfinite(st))) or np.abs(st).max() > 10 * W
     assert det.stab_epoch == 0
+
+
+def test_a_big_target_does_not_raise_its_own_bar():
+    # backyard 2026-11-21 (press 102337): a ball 2-3 cells across over open sky, residual ~158 DN, raised the bar at
+    # its own cells from the 4 DN floor to 110-230 through the CFAR statistics and was not detected for 12 frames
+    # (working px at scale 2: radius 8 = 32 px across at full resolution, a clay at 7 m; without the guard nothing of
+    # it passed, radius 10 = 40 px: 80-90 % passes)
+    for r, frac in ((8, 0.99), (10, 0.75)):
+        D = np.zeros((200, 320), np.uint8)
+        cv2.circle(D, (162, 102), r, 158, -1)
+        SD = M.cell_sums(D, 8)
+        ND = M.cell_sums(np.ones_like(D), 8)
+        SA = SD.copy()                                   # |cur - A| is the ball too (it moved)
+        thr, _ = M.threshold_cells(SD, ND, SA, ND, 0.3, 4.0, 4.0, 6.0, 2.0, 8)
+        binary = M.compare_cells(D, thr, 8)
+        assert np.count_nonzero(binary) >= frac * np.count_nonzero(D)
+    # and texture all around still raises the bar of a cell in its middle
+    busy = np.full(SD.shape, 60 * 64, np.int64)
+    thr2, _ = M.threshold_cells(busy, ND, busy, ND, 0.3, 4.0, 4.0, 6.0, 2.0, 8)
+    assert thr2[12, 20] == 255

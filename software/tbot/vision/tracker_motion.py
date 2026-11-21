@@ -293,7 +293,25 @@ class MotionTracker(CartesianClayTracker):
         self._ratio = max(1.0, float(vt.init_size_ratio))
         self._dup_rad = math.radians(float(vt.duplicate_deg))
         self._mass_ratio = max(0.0, float(vt.track_mass_ratio))
+        # A detection's centroid scatters with its size, not by a fixed pixel: a big near target is often seen in
+        # part (only the edge that moved, branches in front of it). size_jitter_frac x the diameter, beyond the
+        # tracker's meas_sigma_px, is added to the path gates (x3), to the path's RMS allowance and to the filter's
+        # measurement sigma. It starts at meas_sigma_px / size_jitter_frac across (about 5 px: a clay nearer than
+        # ~45 m) and is 1.5 px at 15 px across (0 = off everywhere).
+        self._jit_frac = max(0.0, float(getattr(vt, "size_jitter_frac", 0.0) or 0.0))
+        self._meas_px = float(cfg.tracker.meas_sigma_px)
         self._reset_motion()
+
+    def _jit(self, diam: float) -> float:
+        """Centroid scatter (stab px, 1 sigma) a detection of this diameter has beyond meas_sigma_px."""
+        if self._jit_frac <= 0.0 or not diam > 0.0:
+            return 0.0
+        return max(0.0, self._jit_frac * diam - self._meas_px)
+
+    def _jit_pts(self, pts) -> float:
+        if self._jit_frac <= 0.0:
+            return 0.0
+        return self._jit(_median([p.diam for p in pts if p.diam > 0.0]))
 
     # ----------------------------------------------------------------- public API
     def reset(self) -> None:
@@ -529,7 +547,8 @@ class MotionTracker(CartesianClayTracker):
             return None
         fit = _fit(pts)
         quad = _quad(pts, fit, self._amax, self._ridge)
-        if len(pts) >= 5 and quad[4] > float(self._vt.init_max_rms_px):
+        jit = self._jit_pts(pts)
+        if len(pts) >= 5 and quad[4] > float(self._vt.init_max_rms_px) + jit:
             # one speck taken while the clay dropped out must not bend the path: drop the worst point once
             def res(p):
                 x, y = _path(fit, quad, p.t)
@@ -542,7 +561,7 @@ class MotionTracker(CartesianClayTracker):
         frame_ns = (pts[-1].t - pts[0].t) // (len(pts) - 1)
         px_, py_ = _path(fit, quad, t_ns, last.t + frame_ns)
         step = math.hypot(vx, vy) * (t_ns - last.t) * 1e-9
-        g = float(self._vt.init_gate_px) + float(self._vt.init_gate_frac) * step
+        g = float(self._vt.init_gate_px) + float(self._vt.init_gate_frac) * step + 3.0 * jit
         # ... plus what the fit itself does not know: 3 sigma of its prediction there, from the scatter of its own
         # points (a clean clay path keeps the tight gate, a noisy or short one is not believed to the pixel)
         n = len(pts)
@@ -697,7 +716,7 @@ class MotionTracker(CartesianClayTracker):
             return
         d = p.det
         i = float(self.cam.ifov1(float(d.u), float(d.v)))
-        sig = float(self.cfg.tracker.meas_sigma_px) * i
+        sig = (self._meas_px + self._jit(p.diam)) * i
         p.ifov, p.se, p.sa = i, sig, sig / max(math.cos(p.el), _MIN_COS_EL)
 
     def _points(self, t_ns: int, detections: list[Detection], rot: np.ndarray, bore) -> list[_Pt]:
@@ -721,6 +740,9 @@ class MotionTracker(CartesianClayTracker):
                 az, el, sa, se, ifov = az_l[k], el_l[k], sa_l[k], se_l[k], if_l[k]
                 if not (math.isfinite(az) and math.isfinite(el) and math.isfinite(sa) and sa > 0.0):
                     continue
+                if self._jit_frac > 0.0 and self._meas_px > 0.0:
+                    kj = 1.0 + self._jit(float(d.diameter_px)) / self._meas_px
+                    sa, se = sa * kj, se * kj
                 ce = math.cos(el)
                 wx, wy, wz = ce * math.cos(az), ce * math.sin(az), math.sin(el)
             p = _Pt()
@@ -864,7 +886,8 @@ class MotionTracker(CartesianClayTracker):
             vx, vy = ch.fit[4], ch.fit[5]
             qx, qy = _path(ch.fit, ch.quad, t_ns)
             step = math.hypot(vx, vy) * (t_ns - last.t) * 1e-9
-            base = gate0 + gfrac * step
+            jit = self._jit_pts(ch.pts) if self._jit_frac > 0.0 else 0.0
+            base = gate0 + gfrac * step + 3.0 * jit
             best, best_d2 = None, 0.0
             lfb, lsign, ld, lok, lm = last.fb, last.sign, last.diam, last.reg_ok, last.mass
             g2 = base * base
@@ -890,8 +913,8 @@ class MotionTracker(CartesianClayTracker):
                 fit = _fit_sums(ch.pts[0], sums)
                 quad = _quad(ch.pts + [best], fit, amax, ridge)
                 fit = fit[:6] + (quad[4],)   # the scatter that counts is about the constant-acceleration path
-                if fit[6] > max_rms + (0.0 if (lok and best.reg_ok and ch_ok(ch)) else
-                                       self._rms_allow_pts(ch.pts + [best])):
+                if fit[6] > max_rms + jit + (0.0 if (lok and best.reg_ok and ch_ok(ch)) else
+                                             self._rms_allow_pts(ch.pts + [best])):
                     # off the path: a speck near where the clay should be (it dropped out) is a miss, not the end
                     self.stats["rej_rms"] += 1
                     best = None

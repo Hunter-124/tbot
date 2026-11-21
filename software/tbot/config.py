@@ -168,6 +168,7 @@ class VisionTrackConfig:
     init_strong_max_neighbours: int = 1
     post_birth_hits: int = 2
     fire_min_age_ms: float = -1.0
+    size_jitter_frac: float = 0.0
 
 
 @dataclass

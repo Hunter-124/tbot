@@ -246,6 +246,14 @@ max_chains = 64               # candidate lines of 2+ detections kept at once (t
 max_coast_ms = 200.0          # a track also dies when its last detection is older than this
 stop_window_ms = 150.0        # a track whose detections over this long moved slower than init_min_speed_dps dies
 duplicate_deg = 1.0           # two tracks this close with a similar angular velocity: the younger one goes
+size_jitter_frac = 0.15       # a detection's centroid scatters by this fraction of its diameter (beyond
+                              # tracker.meas_sigma_px): a big near target is seen in part (the edge that moved, branches
+                              # in front). Widens the path gates (x3), the path RMS allowance and the filter's
+                              # measurement sigma, from about 5 px across up (a clay nearer than ~45 m); 0 = off.
+                              # 2026-11-21, 15 backyard tennis-ball presses: tracked on 30 -> 39 % of the frames the
+                              # ball is in view (47 % with the CFAR guard). 94 labelled presses of 2026-11-17 to 20,
+                              # virtual clays: tracked sooner (median 140 -> 130 ms), solver on the clay 21 -> 23 % of
+                              # its frames, the same clays hit; false tracks on the range presses 0.23 -> 0.26 a second
 
 [imu]
 enabled = true

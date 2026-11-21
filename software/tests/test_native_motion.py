@@ -186,7 +186,7 @@ def test_noise_threshold_compare(trial):
         thr = np.empty((ch, cw), np.uint8)
         mD = np.empty((ch, cw))
         prm = [float(x) for x in rng.uniform(0, 8, 4)]
-        assert K.threshold(_p(SD), _p(ND), _p(SA), _p(NA), ch, cw, s_in, *prm, M.ABS_TO_SIGMA, M.CFAR_BOX,
+        assert K.threshold(_p(SD), _p(ND), _p(SA), _p(NA), ch, cw, s_in, *prm, M.ABS_TO_SIGMA, M.CFAR_BOX, M.CFAR_GUARD,
                            _p(thr), _p(mD)) == 0
         wthr, wmD = M.threshold_cells(SD, ND, SA, NA, s_in, *prm, cell)
         assert np.array_equal(thr, wthr) and mD.tobytes() == np.ascontiguousarray(wmD).tobytes()
@@ -465,6 +465,7 @@ def test_motion_kernel(trial):
     cmD = np.zeros((ch, cw))
     scratch = np.zeros(6 * h * w + 64, np.uint8)
     kp.h, kp.w, kp.block, kp.env, kp.cell, kp.row_step, kp.cfar_box = h, w, 16, env, cell, M.NOISE_ROW_STEP, M.CFAR_BOX
+    kp.cfar_guard = M.CFAR_GUARD
     kp.ga, kp.oa, kp.gb, kp.ob = *ga, *gb
     kp.cur, kp.ref_a, kp.ref_b, kp.src_valid, kp.mask = _p(cur), _p(ra), _p(rb), _p(sv), _p(mask)
     kp.dxa, kp.dya, kp.dxb, kp.dyb = (_p(o) for o in offs)

@@ -152,6 +152,41 @@ hit (0.35 deg against a 0.75 deg pattern); the old front end hits it too, on tra
 The simulator (`tbot sim`, a clean synthetic sky, the gun's lens, 10 runs) is the old detector's best case and
 says less: 8 shots / 5 hits old, 7 / 3 new.
 
+### Backyard tennis balls, 2026-11-21: big near targets
+
+15 presses of tennis balls thrown in front of the gun in the yard (trees right behind, the gun held still or
+following; copies in `scratch/backyard-2026-11-21b`). The tracker was on the ball in 30 % of the frames the ball
+was in view. Two causes, neither a threshold to turn down:
+
+- **A big target raised its own detection bar.** The CFAR bar of a cell is the floor plus the mean residual and
+  the mean unregistered texture of the 5 x 5 cells around it, and those cells included the target. Over open
+  sky (floor 4 DN) a ball 25-40 px across lifted the bar at its own cells to 110-230 DN against a residual of
+  ~158, and vanished for 12 frames running (press 102337). On a synthetic disc on clean sky nothing passed from
+  32 px across (a clay at 7 m) up. The bar now leaves out the 3 x 3 cells at the centre (`CFAR_GUARD`, guard
+  cells as in radar CFAR): scenery around a target still raises its bar, the target no longer does. Up to 32 px
+  everything passes, 40 px 80-90 %. At the grid border (2 cells) the whole box is kept: scenery coming into view
+  there (a horizon's end under an uncorrected gyro bias) must keep raising its own bar
+  (`tests/test_motion_register.py`). Python and C (`tbot_motion_threshold`, `TBOT_MOTION_ABI` 5) agree bit for bit.
+- **Paths were judged to the pixel whatever their size.** The ball, half hidden by branches and seen only where
+  it moved, scattered 5-8 px about its path, against `init_gate_px` 4 and `init_max_rms_px` 1.5; with the gun
+  held still it was detected 12 and 13 frames running and never became a track (press 102513).
+  `vision.track.size_jitter_frac` (0.15) adds that fraction of a detection's diameter, beyond
+  `tracker.meas_sigma_px`, to the path gates (x3), the RMS allowance and the filter's measurement sigma: from
+  about 5 px across up, nothing for a far clay.
+
+Ball tracked on 30 -> 47 % of its frames in view, detected on 541 -> 630 of them (held still, press 102513:
+8 -> 17 frames). On the 94 labelled presses of 2026-11-17 to 20 with 3 virtual clays each (`tbot vbench`, seed
+1; 55 presses held long enough): virtual clay detected 58.0 -> 58.6 % of its frames (over 16 px 73 -> 77 %),
+median time to a track 140 -> 130 ms, the solver on the clay 21.0 -> 22.9 % of its frames, false tracks 0.39 ->
+0.58 a second, most of them on the unlabelled ball and thrower of the yard presses (range presses alone 0.23 ->
+0.27). Range presses: clays hit 15 -> 16, the same 21 shots at scenery. Yard presses: clays hit 13 -> 10, as the
+real ball now takes the press's one shot (155103: fired on the ball on open sky, scored "false" for want of a
+label). As recorded: the same 12 shots counted as false and 3 at real movers; 155103 fires on its ball, 071755 no
+longer on its foam glider.
+
+Tried and left out: lags stretched for the solver's target when it moves less than 1.5 of its own diameters in
+lag A (an incoming target cancelling itself): no frame more on the ball once the guard was in.
+
 ## What it does not do
 
 - **Something that does not move against the world is not seen.** A clay at the top of a lob, or one flying
@@ -219,4 +254,5 @@ at the range:
 | `vision.track.init_strong_hits`, `init_strong_mass` | 4, 2000 | ... when they are this strong and alone (0 = off) |
 | `vision.track.fire_min_age_ms` | 120 | the solver's age gate under this front end (negative: `fire.min_track_age_ms`) |
 | `vision.track.init_min_speed_dps` | 2 | slower against the scenery is not a target |
+| `vision.track.size_jitter_frac` | 0.15 | centroid scatter as a share of the diameter: big near targets get wider path gates |
 | `stream.overlay_detail` | `clean` | `debug` draws every candidate as before |
