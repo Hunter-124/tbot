@@ -1066,20 +1066,50 @@ def timeline_at(base: np.ndarray, scene: Scene, t: float) -> np.ndarray:
 
 
 # ============================================================================================ camera + info
-def _clay_marker(img: np.ndarray, u: float, v: float, col) -> None:
-    """The TRUE clay as a dot labelled 'clay' (video only): a physically sized clay is 1-3 px in the frame."""
-    circle(img, (u, v), 5.0, BG, -1)
-    circle(img, (u, v), 4.0, col, -1)
+ZOOM, ZOOM_W, ZOOM_H, ZOOM_GAIN = 6, 180, 120, 2.5  # clay window: magnification, size (panel px), contrast
+
+
+def _clay_zoom(img: np.ndarray, raw: np.ndarray, st, rec, u: float, v: float) -> None:
+    """A window of the camera's own pixels round the TRUE clay, magnified ZOOM x and contrast-stretched ZOOM_GAIN x
+    about the sky (video only): a clay at skeet range is two or three faint grey pixels. The pipeline's confirmed tracks are drawn in it to scale as amber rings,
+    so the window shows the clay and whether the software is tracking it; truth only places the window."""
+    from tbot.app import overlay
+
     h, w = img.shape[:2]
-    lx, ly = u + 22.0, v - 20.0  # beside the brackets' top-right corner, kept inside the frame
-    if lx + 40 > w:
-        lx = u - 22.0 - 34.0
-    if ly - 12 < 0:
-        ly = v + 32.0
-    label(img, "clay", lx, ly, col, BG, 0.42, 0.75, pad=3)
+    cw, ch = ZOOM_W // ZOOM, ZOOM_H // ZOOM
+    x0 = int(min(max(round(u - cw / 2), 0), raw.shape[1] - cw))
+    y0 = int(min(max(round(v - ch / 2), 0), raw.shape[0] - ch))
+    crop = np.ascontiguousarray(raw[y0:y0 + ch, x0:x0 + cw])
+    crop = cv2.cvtColor(crop, cv2.COLOR_GRAY2BGR) if crop.ndim == 2 else crop[:, :, :3]
+    m = float(np.median(crop))  # contrast stretched about the sky level: the clay is ~45 DN under a ~170 DN sky
+    crop = np.clip(m + (crop.astype(np.float32) - m) * ZOOM_GAIN, 0, 255).astype(np.uint8)
+    big = cv2.resize(crop, (ZOOM_W, ZOOM_H), interpolation=cv2.INTER_CUBIC)
+    tracks, _ = overlay._record_tracks(st.tele or {})
+    R = (st.tele or {}).get("R_wg")
+    if R is not None and tracks:
+        try:
+            proj = overlay.projector(rec.cam, rec.mount, R)
+        except (TypeError, ValueError):
+            proj = None
+        for t in tracks if proj is not None else ():
+            if not t.confirmed:
+                continue
+            q = proj(np.array(overlay._azel(t.az, t.el)))
+            if q is None:
+                continue
+            bx, by = (q[0] - x0 + 0.5) * ZOOM - 0.5, (q[1] - y0 + 0.5) * ZOOM - 0.5
+            if -30 < bx < ZOOM_W + 30 and -30 < by < ZOOM_H + 30:
+                circle(big, (bx, by), 22.0, overlay.C_TRACK, 2)
+    # bottom-left over the ground, above the status band; bottom-right when the clay itself is down there
+    X, Y = 12, h - 34 - ZOOM_H
+    if u < X + ZOOM_W + 24 and v > Y - 24:
+        X = w - ZOOM_W - 12
+    img[Y:Y + ZOOM_H, X:X + ZOOM_W] = big
+    cv2.rectangle(img, (X - 1, Y - 1), (X + ZOOM_W, Y + ZOOM_H), (215, 222, 228), 1, cv2.LINE_AA)
+    label(img, f"x{ZOOM}", X + 6, Y + 16, TEXT, BG, 0.4, 0.75, pad=3)
 
 
-def camera_view(scene: Scene, idx: int, size: tuple[int, int], clay_marker: bool = False) -> np.ndarray:
+def camera_view(scene: Scene, idx: int, size: tuple[int, int], clay_zoom: bool = False) -> np.ndarray:
     from tbot.app import overlay
 
     w, h = size
@@ -1092,15 +1122,16 @@ def camera_view(scene: Scene, idx: int, size: tuple[int, int], clay_marker: bool
     st = rec.steps[idx]
     img = overlay.draw_record(st.image, st.tele, rec.cam, rec.mount, mask=rec.mask, bore_px=rec.bore_px,
                               banner=f"t {st.t_s:.3f} s")
-    for ci, (u, v) in st.truth_px:  # the TRUE clay: thin corner brackets in its colour
+    if clay_zoom:  # no truth brackets: the clay in the window is the camera's own pixels
+        if st.truth_px:
+            _clay_zoom(img, st.image, st, rec, *st.truth_px[0][1])
+    for ci, (u, v) in st.truth_px if not clay_zoom else ():  # the TRUE clay: thin corner brackets in its colour
         col = _clay_color(ci)
         r, k = 17.0, 6.0
         for sx_, sy_ in ((-1, -1), (1, -1), (1, 1), (-1, 1)):
             cx_, cy_ = u + sx_ * r, v + sy_ * r
             line(img, (cx_, cy_), (cx_ - sx_ * k, cy_), col, 2)
             line(img, (cx_, cy_), (cx_, cy_ - sy_ * k), col, 2)
-        if clay_marker:  # drawn on top of the pipeline's overlay; truth never reaches the pipeline
-            _clay_marker(img, u, v, col)
     if img.shape[1] != w or img.shape[0] != h:
         img = cv2.resize(img, (w, h), interpolation=cv2.INTER_AREA)
     return img
@@ -1234,9 +1265,9 @@ def _layout(cam_w: int, cam_h: int):
 
 
 class _Renderer:
-    def __init__(self, scene: Scene, clay_marker: bool = False) -> None:
+    def __init__(self, scene: Scene, clay_zoom: bool = False) -> None:
         self.scene = scene
-        self.clay_marker = bool(clay_marker)
+        self.clay_zoom = bool(clay_zoom)
         rec = scene.rec
         cw, ch = int(rec.cam.width), int(rec.cam.height)
         if cw > 640 or ch > 400:  # keep the right column: a bigger camera is shown scaled to 640 wide
@@ -1252,7 +1283,7 @@ class _Renderer:
 
     def _cam(self, idx: int) -> np.ndarray:
         if idx not in self._cam_cache:
-            self._cam_cache = {idx: camera_view(self.scene, idx, self.cam_size, self.clay_marker)}
+            self._cam_cache = {idx: camera_view(self.scene, idx, self.cam_size, self.clay_zoom)}
         return self._cam_cache[idx]
 
     def frame(self, t: float, slowmo: float | None, final: bool = False) -> np.ndarray:
@@ -1270,7 +1301,8 @@ class _Renderer:
         cp = np.empty((cam[3], cam[2], 3), np.uint8)
         cp[:] = PANEL
         panel_title(cp, "CAMERA", "pipeline view + overlay - " + (
-            "brackets + dot: true clay (drawn here only)" if self.clay_marker else "brackets: true clay"))
+            f"window: the camera's pixels round the clay, x{ZOOM}, contrast x{ZOOM_GAIN:g}" if self.clay_zoom
+            else "brackets: true clay"))
         cp[18:18 + self.cam_size[1], :self.cam_size[0]] = self._cam(idx)
         if t > sc.duration + 1e-6:  # the world view runs on; the camera has no more frames
             roi = cp[18:18 + self.cam_size[1], :self.cam_size[0]]
@@ -1319,12 +1351,12 @@ class _Video:
 
 
 def render_video(scene: Scene, stem: Path, fps: float = 30.0, slowmo: float = 0.25, hold_s: float = 1.5,
-                 max_video_frames: int | None = None, clay_marker: bool = False) -> Path:
+                 max_video_frames: int | None = None, clay_zoom: bool = False) -> Path:
     """Slow-motion video of the run: sim time advances slowmo / fps per video frame.
 
-    clay_marker: also mark the TRUE clay in the camera panel with a labelled dot (the brackets alone frame a
-    clay that is only a pixel or two wide at skeet range)."""
-    r = _Renderer(scene, clay_marker)
+    clay_zoom: in the camera panel, a magnified window of the raw pixels round the clay with the pipeline's
+    tracks in it, in place of the truth brackets (a clay at skeet range is only two or three pixels wide)."""
+    r = _Renderer(scene, clay_zoom)
     dt = float(slowmo) / float(fps)
     n = int(math.floor(scene.t_end_video / dt)) + 1
     n_hold = int(round(hold_s * fps))
@@ -1345,9 +1377,9 @@ def render_video(scene: Scene, stem: Path, fps: float = 30.0, slowmo: float = 0.
 
 
 def video_frame(scene: Scene, t: float, slowmo: float | None = None, final: bool = False,
-                clay_marker: bool = False) -> np.ndarray:
+                clay_zoom: bool = False) -> np.ndarray:
     """One video frame at sim time t (for stills and tests)."""
-    return _Renderer(scene, clay_marker).frame(t, slowmo, final)
+    return _Renderer(scene, clay_zoom).frame(t, slowmo, final)
 
 
 # ============================================================================================ summary still
@@ -1483,14 +1515,14 @@ def contact_sheet(paths: Sequence[Path], path: Path, cols: int = 2, scale: float
 
 def render_outputs(rec: Recorder, result: dict, out_dir: Path, *, video: bool = True, fps: float = 30.0,
                    slowmo: float = 0.25, hold_s: float = 1.5, max_video_frames: int | None = None,
-                   clay_marker: bool = False) -> dict:
+                   clay_zoom: bool = False) -> dict:
     """Summary PNG (and the video) of one recorded run -> {"png": path, "video": path or None}."""
     scene = build_scene(rec, result)
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     stem = out_dir / f"{scene.name}_seed{scene.seed}"
     png = render_summary(scene, stem.with_suffix(".png"))
-    vid = render_video(scene, stem, fps, slowmo, hold_s, max_video_frames, clay_marker) if video else None
+    vid = render_video(scene, stem, fps, slowmo, hold_s, max_video_frames, clay_zoom) if video else None
     return {"png": png, "video": vid}
 
 
@@ -1510,9 +1542,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--slowmo", type=float, default=0.25, help="sim seconds per video second (default 0.25)")
     parser.add_argument("--hold", type=float, default=1.5, metavar="S", help="final-frame hold, video seconds")
     parser.add_argument("--max-frames", type=int, default=None, metavar="N", help="cap the frames per run")
-    parser.add_argument("--clay-marker", action="store_true",
-                        help="video: also mark the TRUE clay in the camera panel with a dot labelled 'clay' (drawing "
-                             "only; a clay at skeet range is a pixel or two wide and hard to see in the video)")
+    parser.add_argument("--clay-zoom", action="store_true",
+                        help="video: show the clay in a magnified window of the camera's own pixels, with the "
+                             "pipeline's tracks in it, instead of the truth brackets (drawing only; a clay at skeet "
+                             "range is two or three pixels wide)")
     parser.add_argument("--actuator-delay-ms", type=float, default=None, help="TRUE actuator delay (as tbot sim)")
     parser.add_argument("--not-armed", action="store_true", help="never press the arming button")
     args = parser.parse_args(argv)
@@ -1532,7 +1565,7 @@ def main(argv: list[str] | None = None) -> int:
             rec, r = record_run(cfg, calib, name, int(seed), actuator_delay_ms=args.actuator_delay_ms,
                                 armed=not args.not_armed, max_frames=args.max_frames)
             paths = render_outputs(rec, r, out_dir, video=not args.no_video, fps=args.fps, slowmo=args.slowmo,
-                                   hold_s=args.hold, clay_marker=args.clay_marker)
+                                   hold_s=args.hold, clay_zoom=args.clay_zoom)
             pngs.append(paths["png"])
             extra = f", {paths['video']}" if paths["video"] else ""
             print(f"{name:<18} seed {seed}: {r['fires']} fire(s), {r['clays_broken']}/{r['clays_thrown']} broken"
