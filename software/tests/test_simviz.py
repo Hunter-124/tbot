@@ -91,6 +91,24 @@ def test_frames_show_the_shot_and_its_outcome(recorded):
     assert int((np.abs(after.astype(np.int16) - colour).sum(axis=2) < 12).sum()) > 50  # the outcome is drawn
 
 
+def test_clay_marker_is_opt_in_and_only_touches_the_camera_panel(recorded):
+    _, _, rec, res, _ = recorded
+    scene = simviz.build_scene(rec, res)
+    idx = next((i for i, st in enumerate(rec.steps) if st.truth_px), None)
+    if idx is None:
+        pytest.skip("no frame with the clay in view in the capped run")
+    t = rec.steps[idx].t_s
+    plain = simviz.video_frame(scene, t, 0.25)
+    marked = simviz.video_frame(scene, t, 0.25, clay_marker=True)
+    assert np.array_equal(plain, simviz.video_frame(scene, t, 0.25, clay_marker=False))  # default unchanged
+    _, cam, *_ = simviz._layout(*simviz._Renderer(scene).cam_size)
+    x, y, w, h = cam
+    diff = np.abs(plain.astype(np.int16) - marked.astype(np.int16)).sum(axis=2) > 0
+    assert diff[y:y + h, x:x + w].any()  # the dot is drawn in the camera panel...
+    diff[y:y + h, x:x + w] = False
+    assert not diff.any()  # ...and nowhere else
+
+
 def test_contact_sheet_and_reason_grouping(tmp_path):
     a = np.full((90, 160, 3), 40, np.uint8)
     b = np.full((90, 160, 3), 200, np.uint8)

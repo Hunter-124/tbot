@@ -1066,7 +1066,20 @@ def timeline_at(base: np.ndarray, scene: Scene, t: float) -> np.ndarray:
 
 
 # ============================================================================================ camera + info
-def camera_view(scene: Scene, idx: int, size: tuple[int, int]) -> np.ndarray:
+def _clay_marker(img: np.ndarray, u: float, v: float, col) -> None:
+    """The TRUE clay as a dot labelled 'clay' (video only): a physically sized clay is 1-3 px in the frame."""
+    circle(img, (u, v), 5.0, BG, -1)
+    circle(img, (u, v), 4.0, col, -1)
+    h, w = img.shape[:2]
+    lx, ly = u + 22.0, v - 20.0  # beside the brackets' top-right corner, kept inside the frame
+    if lx + 40 > w:
+        lx = u - 22.0 - 34.0
+    if ly - 12 < 0:
+        ly = v + 32.0
+    label(img, "clay", lx, ly, col, BG, 0.42, 0.75, pad=3)
+
+
+def camera_view(scene: Scene, idx: int, size: tuple[int, int], clay_marker: bool = False) -> np.ndarray:
     from tbot.app import overlay
 
     w, h = size
@@ -1086,6 +1099,8 @@ def camera_view(scene: Scene, idx: int, size: tuple[int, int]) -> np.ndarray:
             cx_, cy_ = u + sx_ * r, v + sy_ * r
             line(img, (cx_, cy_), (cx_ - sx_ * k, cy_), col, 2)
             line(img, (cx_, cy_), (cx_, cy_ - sy_ * k), col, 2)
+        if clay_marker:  # drawn on top of the pipeline's overlay; truth never reaches the pipeline
+            _clay_marker(img, u, v, col)
     if img.shape[1] != w or img.shape[0] != h:
         img = cv2.resize(img, (w, h), interpolation=cv2.INTER_AREA)
     return img
@@ -1219,8 +1234,9 @@ def _layout(cam_w: int, cam_h: int):
 
 
 class _Renderer:
-    def __init__(self, scene: Scene) -> None:
+    def __init__(self, scene: Scene, clay_marker: bool = False) -> None:
         self.scene = scene
+        self.clay_marker = bool(clay_marker)
         rec = scene.rec
         cw, ch = int(rec.cam.width), int(rec.cam.height)
         if cw > 640 or ch > 400:  # keep the right column: a bigger camera is shown scaled to 640 wide
@@ -1236,7 +1252,7 @@ class _Renderer:
 
     def _cam(self, idx: int) -> np.ndarray:
         if idx not in self._cam_cache:
-            self._cam_cache = {idx: camera_view(self.scene, idx, self.cam_size)}
+            self._cam_cache = {idx: camera_view(self.scene, idx, self.cam_size, self.clay_marker)}
         return self._cam_cache[idx]
 
     def frame(self, t: float, slowmo: float | None, final: bool = False) -> np.ndarray:
@@ -1253,7 +1269,8 @@ class _Renderer:
         put(head, header(sc, head[2], head[3], t, slowmo, final))
         cp = np.empty((cam[3], cam[2], 3), np.uint8)
         cp[:] = PANEL
-        panel_title(cp, "CAMERA", "pipeline view + overlay - brackets: true clay")
+        panel_title(cp, "CAMERA", "pipeline view + overlay - " + (
+            "brackets + dot: true clay (drawn here only)" if self.clay_marker else "brackets: true clay"))
         cp[18:18 + self.cam_size[1], :self.cam_size[0]] = self._cam(idx)
         if t > sc.duration + 1e-6:  # the world view runs on; the camera has no more frames
             roi = cp[18:18 + self.cam_size[1], :self.cam_size[0]]
@@ -1302,9 +1319,12 @@ class _Video:
 
 
 def render_video(scene: Scene, stem: Path, fps: float = 30.0, slowmo: float = 0.25, hold_s: float = 1.5,
-                 max_video_frames: int | None = None) -> Path:
-    """Slow-motion video of the run: sim time advances slowmo / fps per video frame."""
-    r = _Renderer(scene)
+                 max_video_frames: int | None = None, clay_marker: bool = False) -> Path:
+    """Slow-motion video of the run: sim time advances slowmo / fps per video frame.
+
+    clay_marker: also mark the TRUE clay in the camera panel with a labelled dot (the brackets alone frame a
+    clay that is only a pixel or two wide at skeet range)."""
+    r = _Renderer(scene, clay_marker)
     dt = float(slowmo) / float(fps)
     n = int(math.floor(scene.t_end_video / dt)) + 1
     n_hold = int(round(hold_s * fps))
@@ -1324,9 +1344,10 @@ def render_video(scene: Scene, stem: Path, fps: float = 30.0, slowmo: float = 0.
     return path
 
 
-def video_frame(scene: Scene, t: float, slowmo: float | None = None, final: bool = False) -> np.ndarray:
+def video_frame(scene: Scene, t: float, slowmo: float | None = None, final: bool = False,
+                clay_marker: bool = False) -> np.ndarray:
     """One video frame at sim time t (for stills and tests)."""
-    return _Renderer(scene).frame(t, slowmo, final)
+    return _Renderer(scene, clay_marker).frame(t, slowmo, final)
 
 
 # ============================================================================================ summary still
@@ -1461,14 +1482,15 @@ def contact_sheet(paths: Sequence[Path], path: Path, cols: int = 2, scale: float
 
 
 def render_outputs(rec: Recorder, result: dict, out_dir: Path, *, video: bool = True, fps: float = 30.0,
-                   slowmo: float = 0.25, hold_s: float = 1.5, max_video_frames: int | None = None) -> dict:
+                   slowmo: float = 0.25, hold_s: float = 1.5, max_video_frames: int | None = None,
+                   clay_marker: bool = False) -> dict:
     """Summary PNG (and the video) of one recorded run -> {"png": path, "video": path or None}."""
     scene = build_scene(rec, result)
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     stem = out_dir / f"{scene.name}_seed{scene.seed}"
     png = render_summary(scene, stem.with_suffix(".png"))
-    vid = render_video(scene, stem, fps, slowmo, hold_s, max_video_frames) if video else None
+    vid = render_video(scene, stem, fps, slowmo, hold_s, max_video_frames, clay_marker) if video else None
     return {"png": png, "video": vid}
 
 
@@ -1488,6 +1510,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--slowmo", type=float, default=0.25, help="sim seconds per video second (default 0.25)")
     parser.add_argument("--hold", type=float, default=1.5, metavar="S", help="final-frame hold, video seconds")
     parser.add_argument("--max-frames", type=int, default=None, metavar="N", help="cap the frames per run")
+    parser.add_argument("--clay-marker", action="store_true",
+                        help="video: also mark the TRUE clay in the camera panel with a dot labelled 'clay' (drawing "
+                             "only; a clay at skeet range is a pixel or two wide and hard to see in the video)")
     parser.add_argument("--actuator-delay-ms", type=float, default=None, help="TRUE actuator delay (as tbot sim)")
     parser.add_argument("--not-armed", action="store_true", help="never press the arming button")
     args = parser.parse_args(argv)
@@ -1507,7 +1532,7 @@ def main(argv: list[str] | None = None) -> int:
             rec, r = record_run(cfg, calib, name, int(seed), actuator_delay_ms=args.actuator_delay_ms,
                                 armed=not args.not_armed, max_frames=args.max_frames)
             paths = render_outputs(rec, r, out_dir, video=not args.no_video, fps=args.fps, slowmo=args.slowmo,
-                                   hold_s=args.hold)
+                                   hold_s=args.hold, clay_marker=args.clay_marker)
             pngs.append(paths["png"])
             extra = f", {paths['video']}" if paths["video"] else ""
             print(f"{name:<18} seed {seed}: {r['fires']} fire(s), {r['clays_broken']}/{r['clays_thrown']} broken"
